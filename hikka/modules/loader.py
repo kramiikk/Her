@@ -179,6 +179,7 @@ class LoaderMod(loader.Module):
             await utils.answer(
                 message, self.strings("finding_module_in_repos")
             )
+            await message.delete()
 
             if (
                 await self.download_and_install(args, message, force_pm)
