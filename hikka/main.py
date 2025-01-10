@@ -99,7 +99,7 @@ IS_SERV00 = "serv00" in socket.gethostname()
 IS_TOTHOST = "TOTHOST" in os.environ
 IS_AEZA = "aeza" in socket.gethostname()
 IS_DJHOST = "IS_DJHOST" in os.environ
-IS_USERLAND = "userland" in os.environ
+IS_USERLAND = "userland" in os.environ.get("USER", "")
 IS_WSL = False
 with contextlib.suppress(Exception):
     from platform import uname
@@ -175,16 +175,26 @@ def generate_random_system_version():
     :example: "Windows 10.0.19042.1234" or "Ubuntu 20.04.19042.1234"
     """
     os_choices = [
-        ("Windows Vista", "Vista"),
-        ("Windows XP", "XP"),
-        ("Windows 7", "7"),
-        ("Windows 8", "8"),
-        ("Windows 10", "10"),
+        ("Windows", "Vista"),
+        ("Windows", "XP"),
+        ("Windows", "7"),
+        ("Windows", "8"),
+        ("Windows", "10"),
         ("Ubuntu", "20.04"),
         ("Debian", "10"),
         ("Fedora", "33"),
         ("Arch Linux", "2021.05"),
         ("CentOS", "8"),
+        ("NixOS", "23.05"),
+        ("Puppy Linux", "9.5"),
+        ("Alpine Linux", "3.18.0"),
+        ("Android", "14"),
+        ("Android", "15"),
+        ("Android", "13"),
+        ("Solus", "4.4"),
+        ("Gentoo", "2023.0"),
+        ("Void Linux", "2023-07-01"),
+        ("IOS", "18.0.1"),
     ]
     os_name, os_version = random.choice(os_choices)
 
