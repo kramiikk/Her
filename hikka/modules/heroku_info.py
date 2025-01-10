@@ -32,12 +32,6 @@ class HerokuInfoMod(loader.Module):
                 "https://imgur.com/a/7LBPJiq.png",
                 lambda: self.strings("_cfg_banner"),
             ),
-            
-            loader.ConfigValue(
-                "pp_to_banner",
-                False,
-                validator=loader.validators.Boolean(),
-            ),
 
             loader.ConfigValue(
                 "show_heroku",
@@ -140,37 +134,6 @@ class HerokuInfoMod(loader.Module):
                 )
             )
         )
-
-    async def upload_pp_to_oxo(self, photo):
-        save_path = "profile_photo.jpg"
-        await self._client.download_media(photo, file=save_path)
-
-        try:
-            with open(save_path, 'rb') as file:
-                oxo = await utils.run_sync(
-                    requests.post,
-                    "https://0x0.st",
-                    files={"file": file},
-                    data={"secret": True},
-                )
-
-            if oxo.status_code == 200:
-                return oxo.text.strip()
-            else:
-                return "https://imgur.com/a/7LBPJiq.png"
-
-        except Exception:
-            return "https://imgur.com/H56KRbM"
-
-        finally:
-            if os.path.exists(save_path):
-                os.remove(save_path)
-
-    async def get_pp_for_banner(self):
-        photos = await self._client.get_profile_photos('me')
-        if photos:
-            return await self.upload_pp_to_oxo(photos[0])
-        return "https://imgur.com/a/7LBPJiq.png"
 
     async def info(self, _: InlineQuery) -> dict:
         """Send userbot info"""
