@@ -176,7 +176,7 @@ class LoaderMod(loader.Module):
         if args := utils.get_args(message):
             args = args[0]
 
-            msg = await utils.answer(
+            await utils.answer(
                 message, self.strings("finding_module_in_repos")
             )
 
@@ -216,7 +216,6 @@ class LoaderMod(loader.Module):
                     for repo, mods in (await self.get_repo_list()).items()
                 ],
             )
-            await msg.delete()
 
     async def _get_modules_to_load(self):
         todo = self.get("loaded_modules", {})
