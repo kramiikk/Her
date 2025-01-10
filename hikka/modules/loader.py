@@ -176,10 +176,10 @@ class LoaderMod(loader.Module):
         if args := utils.get_args(message):
             args = args[0]
 
-            await utils.answer(
+             msg = await utils.answer(
                 message, self.strings("finding_module_in_repos")
             )
-            await message.delete()
+             await msg.delete()
 
             if (
                 await self.download_and_install(args, message, force_pm)
