@@ -45,7 +45,7 @@ class HerokuInfoMod(loader.Module):
             repo = git.Repo(search_parent_directories=True)
             diff = repo.git.log([f"HEAD..origin/{version.branch}", "--oneline"])
             upd = (
-                self.strings("update_required") if diff else self.strings("up-to-date")
+                self.strings("update_required").format(prefix=self.get_prefix()) if diff else self.strings("up-to-date")
             )
         except Exception:
             upd = ""
