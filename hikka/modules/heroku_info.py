@@ -41,6 +41,12 @@ class HerokuInfoMod(loader.Module):
                 True,
                 validator=loader.validators.Boolean(),
             ),
+            loader.ConfigValue(
+                "ping_emoji",
+                "🪐",
+                lambda: self.strings["ping_emoji"],
+                validator=loader.validators.String(),
+            ),
         )
 
     def _render_info(self, inline: bool) -> str:
