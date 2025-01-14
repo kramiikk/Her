@@ -435,6 +435,7 @@ heroku_info:
   branch: "Branch"
   cpu_usage: "CPU usage"
   ram_usage: "RAM usage"
+  non_detectable: "<emoji document_id=5210952531676504517>❌</emoji> <b>This component cannot be detected on your server!</b>"
   send_info: "Send userbot info"
   description: "ℹ This will not compromise any sensitive info"
   up-to-date: "<emoji document_id=5370699111492229743>😌</emoji> <b>Up-to-date</b>"
