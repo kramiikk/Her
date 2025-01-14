@@ -68,6 +68,8 @@ def override_text(exception: Exception) -> typing.Optional[str]:
     """Returns error-specific description if available, else `None`"""
     if isinstance(exception, NetworkError):
         return "✈️ <b>You have problems with internet connection on your server.</b>"
+    if 'Telegram is having internal issues' in str(exception):
+        return "✈️ <b>Telegram has problems with their datacenters.</b>"
 
     return None
 
