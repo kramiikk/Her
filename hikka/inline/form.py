@@ -1,5 +1,5 @@
 # ©️ Dan Gazizullin, 2021-2023
-# This file is a part of Hikka Userbot
+# This file is a part of Her
 # 🌐 https://github.com/hikariatama/Hikka
 # You can redistribute it and/or modify it under the terms of the GNU AGPLv3
 # 🔑 https://www.gnu.org/licenses/agpl-3.0.html
@@ -92,9 +92,9 @@ class Form(InlineUnit):
                     be bigger, than default one (1 day) and must be either `int` or `False`
         :param on_unload: Callback, called when form is unloaded and/or closed. You can clean up trash
                           or perform another needed action
-        :param manual_security: By default, Hikka will try to inherit inline buttons security from the caller (command)
+        :param manual_security: By default, Her will try to inherit inline buttons security from the caller (command)
                                 If you want to avoid this, pass `manual_security=True`
-        :param disable_security: By default, Hikka will try to inherit inline buttons security from the caller (command)
+        :param disable_security: By default, Her will try to inherit inline buttons security from the caller (command)
                                  If you want to disable all security checks on this form in particular, pass `disable_security=True`
         :param photo: Attach a photo to the form. URL must be supplied
         :param gif: Attach a gif to the form. URL must be supplied
@@ -440,8 +440,8 @@ class Form(InlineUnit):
                     [
                         InlineQueryResultPhoto(
                             id=utils.rand(20),
-                            title="Hikka",
-                            description="Hikka",
+                            title="Her",
+                            description="Her",
                             caption=form.get("text"),
                             parse_mode="HTML",
                             photo_url=form["photo"],
@@ -460,7 +460,7 @@ class Form(InlineUnit):
                     [
                         InlineQueryResultGif(
                             id=utils.rand(20),
-                            title="Hikka",
+                            title="Her",
                             caption=form.get("text"),
                             parse_mode="HTML",
                             gif_url=form["gif"],
@@ -479,8 +479,8 @@ class Form(InlineUnit):
                     [
                         InlineQueryResultVideo(
                             id=utils.rand(20),
-                            title="Hikka",
-                            description="Hikka",
+                            title="Her",
+                            description="Her",
                             caption=form.get("text"),
                             parse_mode="HTML",
                             video_url=form["video"],
@@ -500,8 +500,8 @@ class Form(InlineUnit):
                     [
                         InlineQueryResultDocument(
                             id=utils.rand(20),
-                            title="Hikka",
-                            description="Hikka",
+                            title="Her",
+                            description="Her",
                             caption=form.get("text"),
                             parse_mode="HTML",
                             document_url=form["file"],
@@ -520,7 +520,7 @@ class Form(InlineUnit):
                             id=utils.rand(20),
                             latitude=form["location"][0],
                             longitude=form["location"][1],
-                            title="Hikka",
+                            title="Her",
                             reply_markup=self.generate_markup(
                                 form["uid"],
                             ),
@@ -536,7 +536,7 @@ class Form(InlineUnit):
                             audio_url=form["audio"]["url"],
                             caption=form.get("text"),
                             parse_mode="HTML",
-                            title=form["audio"].get("title", "Hikka"),
+                            title=form["audio"].get("title", "Her"),
                             performer=form["audio"].get("performer"),
                             audio_duration=form["audio"].get("duration"),
                             reply_markup=self.generate_markup(
@@ -551,7 +551,7 @@ class Form(InlineUnit):
                     [
                         InlineQueryResultArticle(
                             id=utils.rand(20),
-                            title="Hikka",
+                            title="Her",
                             input_message_content=InputTextMessageContent(
                                 form["text"],
                                 "HTML",

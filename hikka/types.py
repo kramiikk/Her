@@ -1,6 +1,6 @@
 # This file is a part of Her
 # ©️ Dan Gazizullin, 2021-2023
-# This file is a part of Hikka Userbot
+# This file is a part of Her
 # 🌐 https://github.com/hikariatama/Hikka
 # You can redistribute it and/or modify it under the terms of the GNU AGPLv3
 # 🔑 https://www.gnu.org/licenses/agpl-3.0.html
@@ -477,7 +477,7 @@ class Module:
             if version.__version__ < ver:
                 _raise(
                     RuntimeError(
-                        f"Library requires Hikka version {'{}.{}.{}'.format(*ver)}+"
+                        f"Library requires Her version {'{}.{}.{}'.format(*ver)}+"
                     )
                 )
 
@@ -790,7 +790,7 @@ class ModuleConfig(dict):
         if callable(ret):
             try:
                 # Compatibility tweak
-                # does nothing in Hikka
+                # does nothing in Her
                 ret = ret(message)
             except Exception:
                 ret = ret()

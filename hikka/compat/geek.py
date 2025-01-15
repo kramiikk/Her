@@ -1,6 +1,6 @@
 # This file is a part of Her
 # ©️ Dan Gazizullin, 2021-2023
-# This file is a part of Hikka Userbot
+# This file is a part of Her
 # 🌐 https://github.com/hikariatama/Hikka
 # You can redistribute it and/or modify it under the terms of the GNU AGPLv3
 # 🔑 https://www.gnu.org/licenses/agpl-3.0.html
@@ -9,7 +9,7 @@ import re
 
 def compat(code: str) -> str:
     """
-    Reformats modules, built for GeekTG to work with Hikka
+    Reformats modules, built for GeekTG to work with Her
     :param code: code to reformat
     :return: reformatted code
     :rtype: str

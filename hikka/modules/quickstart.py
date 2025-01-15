@@ -1,5 +1,5 @@
 # ©️ Dan Gazizullin, 2021-2023
-# This file is a part of Hikka Userbot
+# This file is a part of Her
 # 🌐 https://github.com/hikariatama/Hikka
 # You can redistribute it and/or modify it under the terms of the GNU AGPLv3
 # 🔑 https://www.gnu.org/licenses/agpl-3.0.html
@@ -35,7 +35,7 @@ class Quickstart(loader.Module):
             [
                 {
                     "text": self.strings("btn_support"),
-                    "url": "https://t.me/heroku_talks",
+                    "url": "https://t.me/her_talks",
                 }
             ],
         ] + utils.chunks(

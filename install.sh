@@ -49,8 +49,8 @@ if [ ! x"$SUDO_USER" = x"" ]; then
 	chown "$SUDO_USER:" hikka-install.log
 fi
 
-if [ -d "Hikka/hikka" ]; then
-	cd Hikka || {
+if [ -d "Her/hikka" ]; then
+	cd Her || {
 		printf "\rError: Install git package and re-run installer"
 		exit 6
 	}
@@ -127,13 +127,13 @@ printf "\n\r\033[0;34mCloning repo...\e[0m"
 ##############################################################################
 
 # shellcheck disable=SC2086
-${SUDO_CMD}rm -rf Hikka
+${SUDO_CMD}rm -rf Her
 # shellcheck disable=SC2086
 runout ${SUDO_CMD}git clone https://github.com/kramiikk/Her/ || {
 	errorout "Clone failed."
 	exit 3
 }
-cd Hikka || {
+cd Her || {
 	printf "\r\033[0;33mRun: \033[1;33mpkg install git\033[0;33m and restart installer"
 	exit 7
 }

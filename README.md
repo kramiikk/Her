@@ -8,7 +8,7 @@
 
 <b>Manual installation (no script):</b><br>
 <code>apt update && apt install git python3 -y && git clone https://github.com/kramiikk/Her && cd Her && pip install -r requirements.txt && python3 -m hikka</code><br.>
-<i>If you are on VPS\VDS, type <code>--proxy-pass</code> in the end of command to open SSH tunnel to your Hikka web interface, or use <code>--no-web</code> to complete setup in console</i>
+<i>If you are on VPS\VDS, type <code>--proxy-pass</code> in the end of command to open SSH tunnel to your Her web interface, or use <code>--no-web</code> to complete setup in console</i>
 
 <hr>
 <h2 border="none"><img src="https://github.com/hikariatama/assets/raw/master/1312-micro-sd-card-flat.webp" height="54" align="middle"> Requirements</h2>

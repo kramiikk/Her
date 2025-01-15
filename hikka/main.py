@@ -2,7 +2,7 @@
 
 # This file is a part of Her
 # ©️ Dan Gazizullin, 2021-2023
-# This file is a part of Hikka Userbot
+# This file is a part of Her
 # 🌐 https://github.com/hikariatama/Hikka
 # You can redistribute it and/or modify it under the terms of the GNU AGPLv3
 # 🔑 https://www.gnu.org/licenses/agpl-3.0.html
@@ -370,7 +370,7 @@ def raise_auth():
     raise InteractiveAuthRequired()
 
 
-class Hikka:
+class Her:
     """Main userbot instance, which can handle multiple clients"""
 
     def __init__(self):
@@ -954,4 +954,4 @@ class Hikka:
 
 hikkatl.extensions.html.CUSTOM_EMOJIS = not get_config_key("disable_custom_emojis")
 
-hikka = Hikka()
+hikka = Her()
