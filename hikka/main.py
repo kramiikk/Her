@@ -819,7 +819,7 @@ class Hikka:
                 "https://imgur.com/a/uUF9zYL.png",
                 caption=(
                     "🪐 <b>Her {} started!</b>\n\n⚙ <b>GitHub commit SHA: <a"
-                    ' href="https://github.com/coddrago/Her/commit/{}">{}</a></b>\n🔎'
+                    ' href="https://github.com/kramiikk/Her/commit/{}">{}</a></b>\n🔎'
                     " <b>Update status: {}</b>\n<b>{}</b>".format(
                         ".".join(list(map(str, list(__version__)))),
                         build,
