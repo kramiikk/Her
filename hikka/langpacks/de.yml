@@ -411,6 +411,7 @@ heroku_info:
   branch: "Branch"
   cpu_usage: "CPU-Nutzung"
   ram_usage: "RAM-Nutzung"
+  non_detectable: "<emoji document_id=5210952531676504517>❌</emoji> <b>Diese Komponente kann auf Ihrem Server nicht erkannt werden!</b>"
   send_info: "Sende Informationen zum Userbot"
   description: "ℹ Dies wird keine persönlichen Informationen preisgeben"
   _ihandle_doc_info: "Sende Informationen zum Userbot"

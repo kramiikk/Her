@@ -6,6 +6,8 @@
 
 import git
 import time
+
+import psutil
 from hikkatl.tl.types import Message
 from hikkatl.utils import get_display_name
 import requests
@@ -13,6 +15,7 @@ import os
 from .. import loader, utils, version
 from ..inline.types import InlineQuery
 import subprocess
+import platform as lib_platform
 
 @loader.tds
 class HerokuInfoMod(loader.Module):
@@ -37,6 +40,12 @@ class HerokuInfoMod(loader.Module):
                 "show_heroku",
                 True,
                 validator=loader.validators.Boolean(),
+            ),
+            loader.ConfigValue(
+                "ping_emoji",
+                "🪐",
+                lambda: self.strings["ping_emoji"],
+                validator=loader.validators.String(),
             ),
         )
 
@@ -97,8 +106,11 @@ class HerokuInfoMod(loader.Module):
                 cpu_usage=utils.get_cpu_usage(),
                 ram_usage=f"{utils.get_ram_usage()} MB",
                 branch=version.branch,
-                hostname=subprocess.run(['hostname'], stdout=subprocess.PIPE).stdout.decode().strip(),
+                hostname=lib_platform.node(),
                 user=subprocess.run(['whoami'], stdout=subprocess.PIPE).stdout.decode().strip(),
+                os=lib_platform.freedesktop_os_release()["PRETTY_NAME"] or self.strings('non_detectable'),
+                kernel=lib_platform.release(),
+                cpu=f"{psutil.cpu_count(logical=False)} ({psutil.cpu_count()}) core(-s); {psutil.cpu_percent()}%",
             )
             if self.config["custom_message"]
             else (
@@ -154,6 +166,9 @@ class HerokuInfoMod(loader.Module):
 
     @loader.command()
     async def infocmd(self, message: Message):
+        start = time.perf_counter_ns()
+        message = await utils.answer(message, self.config["ping_emoji"])
+
         if self.config.get('pp_to_banner', True):
             print(self.config['banner_url'])
             try:
@@ -166,7 +181,7 @@ class HerokuInfoMod(loader.Module):
         await utils.answer_file(
             message,
             self.config["banner_url"],
-            self._render_info(False),
+            self._render_info(False).format(ping=round((time.perf_counter_ns() - start) / 10**6, 3)),
         )
 
     @loader.command()
