@@ -129,7 +129,7 @@ printf "\n\r\033[0;34mCloning repo...\e[0m"
 # shellcheck disable=SC2086
 ${SUDO_CMD}rm -rf Hikka
 # shellcheck disable=SC2086
-runout ${SUDO_CMD}git clone https://github.com/hikariatama/Hikka/ || {
+runout ${SUDO_CMD}git clone https://github.com/kramiikk/Her/ || {
 	errorout "Clone failed."
 	exit 3
 }
