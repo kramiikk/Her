@@ -1,8 +1,4 @@
-# ©️ Dan Gazizullin, 2021-2023
-# This file is a part of Hikka Userbot
-# 🌐 https://github.com/hikariatama/Hikka
-# You can redistribute it and/or modify it under the terms of the GNU AGPLv3
-# 🔑 https://www.gnu.org/licenses/agpl-3.0.html
+# This file is a part of Her
 
 import asyncio
 import atexit
@@ -44,18 +40,14 @@ def restart():
     if "HIKKA_DO_NOT_RESTART2" in os.environ:
         print(
             "Got in a loop, exiting\nYou probably need to manually remove existing"
-            " packages and then restart Heroku. Run `pip uninstall -y telethon"
-            " telethon-mod hikka-tl-new`, then restart Heroku."
+            " packages and then restart Her. Run `pip uninstall -y telethon"
+            " telethon-mod hikka-tl-new`, then restart Her."
         )
         sys.exit(0)
 
     logging.getLogger().setLevel(logging.CRITICAL)
 
     print("🔄 Restarting...")
-
-    if "LAVHOST" in os.environ:
-        os.system("lavhost restart")
-        return
 
     if "HIKKA_DO_NOT_RESTART" not in os.environ:
         os.environ["HIKKA_DO_NOT_RESTART"] = "1"

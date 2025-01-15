@@ -1,27 +1,6 @@
 """Utilities"""
 
-#    еще пасхалочка
-#    Friendly Telegram (telegram userbot)
-#    Copyright (C) 2018-2021 The Authors
-
-#    This program is free software: you can redistribute it and/or modify
-#    it under the terms of the GNU Affero General Public License as published by
-#    the Free Software Foundation, either version 3 of the License, or
-#    (at your option) any later version.
-
-#    This program is distributed in the hope that it will be useful,
-#    but WITHOUT ANY WARRANTY; without even the implied warranty of
-#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#    GNU Affero General Public License for more details.
-
-#    You should have received a copy of the GNU Affero General Public License
-#    along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
-# ©️ Dan Gazizullin, 2021-2023
-# This file is a part of Hikka Userbot
-# 🌐 https://github.com/hikariatama/Hikka
-# You can redistribute it and/or modify it under the terms of the GNU AGPLv3
-# 🔑 https://www.gnu.org/licenses/agpl-3.0.html
+# This file is a part of Her
 
 import asyncio
 import atexit as _atexit
@@ -713,7 +692,7 @@ async def invite_inline_bot(
                 channel=peer,
                 user_id=client.loader.inline.bot_username,
                 admin_rights=ChatAdminRights(ban_users=True),
-                rank="Heroku",
+                rank="Her",
             )
         )
 
@@ -754,10 +733,6 @@ async def asset_channel(
         and client._channels_cache[title]["exp"] > time.time()
     ):
         return client._channels_cache[title]["peer"], False
-
-    # legacy heroku / hikka chats conversion to heroku
-    if title.startswith("hikka-"):
-        title = title.replace("hikka-", "heroku-")
 
     async for d in client.iter_dialogs():
         if d.title == title:
@@ -913,9 +888,6 @@ def get_named_platform() -> str:
     if main.IS_WSL:
         return "🍀 WSL"
 
-    if main.IS_DJHOST:
-        return "🎡 DJHost"
-
     if main.IS_ORACLE:
         return "😶‍🌫️ Oracle"
 
@@ -928,9 +900,6 @@ def get_named_platform() -> str:
     if main.IS_SERV00:
         return "💎 Serv00"
 
-    if main.IS_TOTHOST:
-        return f"💘 ToTHost {os.environ['TOTHOST_RATE']}"
-
     if main.IS_AEZA:
         return "🛡 Aeza"
 
@@ -939,9 +908,6 @@ def get_named_platform() -> str:
 
     if main.IS_RAILWAY:
         return "🚂 Railway"
-
-    if main.IS_HIKKAHOST:
-        return "🌼 HikkaHost"
 
     if main.IS_DOCKER:
         return "🐳 Docker"
@@ -952,7 +918,7 @@ def get_named_platform() -> str:
     if main.IS_CODESPACES:
         return "🐈‍⬛ Codespaces"
 
-    return f"✌️ lavHost {os.environ['LAVHOST']}" if main.IS_LAVHOST else "💎 VDS"
+    return "💎 VDS"
 
 
 def get_platform_emoji() -> str:
@@ -971,15 +937,6 @@ def get_platform_emoji() -> str:
         )
     )
 
-    if main.IS_TOTHOST:
-        return BASE.format(5372887118156683469)
-
-    if main.IS_HIKKAHOST:
-        return BASE.format(5395745114494624362)
-
-    if main.IS_DJHOST:
-        return BASE.format(5116472489639150735)
-
     if main.IS_USERLAND:
         return BASE.format(5458877818031077824)
 
@@ -991,9 +948,6 @@ def get_platform_emoji() -> str:
 
     if main.IS_SERV00:
         return BASE.format(5192765204898783881)
-
-    if main.IS_LAVHOST:
-        return BASE.format(5352753797531721191)
 
     if main.IS_GOORM:
         return BASE.format(5298947740032573902)
@@ -1180,9 +1134,6 @@ def smart_split(
         <<< ["<b>Hello, world!</b>"]
     """
 
-    # Authored by @bsolute
-    # https://t.me/LonamiWebs/27777
-
     encoded = text.encode("utf-16le")
     pending_entities = entities
     text_offset = 0
@@ -1333,12 +1284,12 @@ def get_git_hash() -> typing.Union[str, bool]:
 
 def get_commit_url() -> str:
     """
-    Get current Heroku git commit url
+    Get current Her git commit url
     :return: Git commit url
     """
     try:
         hash_ = get_git_hash()
-        return f'<a href="https://github.com/coddrago/Heroku/commit/{hash_}">#{hash_[:7]}</a>'
+        return f'<a href="https://github.com/kramiikk/Her/commit/{hash_}">#{hash_[:7]}</a>'
     except Exception:
         return "Unknown"
 
@@ -1459,7 +1410,6 @@ def get_kwargs() -> typing.Dict[str, typing.Any]:
     Get kwargs of function, in which is called
     :return: kwargs
     """
-    # https://stackoverflow.com/a/65927265/19170642
     keys, _, _, values = inspect.getargvalues(inspect.currentframe().f_back)
     return {key: values[key] for key in keys if key != "self"}
 
@@ -1618,8 +1568,6 @@ def get_cpu_usage() -> float:
 
 init_ts = time.perf_counter()
 
-
-# GeekTG Compatibility
 def get_git_info() -> typing.Tuple[str, str]:
     """
     Get git info
@@ -1628,7 +1576,7 @@ def get_git_info() -> typing.Tuple[str, str]:
     hash_ = get_git_hash()
     return (
         hash_,
-        f"https://github.com/coddrago/Heroku/commit/{hash_}" if hash_ else "",
+        f"https://github.com/kramiikk/Her/commit/{hash_}" if hash_ else "",
     )
 
 

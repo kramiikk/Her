@@ -1,10 +1,6 @@
 """Saves modules to disk and fetches them if remote storage is not available."""
 
-# ©️ Dan Gazizullin, 2021-2023
-# This file is a part of Hikka Userbot
-# 🌐 https://github.com/hikariatama/Hikka
-# You can redistribute it and/or modify it under the terms of the GNU AGPLv3
-# 🔑 https://www.gnu.org/licenses/agpl-3.0.html
+# This file is a part of Her
 
 import asyncio
 import contextlib
@@ -146,7 +142,7 @@ class RemoteStorage:
                 url,
                 auth=(tuple(auth.split(":", 1)) if auth else None),
                 headers={
-                    "User-Agent": "Heroku Userbot",
+                    "User-Agent": "Her Userbot",
                     "X-Hikka-Version": ".".join(map(str, __version__)),
                     "X-Hikka-Commit-SHA": utils.get_git_hash(),
                     "X-Hikka-User": str(self._client.tg_id),

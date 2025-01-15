@@ -1,27 +1,6 @@
 """Main script, where all the fun starts"""
 
-#    Friendly Telegram (telegram userbot)
-#    Copyright (C) 2018-2021 The Authors
-
-#    This program is free software: you can redistribute it and/or modify
-#    it under the terms of the GNU Affero General Public License as published by
-#    the Free Software Foundation, either version 3 of the License, or
-#    (at your option) any later version.
-
-#    This program is distributed in the hope that it will be useful,
-#    but WITHOUT ANY WARRANTY; without even the implied warranty of
-#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#    GNU Affero General Public License for more details.
-
-#    You should have received a copy of the GNU Affero General Public License
-#    along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
-
-# ©️ Dan Gazizullin, 2021-2023
-# This file is a part of Hikka Userbot
-# 🌐 https://github.com/hikariatama/Hikka
-# You can redistribute it and/or modify it under the terms of the GNU AGPLv3
-# 🔑 https://www.gnu.org/licenses/agpl-3.0.html
+# This file is a part of Her
 
 import argparse
 import asyncio
@@ -91,14 +70,10 @@ IS_CODESPACES = "CODESPACES" in os.environ
 IS_DOCKER = "DOCKER" in os.environ
 IS_RAILWAY = "RAILWAY" in os.environ
 IS_GOORM = "GOORM" in os.environ
-IS_LAVHOST = "LAVHOST" in os.environ
-IS_HIKKAHOST = "HIKKAHOST" in os.environ
 IS_ORACLE = "ORACLE_OS" in os.environ
 IS_AWS = "AWS_OS" in os.environ
 IS_SERV00 = "serv00" in socket.gethostname()
-IS_TOTHOST = "TOTHOST" in os.environ
 IS_AEZA = "aeza" in socket.gethostname()
-IS_DJHOST = "IS_DJHOST" in os.environ
 IS_USERLAND = "userland" in os.environ.get("USER", "")
 IS_WSL = False
 with contextlib.suppress(Exception):
@@ -109,33 +84,24 @@ with contextlib.suppress(Exception):
 
 # fmt: off
 LATIN_MOCK = [
-    "Amor", "Arbor", "Astra", "Aurum", "Bellum", "Caelum",
-    "Calor", "Candor", "Carpe", "Celer", "Certo", "Cibus",
-    "Civis", "Clemens", "Coetus", "Cogito", "Conexus",
-    "Consilium", "Cresco", "Cura", "Cursus", "Decus",
-    "Deus", "Dies", "Digitus", "Discipulus", "Dominus",
-    "Donum", "Dulcis", "Durus", "Elementum", "Emendo",
-    "Ensis", "Equus", "Espero", "Fidelis", "Fides",
-    "Finis", "Flamma", "Flos", "Fortis", "Frater", "Fuga",
-    "Fulgeo", "Genius", "Gloria", "Gratia", "Gravis",
-    "Habitus", "Honor", "Hora", "Ignis", "Imago",
-    "Imperium", "Inceptum", "Infinitus", "Ingenium",
-    "Initium", "Intra", "Iunctus", "Iustitia", "Labor",
-    "Laurus", "Lectus", "Legio", "Liberi", "Libertas",
-    "Lumen", "Lux", "Magister", "Magnus", "Manus",
-    "Memoria", "Mens", "Mors", "Mundo", "Natura",
-    "Nexus", "Nobilis", "Nomen", "Novus", "Nox",
-    "Oculus", "Omnis", "Opus", "Orbis", "Ordo", "Os",
-    "Pax", "Perpetuus", "Persona", "Petra", "Pietas",
-    "Pons", "Populus", "Potentia", "Primus", "Proelium",
-    "Pulcher", "Purus", "Quaero", "Quies", "Ratio",
-    "Regnum", "Sanguis", "Sapientia", "Sensus", "Serenus",
-    "Sermo", "Signum", "Sol", "Solus", "Sors", "Spes",
-    "Spiritus", "Stella", "Summus", "Teneo", "Terra",
-    "Tigris", "Trans", "Tribuo", "Tristis", "Ultimus",
-    "Unitas", "Universus", "Uterque", "Valde", "Vates",
-    "Veritas", "Verus", "Vester", "Via", "Victoria",
-    "Vita", "Vox", "Vultus", "Zephyrus"
+    "iPhone", "Android", "Chrome", "macOS", "Galaxy", "Windows",
+    "Firefox", "iPad", "Ubuntu", "Edge", "Pixel", "iOS",
+    "Safari", "Laptop", "Fedora", "Opera", "Tablet", "Linux",
+    "Router", "WatchOS", "Chromium", "SmartTV", "SteamOS", "Kindle",
+    "RaspberryPi", "FireFoxOS", "PlayStation", "Xbox", "Arduino",
+    "WearOS", "Sailfish", "FreeBSD", "OpenBSD", "NetBSD",
+    "PalmOS", "Symbian", "BlackBerryOS", "Tizen", "webOS",
+    "QNX", "Solaris", "HP-UX", "AIX", "zOS",
+    "Vivaldi", "Brave", "TorBrowser", "DuckDuckGoBrowser", "UCBrowser",
+    "SamsungBrowser", "HuaweiBrowser", "MiBrowser", "YandexBrowser",
+    "Lynx", "Konqueror", "Midori", "PaleMoon", "SeaMonkey",
+    "MicrosoftEdge", "GoogleChrome", "MozillaFirefox", "AppleSafari", "OperaBrowser",
+    "InternetExplorer", "NetscapeNavigator", "Mosaic", "Cello",
+    "AndroidStudio", "Xcode", "VisualStudio", "Eclipse", "IntelliJ",
+    "SublimeText", "VSCode", "Atom", "NotepadPlusPlus", "TextEdit",
+    "Terminal", "PowerShell", "Bash", "Zsh", "Cmd",
+    "Docker", "Kubernetes", "VMware", "VirtualBox", "HyperV",
+    "AWS", "Azure", "GCP", "Heroku", "DigitalOcean"
 ]
 # fmt: on
 
@@ -175,26 +141,30 @@ def generate_random_system_version():
     :example: "Windows 10.0.19042.1234" or "Ubuntu 20.04.19042.1234"
     """
     os_choices = [
-        ("Windows", "Vista"),
-        ("Windows", "XP"),
-        ("Windows", "7"),
-        ("Windows", "8"),
+        ("Windows", "11"),
         ("Windows", "10"),
-        ("Ubuntu", "20.04"),
-        ("Debian", "10"),
-        ("Fedora", "33"),
-        ("Arch Linux", "2021.05"),
-        ("CentOS", "8"),
-        ("NixOS", "23.05"),
-        ("Puppy Linux", "9.5"),
-        ("Alpine Linux", "3.18.0"),
+        ("Ubuntu", "24.04 LTS"),
+        ("Ubuntu", "22.04 LTS"),
+        ("Debian", "12"),
+        ("Fedora", "40"),
+        ("Arch Linux", "latest"),
+        ("CentOS", "Stream 9"),
+        ("AlmaLinux", "9"),
+        ("Rocky Linux", "9"),
+        ("NixOS", "latest"),
+        ("Pop!_OS", "22.04 LTS"),
+        ("Linux Mint", "21.3"),
+        ("Elementary OS", "7"),
+        ("Manjaro", "latest"),
+        ("openSUSE", "Leap 15.6"),
+        ("EndeavourOS", "latest"),
+        ("Garuda Linux", "latest"),
+        ("ChromeOS", "latest"),
+        ("macOS", "Sonoma"),
         ("Android", "14"),
         ("Android", "15"),
-        ("Android", "13"),
-        ("Solus", "4.4"),
-        ("Gentoo", "2023.0"),
-        ("Void Linux", "2023-07-01"),
-        ("IOS", "18.0.1"),
+        ("iOS", "17"),
+        ("iPadOS", "17"),
     ]
     os_name, os_version = random.choice(os_choices)
 
@@ -818,11 +788,11 @@ class Hikka:
             upd = "Update required" if diff else "Up-to-date"
 
             logo = (
-                "                          _           \n"
-                "  /\  /\ ___  _ __  ___  | | __ _   _ \n"
-                " / /_/ // _ \| '__|/ _ \ | |/ /| | | |\n"
-                "/ __  /|  __/| |  | (_) ||   < | |_| |\n"
-                "\/ /_/  \___||_|   \___/ |_|\_\ \__,_|\n\n"
+                "                   \n"
+                "  /\  /\ ___  _ __ \n"
+                " / /_/ // _ \| '__|\n"
+                "/ __  /|  __/| |   \n"
+                "\/ /_/  \___||_|   \n\n"
                 f"• Build: {build[:7]}\n"
                 f"• Version: {'.'.join(list(map(str, list(__version__))))}\n"
                 f"• {upd}\n"
@@ -836,7 +806,7 @@ class Hikka:
                     else ""
                 )
                 logging.debug(
-                    "\n🪐 Heroku %s #%s (%s) started\n%s",
+                    "\n🪐 Her %s #%s (%s) started\n%s",
                     ".".join(list(map(str, list(__version__)))),
                     build[:7],
                     upd,
@@ -848,8 +818,8 @@ class Hikka:
                 logging.getLogger().handlers[0].get_logid_by_client(client.tg_id),
                 "https://imgur.com/a/uUF9zYL.png",
                 caption=(
-                    "🪐 <b>Heroku {} started!</b>\n\n⚙ <b>GitHub commit SHA: <a"
-                    ' href="https://github.com/coddrago/Heroku/commit/{}">{}</a></b>\n🔎'
+                    "🪐 <b>Her {} started!</b>\n\n⚙ <b>GitHub commit SHA: <a"
+                    ' href="https://github.com/coddrago/Her/commit/{}">{}</a></b>\n🔎'
                     " <b>Update status: {}</b>\n<b>{}</b>".format(
                         ".".join(list(map(str, list(__version__)))),
                         build,

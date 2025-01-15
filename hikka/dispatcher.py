@@ -1,31 +1,10 @@
 """Processes incoming events and dispatches them to appropriate handlers"""
 
-#    Friendly Telegram (telegram userbot)
-#    Copyright (C) 2018-2022 The Authors
-
-#    This program is free software: you can redistribute it and/or modify
-#    it under the terms of the GNU Affero General Public License as published by
-#    the Free Software Foundation, either version 3 of the License, or
-#    (at your option) any later version.
-
-#    This program is distributed in the hope that it will be useful,
-#    but WITHOUT ANY WARRANTY; without even the implied warranty of
-#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#    GNU Affero General Public License for more details.
-
-#    You should have received a copy of the GNU Affero General Public License
-#    along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
-# ©️ Dan Gazizullin, 2021-2023
-# This file is a part of Hikka Userbot
-# 🌐 https://github.com/hikariatama/Hikka
-# You can redistribute it and/or modify it under the terms of the GNU AGPLv3
-# 🔑 https://www.gnu.org/licenses/agpl-3.0.html
+# This file is a part of Her
 
 import asyncio
 import collections
 import contextlib
-import copy
 import inspect
 import logging
 import re
@@ -33,7 +12,6 @@ import sys
 import traceback
 import typing
 
-import requests
 from hikkatl import events
 from hikkatl.errors import FloodWaitError, RPCError
 from hikkatl.tl.types import Message
@@ -135,9 +113,6 @@ class CommandDispatcher:
         )
 
         self.raw_handlers = []
-        self._external_bl: typing.List[int] = []
-
-        asyncio.ensure_future(self._external_bl_reload_loop())
 
     async def _handle_ratelimit(self, message: Message, func: callable) -> bool:
         if await self.security.check(message, security.OWNER):
@@ -324,24 +299,6 @@ class CommandDispatcher:
         ):
             return False
 
-        blacklist_chats = self._db.get(main.__name__, "blacklist_chats", [])
-        whitelist_chats = self._db.get(main.__name__, "whitelist_chats", [])
-        whitelist_modules = self._db.get(main.__name__, "whitelist_modules", [])
-
-        # ⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️
-        # It's not recommended to remove the security check below (external_bl)
-        # If you attempt to bypass this protection, you will be banned from the chat
-        # The protection from using userbots is multi-layer and this is one of the layers
-        # If you bypass it, the next (external) layer will trigger and you will be banned
-        # ⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️
-
-        if (
-            (chat_id := utils.get_chat_id(message)) in self._external_bl
-            or chat_id in blacklist_chats
-            or (whitelist_chats and chat_id not in whitelist_chats)
-        ):
-            return False
-
         if not message.message or len(message.message) == len(prefix):
             return False  # Message is just the prefix
 
@@ -391,30 +348,10 @@ class CommandDispatcher:
         ):
             return False
 
-        if message.is_channel and message.edit_date and not message.is_group:
-            async for event in self._client.iter_admin_log(
-                chat_id,
-                limit=10,
-                edit=True,
-            ):
-                if event.action.prev_message.id == message.id:
-                    if event.user_id != self._client.tg_id:
-                        logger.debug("Ignoring edit in channel")
-                        return False
-
-                    break
-            if not watcher:
-                logger.warning("Ignoring message in datachat \\ logging chat")
+        if message.is_channel and message.edit_date and not message.is_group and not message.out:
+            logger.debug("Ignoring edit in channel by other user")
             return False
-
         message.message = prefix + txt + message.message[len(prefix + command) :]
-
-        if (
-            f"{str(chat_id)}.{func.__self__.__module__}" in blacklist_chats
-            or whitelist_modules
-            and f"{chat_id}.{func.__self__.__module__}" not in whitelist_modules
-        ):
-            return False
 
         if await self._handle_tags(event, func):
             return False
@@ -627,57 +564,7 @@ class CommandDispatcher:
         """Handle all incoming messages"""
         message = utils.censor(getattr(event, "message", event))
 
-        blacklist_chats = self._db.get(main.__name__, "blacklist_chats", [])
-        whitelist_chats = self._db.get(main.__name__, "whitelist_chats", [])
-        whitelist_modules = self._db.get(main.__name__, "whitelist_modules", [])
-
-        # ⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️
-        # It's not recommended to remove the security check below (external_bl)
-        # If you attempt to bypass this protection, you will be banned from the chat
-        # The protection from using userbots is multi-layer and this is one of the layers
-        # If you bypass it, the next (external) layer will trigger and you will be banned
-        # ⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️
-
-        if (
-            (chat_id := utils.get_chat_id(message)) in self._external_bl
-            or chat_id in blacklist_chats
-            or (whitelist_chats and chat_id not in whitelist_chats)
-        ):
-            logger.debug("Message is blacklisted")
-            return
-
         for func in self._modules.watchers:
-            bl = self._db.get(main.__name__, "disabled_watchers", {})
-            modname = str(func.__self__.__class__.strings["name"])
-
-            if (
-                modname in bl
-                and isinstance(message, Message)
-                and (
-                    "*" in bl[modname]
-                    or chat_id in bl[modname]
-                    or "only_chats" in bl[modname]
-                    and message.is_private
-                    or "only_pm" in bl[modname]
-                    and not message.is_private
-                    or "out" in bl[modname]
-                    and not message.out
-                    or "in" in bl[modname]
-                    and message.out
-                )
-                or f"{str(chat_id)}.{func.__self__.__module__}" in blacklist_chats
-                or whitelist_modules
-                and f"{str(chat_id)}.{func.__self__.__module__}"
-                not in whitelist_modules
-                or await self._handle_tags(event, func)
-            ):
-                logger.debug(
-                    "Ignored watcher of module %s because of %s",
-                    modname,
-                    await self._handle_tags_ext(event, func),
-                )
-                continue
-
             # Avoid weird AttributeErrors in weird dochub modules by settings placeholder
             # of attributes
             for placeholder in {"text", "raw_text", "out"}:
@@ -706,20 +593,7 @@ class CommandDispatcher:
     ):
         # Will be used to determine, which client caused logging messages
         # parsed via inspect.stack()
-        _hikka_client_id_logging_tag = copy.copy(self.client.tg_id)  # noqa: F841
         try:
             await func(message)
         except Exception as e:
             await exception_handler(e, message, *args)
-
-    async def _external_bl_reload_loop(self):
-        while True:
-            with contextlib.suppress(Exception):
-                self._external_bl = (
-                    await utils.run_sync(
-                        requests.get,
-                        "https://ubguard.dan.tatar/blacklist.json",
-                    )
-                ).json()["blacklist"]
-
-            await asyncio.sleep(60)

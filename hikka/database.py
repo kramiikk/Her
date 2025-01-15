@@ -1,8 +1,4 @@
-# ©️ Dan Gazizullin, 2021-2023
-# This file is a part of Hikka Userbot
-# 🌐 https://github.com/hikariatama/Hikka
-# You can redistribute it and/or modify it under the terms of the GNU AGPLv3
-# 🔑 https://www.gnu.org/licenses/agpl-3.0.html
+# This file is a part of Her
 
 import asyncio
 import collections
@@ -114,8 +110,8 @@ class Database(dict):
         try:
             self._assets, _ = await utils.asset_channel(
                 self._client,
-                "heroku-assets",
-                "🌆 Your Heroku assets will be stored here",
+                "her-assets",
+                "🌆 Your Her assets will be stored here",
                 archive=True,
                 avatar="https://raw.githubusercontent.com/coddrago/Heroku/refs/heads/v1.6.8/assets/heroku-assets.png"
             )

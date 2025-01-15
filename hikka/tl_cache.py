@@ -1,8 +1,4 @@
-# ©️ Dan Gazizullin, 2021-2023
-# This file is a part of Hikka Userbot
-# 🌐 https://github.com/hikariatama/Hikka
-# You can redistribute it and/or modify it under the terms of the GNU AGPLv3
-# 🔑 https://www.gnu.org/licenses/agpl-3.0.html
+# This file is a part of Her
 
 import copy
 import inspect
@@ -234,10 +230,6 @@ class CustomTelegramClient(TelegramClient):
         :return: :obj:`Entity`
         """
 
-        # Will be used to determine, which client caused logging messages
-        # parsed via inspect.stack()
-        _hikka_client_id_logging_tag = copy.copy(self.tg_id)  # noqa: F841
-
         if not hashable(entity):
             try:
                 hashable_entity = next(
@@ -312,8 +304,6 @@ class CustomTelegramClient(TelegramClient):
         """
 
         # Will be used to determine, which client caused logging messages
-        # parsed via inspect.stack()
-        _hikka_client_id_logging_tag = copy.copy(self.tg_id)  # noqa: F841
 
         entity = await self.get_entity(entity)
         user = await self.get_entity(user) if user else None

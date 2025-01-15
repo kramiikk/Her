@@ -1,8 +1,4 @@
-# ©️ Dan Gazizullin, 2021-2023
-# This file is a part of Hikka Userbot
-# 🌐 https://github.com/hikariatama/Hikka
-# You can redistribute it and/or modify it under the terms of the GNU AGPLv3
-# 🔑 https://www.gnu.org/licenses/agpl-3.0.html
+# This file is a part of Her
 
 import re
 import string
@@ -38,7 +34,7 @@ def api_config(tty: typing.Optional[bool] = None):
     if tty:
         print_banner("banner.txt")
 
-    tty_print("\033[0;95mWelcome to Heroku Userbot!\033[0m", tty)
+    tty_print("\033[0;95mWelcome to Her Userbot!\033[0m", tty)
     tty_print("\033[0;96m1. Go to https://my.telegram.org and login\033[0m", tty)
     tty_print("\033[0;96m2. Click on \033[1;96mAPI development tools\033[0m", tty)
     tty_print(

@@ -1,15 +1,10 @@
 """Registers modules"""
 
-# ©️ Dan Gazizullin, 2021-2023
-# This file is a part of Hikka Userbot
-# 🌐 https://github.com/hikariatama/Hikka
-# You can redistribute it and/or modify it under the terms of the GNU AGPLv3
-# 🔑 https://www.gnu.org/licenses/agpl-3.0.html
+# This file is a part of Her
 
 import asyncio
 import builtins
 import contextlib
-import copy
 import importlib
 import importlib.machinery
 import importlib.util
@@ -169,11 +164,6 @@ class InfiniteLoop:
         self._wait_for_stop.set()
 
     def stop(self, *args, **kwargs):
-        with contextlib.suppress(AttributeError):
-            _hikka_client_id_logging_tag = copy.copy(  # noqa: F841
-                self.module_instance.allmodules.client.tg_id
-            )
-
         if self._task:
             logger.debug("Stopped loop for method %s", self.func)
             self._wait_for_stop = asyncio.Event()
@@ -186,11 +176,6 @@ class InfiniteLoop:
         return asyncio.ensure_future(stop_placeholder())
 
     def start(self, *args, **kwargs):
-        with contextlib.suppress(AttributeError):
-            _hikka_client_id_logging_tag = copy.copy(  # noqa: F841
-                self.module_instance.allmodules.client.tg_id
-            )
-
         if not self._task:
             logger.debug("Started loop for method %s", self.func)
             self._task = asyncio.ensure_future(self.actual_loop(*args, **kwargs))
@@ -593,9 +578,6 @@ class Modules:
         modules: list,
         origin: str = "<core>",
     ) -> typing.List[Module]:
-        with contextlib.suppress(AttributeError):
-            _hikka_client_id_logging_tag = copy.copy(self.client.tg_id)  # noqa: F841
-
         loaded = []
 
         for mod in modules:
@@ -628,9 +610,6 @@ class Modules:
         save_fs: bool = False,
     ) -> Module:
         """Register single module from importlib spec"""
-        with contextlib.suppress(AttributeError):
-            _hikka_client_id_logging_tag = copy.copy(self.client.tg_id)  # noqa: F841
-
         module = importlib.util.module_from_spec(spec)
         sys.modules[module_name] = module
         spec.loader.exec_module(module)
@@ -698,9 +677,6 @@ class Modules:
 
     def register_commands(self, instance: Module):
         """Register commands from instance"""
-        with contextlib.suppress(AttributeError):
-            _hikka_client_id_logging_tag = copy.copy(self.client.tg_id)  # noqa: F841
-
         if instance.__origin__.startswith("<core"):
             self._core_commands += list(
                 map(lambda x: x.lower(), list(instance.hikka_commands))
@@ -799,9 +775,6 @@ class Modules:
 
     def register_watchers(self, instance: Module):
         """Register watcher from instance"""
-        with contextlib.suppress(AttributeError):
-            _hikka_client_id_logging_tag = copy.copy(self.client.tg_id)  # noqa: F841
-
         for _watcher in self.watchers:
             if _watcher.__self__.__class__.__name__ == instance.__class__.__name__:
                 logger.debug("Removing watcher %s for update", _watcher)
@@ -842,9 +815,6 @@ class Modules:
 
     async def complete_registration(self, instance: Module):
         """Complete registration of instance"""
-        with contextlib.suppress(AttributeError):
-            _hikka_client_id_logging_tag = copy.copy(self.client.tg_id)  # noqa: F841
-
         instance.allmodules = self
         instance.internal_init()
 
@@ -929,9 +899,6 @@ class Modules:
 
     def send_config_one(self, mod: Module, skip_hook: bool = False):
         """Send config to single instance"""
-        with contextlib.suppress(AttributeError):
-            _hikka_client_id_logging_tag = copy.copy(self.client.tg_id)  # noqa: F841
-
         if hasattr(mod, "config"):
             modcfg = self._db.get(
                 mod.__class__.__name__,
@@ -995,9 +962,6 @@ class Modules:
         no_self_unload: bool = False,
         from_dlmod: bool = False,
     ):
-        with contextlib.suppress(AttributeError):
-            _hikka_client_id_logging_tag = copy.copy(self.client.tg_id)  # noqa: F841
-
         if from_dlmod:
             try:
                 if len(inspect.signature(mod.on_dlmod).parameters) == 2:
@@ -1065,10 +1029,6 @@ class Modules:
     async def unload_module(self, classname: str) -> typing.List[str]:
         """Remove module and all stuff from it"""
         worked = []
-
-        with contextlib.suppress(AttributeError):
-            _hikka_client_id_logging_tag = copy.copy(self.client.tg_id)  # noqa: F841
-
         for module in self.modules:
             if classname.lower() in (
                 module.name.lower(),
