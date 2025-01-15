@@ -26,10 +26,10 @@ NUM_ROWS = 5
 
 
 @loader.tds
-class HerokuConfigMod(loader.Module):
+class HerConfigMod(loader.Module):
     """Interactive configurator for Hikka Userbot"""
 
-    strings = {"name": "HerokuConfig"}
+    strings = {"name": "HerConfig"}
 
     def __init__(self):
         self.config = loader.ModuleConfig(

@@ -37,10 +37,10 @@ ALL_INVOKES = [
 
 
 @loader.tds
-class HerokuSettingsMod(loader.Module):
-    """Advanced settings for Heroku Userbot"""
+class HerSettingsMod(loader.Module):
+    """Advanced settings for Her Userbot"""
 
-    strings = {"name": "HerokuSettings"}
+    strings = {"name": "HerSettings"}
 
     def get_watchers(self) -> tuple:
         return [
@@ -77,18 +77,18 @@ class HerokuSettingsMod(loader.Module):
             if (
                 dialog.name
                 in {
-                    "heroku-logs",
-                    "heroku-onload",
-                    "heroku-assets",
-                    "heroku-backups",
-                    "heroku-acc-switcher",
+                    "her-logs",
+                    "her-onload",
+                    "her-assets",
+                    "her-backups",
+                    "her-acc-switcher",
                     "silent-tags",
                 }
                 and dialog.is_channel
                 and (
                     dialog.entity.participants_count == 1
                     or dialog.entity.participants_count == 2
-                    and dialog.name in {"heroku-logs", "silent-tags"}
+                    and dialog.name in {"her-logs", "silent-tags"}
                 )
                 or (
                     self._client.loader.inline.init_complete
@@ -102,7 +102,7 @@ class HerokuSettingsMod(loader.Module):
 
         folders = await self._client(GetDialogFiltersRequest())
 
-        if any(folder.title == "heroku" for folder in folders):
+        if any(folder.title == "her" for folder in folders):
             folder_id = max(
                 folders,
                 key=lambda x: x.id,
@@ -154,7 +154,7 @@ class HerokuSettingsMod(loader.Module):
         )
 
     @loader.command()
-    async def uninstall_heroku(self, message: Message):
+    async def uninstall_her(self, message: Message):
         await self.inline.form(
             self.strings("deauth_confirm"),
             message,

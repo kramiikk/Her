@@ -39,7 +39,7 @@ class UpdaterMod(loader.Module):
         self.config = loader.ModuleConfig(
             loader.ConfigValue(
                 "GIT_ORIGIN_URL",
-                "https://github.com/coddrago/Heroku",
+                "https://github.com/kramiikk/Her",
                 lambda: self.strings("origin_cfg_doc"),
                 validator=loader.validators.Link(),
             )
@@ -111,7 +111,7 @@ class UpdaterMod(loader.Module):
                 if self._client.hikka_me.premium
                 and CUSTOM_EMOJIS
                 and isinstance(msg_obj, Message)
-                else "Heroku"
+                else "Her"
             ),
         )
 
@@ -329,11 +329,11 @@ class UpdaterMod(loader.Module):
                             )
                             if dialog.name
                             in {
-                                "heroku-logs",
-                                "heroku-onload",
-                                "heroku-assets",
-                                "heroku-backups",
-                                "heroku-acc-switcher",
+                                "her-logs",
+                                "her-onload",
+                                "her-assets",
+                                "her-backups",
+                                "her-acc-switcher",
                                 "silent-tags",
                             }
                             and dialog.is_channel
@@ -353,7 +353,7 @@ class UpdaterMod(loader.Module):
                                 1697279580,
                                 1679998924,
                                 2410964167,
-                            ]  # official heroku chats
+                            ]  # official her chats
                         ],
                         emoticon="🐱",
                         exclude_peers=[],
@@ -370,7 +370,7 @@ class UpdaterMod(loader.Module):
             )
         except Exception:
             logger.critical(
-                "Can't create Heroku folder. Possible reasons are:\n"
+                "Can't create Her folder. Possible reasons are:\n"
                 "- User reached the limit of folders in Telegram\n"
                 "- User got floodwait\n"
                 "Ignoring error and adding folder addition to ignore list"

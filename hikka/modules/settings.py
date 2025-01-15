@@ -86,8 +86,8 @@ class CoreMod(loader.Module):
         module = self.allmodules.get_classname(module)
         return f"{str(chatid)}.{module}" if module else chatid
 
-    @loader.command(alias="hikka", ru_doc="Информация о Хероку", en_doc="Information of Heroku", ua_doc="Інформація про Хероку", de_doc="Informationen über Heroku")
-    async def herokucmd(self, message: Message):
+    @loader.command(alias="hikka", ru_doc="Информация о Хере", en_doc="Information of Her", ua_doc="Інформація про Хер", de_doc="Informationen über Her")
+    async def hercmd(self, message: Message):
         await utils.answer_file(
             message,
             "https://imgur.com/a/i0Mq22X.png",
@@ -95,7 +95,7 @@ class CoreMod(loader.Module):
                 (
                     utils.get_platform_emoji()
                     if self._client.hikka_me.premium and CUSTOM_EMOJIS
-                    else "🪐 <b>Heroku userbot</b>"
+                    else "🪐 <b>Her userbot</b>"
                 ),
                 *version.__version__,
                 utils.get_commit_url(),

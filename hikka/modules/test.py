@@ -45,11 +45,11 @@ class TestMod(loader.Module):
                 False,
                 (
                     "⚠️ Do not touch, if you don't know what it does!\nBy default, "
-                    " Heroku will try to determine, which client caused logs. E.g. there"
+                    " Her will try to determine, which client caused logs. E.g. there"
                     " is a module TestModule installed on Client1 and TestModule2 on"
                     " Client2. By default, Client2 will get logs from TestModule2, and"
                     " Client1 will get logs from TestModule. If this option is enabled,"
-                    " Heroku will send all logs to Client1 and Client2, even if it is"
+                    " Her will send all logs to Client1 and Client2, even if it is"
                     " not the one that caused the log."
                 ),
                 validator=loader.validators.Boolean(),
@@ -94,7 +94,7 @@ class TestMod(loader.Module):
             ),
             loader.ConfigValue(
                 "banner_url",
-                "heroku",
+                "her",
                 lambda: self.strings["banner_url"],
                 validator=loader.validators.String(),
             ),
@@ -319,7 +319,7 @@ class TestMod(loader.Module):
         logs = self.lookup("evaluator").censor(logs)
 
         logs = BytesIO(logs.encode("utf-16"))
-        logs.name = "heroku-logs.txt"
+        logs.name = "her-logs.txt"
 
         ghash = utils.get_git_hash()
 
@@ -327,7 +327,7 @@ class TestMod(loader.Module):
             *main.__version__,
             (
                 " <a"
-                f' href="https://github.com/coddrago/Heroku/commit/{ghash}">@{ghash[:8]}</a>'
+                f' href="https://github.com/kramiikk/Her/commit/{ghash}">@{ghash[:8]}</a>'
                 if ghash
                 else ""
             ),
@@ -369,7 +369,7 @@ class TestMod(loader.Module):
         message = await utils.answer(message, self.config["ping_emoji"])
         banner = self.config["banner_url"]
         
-        if banner != "heroku":
+        if banner != "her":
             await message.delete()
             await self.client.send_file(
                 message.peer_id,
@@ -404,11 +404,11 @@ class TestMod(loader.Module):
     async def client_ready(self):
         chat, _ = await utils.asset_channel(
             self._client,
-            "heroku-logs",
-            "🪐 Your Heroku logs will appear in this chat",
+            "her-logs",
+            "🪐 Your Her logs will appear in this chat",
             silent=True,
             invite_bot=True,
-            avatar="https://raw.githubusercontent.com/coddrago/Heroku/refs/heads/v1.6.8/assets/heroku-logs.png",
+            avatar="https://raw.githubusercontent.com/kramiikk/Her/refs/heads/main/assets/her-logs.png",
         )
 
         self.logchat = int(f"-100{chat.id}")

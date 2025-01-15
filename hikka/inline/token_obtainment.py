@@ -46,13 +46,13 @@ class TokenObtainment(InlineUnit):
                     pass
                 else:
                     uid = utils.rand(6)
-                    username = f"@heroku_{uid}_bot"
+                    username = f"@her_{uid}_bot"
             else:
                 uid = utils.rand(6)
-                username = f"@heroku_{uid}_bot"
+                username = f"@her_{uid}_bot"
 
             for msg in [
-                f"🪐 Heroku userbot"[:64],
+                f"🪐 Her userbot"[:64],
                 username,
                 "/setuserpic",
                 username,
@@ -72,7 +72,7 @@ class TokenObtainment(InlineUnit):
                 await fw_protect()
                 from .. import main
 
-                m = await conv.send_file(main.BASE_PATH / "assets" / "heroku-ava.png")
+                m = await conv.send_file(main.BASE_PATH / "assets" / "her-ava.png")
                 r = await conv.get_response()
 
                 logger.debug(">> <Photo>")
@@ -147,7 +147,7 @@ class TokenObtainment(InlineUnit):
                         "hikka.inline",
                         "custom_bot",
                         False,
-                    ) and not re.search(r"@heroku_[0-9a-zA-Z]{6}_bot", button.text):
+                    ) and not re.search(r"@her_[0-9a-zA-Z]{6}_bot", button.text):
                         continue
 
                     await fw_protect()
@@ -197,7 +197,7 @@ class TokenObtainment(InlineUnit):
                     for msg in [
                         "/setinline",
                         button.text,
-                        "user@heroku:~$",
+                        "user@her:~$",
                         "/setinlinefeedback",
                         button.text,
                         "Enabled",
@@ -221,7 +221,7 @@ class TokenObtainment(InlineUnit):
                         from .. import main
 
                         m = await conv.send_file(
-                            main.BASE_PATH / "assets" / "heroku-ava.png"
+                            main.BASE_PATH / "assets" / "her-ava.png"
                         )
                         r = await conv.get_response()
 

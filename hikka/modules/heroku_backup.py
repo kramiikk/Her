@@ -24,10 +24,10 @@ logger = logging.getLogger(__name__)
 
 
 @loader.tds
-class HerokuBackupMod(loader.Module):
+class HerBackupMod(loader.Module):
     """Handles database and modules backups"""
 
-    strings = {"name": "HerokuBackup"}
+    strings = {"name": "HerBackup"}
 
     async def client_ready(self):
         if not self.get("period"):
@@ -61,11 +61,11 @@ class HerokuBackupMod(loader.Module):
 
         self._backup_channel, _ = await utils.asset_channel(
             self._client,
-            "heroku-backups",
+            "her-backups",
             "📼 Your database backups will appear here",
             silent=True,
             archive=True,
-            avatar="https://raw.githubusercontent.com/coddrago/Heroku/refs/heads/v1.6.8/assets/heroku-backups.png",
+            avatar="https://raw.githubusercontent.com/kramiikk/Her/refs/heads/main/assets/her-backups.png",
             _folder="hikka",
             invite_bot=True,
         )
@@ -125,7 +125,7 @@ class HerokuBackupMod(loader.Module):
 
             backup = io.BytesIO(json.dumps(self._db).encode())
             backup.name = (
-                f"heroku-db-backup-{datetime.datetime.now():%d-%m-%Y-%H-%M}.json"
+                f"her-db-backup-{datetime.datetime.now():%d-%m-%Y-%H-%M}.json"
             )
 
             await self.inline.bot.send_document(
@@ -147,7 +147,7 @@ class HerokuBackupMod(loader.Module):
         except loader.StopLoop:
             raise
         except Exception:
-            logger.exception("HerokuBackup failed")
+            logger.exception("HerBackup failed")
             await asyncio.sleep(60)
 
     @loader.callback_handler()

@@ -1,8 +1,4 @@
-# ©️ Dan Gazizullin, 2021-2023
-# This file is a part of Hikka Userbot
-# 🌐 https://github.com/hikariatama/Hikka
-# You can redistribute it and/or modify it under the terms of the GNU AGPLv3
-# 🔑 https://www.gnu.org/licenses/agpl-3.0.html
+# This file is a part of Her
 
 import git
 import time
@@ -10,18 +6,16 @@ import time
 import psutil
 from hikkatl.tl.types import Message
 from hikkatl.utils import get_display_name
-import requests
-import os
 from .. import loader, utils, version
 from ..inline.types import InlineQuery
 import subprocess
 import platform as lib_platform
 
 @loader.tds
-class HerokuInfoMod(loader.Module):
+class HerInfoMod(loader.Module):
     """Show userbot info"""
 
-    strings = {"name": "HerokuInfo"}
+    strings = {"name": "HerInfo"}
 
     def __init__(self):
         self.config = loader.ModuleConfig(
@@ -37,7 +31,7 @@ class HerokuInfoMod(loader.Module):
             ),
 
             loader.ConfigValue(
-                "show_heroku",
+                "show_her",
                 True,
                 validator=loader.validators.Boolean(),
             ),
@@ -91,8 +85,8 @@ class HerokuInfoMod(loader.Module):
             platform = platform.replace(emoji, icon)
         return (
             (
-                "<b>🪐 Heroku</b>\n"
-                if self.config["show_heroku"]
+                "<b>🪐 Her</b>\n"
+                if self.config["show_her"]
                 else ""
             )
             + self.config["custom_message"].format(
@@ -131,7 +125,7 @@ class HerokuInfoMod(loader.Module):
                     (
                         (
                             utils.get_platform_emoji()
-                            if self._client.hikka_me.premium and self.config["show_heroku"]
+                            if self._client.hikka_me.premium and self.config["show_her"]
                             else ""
                         ),
                         "<emoji document_id=5373141891321699086>😎</emoji>",
@@ -185,7 +179,7 @@ class HerokuInfoMod(loader.Module):
         )
 
     @loader.command()
-    async def herokuinfo(self, message: Message):
+    async def herinfo(self, message: Message):
         await utils.answer(message, self.strings("desc"))
 
     @loader.command()

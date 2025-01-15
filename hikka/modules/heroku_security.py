@@ -33,10 +33,10 @@ from ..security import (
 
 
 @loader.tds
-class HerokuSecurityMod(loader.Module):
+class HerSecurityMod(loader.Module):
     """Control security settings"""
 
-    strings = {"name": "HerokuSecurity"}
+    strings = {"name": "HerSecurity"}
 
     async def client_ready(self):
         self._sgroups: typing.Iterable[str, SecurityGroup] = self.pointer(
