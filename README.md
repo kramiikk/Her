@@ -23,18 +23,6 @@
 </details>
 
 <hr>
-<h2><img src="https://github.com/hikariatama/assets/raw/master/35-edit-flat.webp" height="54" align="middle"> Changes</h2>
-
-<ul>
- <li>🆕 <b>Latest Telegram layer</b> with reactions, video stickers and other stuff</li>
- <li>🔓 <b>Security</b> improvements, including <b>native entity caching</b> and <b>targeted security rules</b></li>
- <li>🎨 <b>UI/UX</b> improvements</li>
- <li>📼 Improved and new <b>core modules</b></li>
- <li>⏱ Quick <b>bug fixes</b> (compared to official FTG and GeekTG)</li>
- <li>▶️ <b>Inline forms, galleries and lists</b></li>
- <li>🔁 Full <b>backward compatibility</b> with FTG and GeekTG modules</li>
-</ul>
-<hr>
 <h2 border="none"><img src="https://github.com/hikariatama/assets/raw/master/1312-micro-sd-card-flat.webp" height="54" align="middle"> Requirements</h2>
 <ul>
  <li>Python 3.8-3.11</li>
