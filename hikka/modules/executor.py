@@ -1,16 +1,19 @@
+# ©️ Dan Gazizullin, 2021-2023
+# This file is a part of Hikka Userbot
+# 🌐 https://github.com/hikariatama/Hikka
+# You can redistribute it and/or modify it under the terms of the GNU AGPLv3
+# 🔑 https://www.gnu.org/licenses/agpl-3.0.html
+
 import sys
 import traceback
-import html
 import time
 import hikkatl
-import asyncio
 import logging
 
 from meval import meval
 from io import StringIO
 
 from .. import loader, utils
-from ..log import HikkaException
 
 logger = logging.getLogger(__name__)
 
