@@ -92,6 +92,12 @@ class TestMod(loader.Module):
                 lambda: self.strings["ping_emoji"],
                 validator=loader.validators.String(),
             ),
+            loader.ConfigValue(
+                "banner_url",
+                "heroku",
+                lambda: self.strings["banner_url"],
+                validator=loader.validators.String(),
+            ),
         )
 
     def _pass_config_to_logger(self):
@@ -361,19 +367,39 @@ class TestMod(loader.Module):
         """- Find out your userbot ping"""
         start = time.perf_counter_ns()
         message = await utils.answer(message, self.config["ping_emoji"])
+        banner = self.config["banner_url"]
+        
+        if banner != "heroku":
+            await message.delete()
+            await self.client.send_file(
+                message.peer_id,
+                banner,
+                caption = self.config["Text_Of_Ping"].format(
+                    ping=round((time.perf_counter_ns() - start) / 10**6, 3),
+                    uptime=utils.formatted_uptime(),
+                    ping_hint=(
+                        (self.config["hint"]) if random.choice([0, 0, 1]) == 1 else ""
+                    ),
+                    hostname=subprocess.run(['hostname'], stdout=subprocess.PIPE).stdout.decode().strip(),
+                    user=subprocess.run(['whoami'], stdout=subprocess.PIPE).stdout.decode().strip(),
+        ),
+                reply_to=getattr(message, "reply_to_msg_id", None),
+            )
 
-        await utils.answer(
-            message,
-            self.config["Text_Of_Ping"].format(
-                ping=round((time.perf_counter_ns() - start) / 10**6, 3),
-                uptime=utils.formatted_uptime(),
-                ping_hint=(
-                    (self.config["hint"]) if random.choice([0, 0, 1]) == 1 else ""
-                ),
-                hostname=subprocess.run(['hostname'], stdout=subprocess.PIPE).stdout.decode().strip(),
-                user=subprocess.run(['whoami'], stdout=subprocess.PIPE).stdout.decode().strip(),
-    ),
-        )
+        else:
+            await utils.answer(
+                message,
+                self.config["Text_Of_Ping"].format(
+                    ping=round((time.perf_counter_ns() - start) / 10**6, 3),
+                    uptime=utils.formatted_uptime(),
+                    ping_hint=(
+                        (self.config["hint"]) if random.choice([0, 0, 1]) == 1 else ""
+                    ),
+                    hostname=subprocess.run(['hostname'], stdout=subprocess.PIPE).stdout.decode().strip(),
+                    user=subprocess.run(['whoami'], stdout=subprocess.PIPE).stdout.decode().strip(),
+        ),
+            )
+
 
     async def client_ready(self):
         chat, _ = await utils.asset_channel(

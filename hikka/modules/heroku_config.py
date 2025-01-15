@@ -31,6 +31,16 @@ class HerokuConfigMod(loader.Module):
 
     strings = {"name": "HerokuConfig"}
 
+    def __init__(self):
+        self.config = loader.ModuleConfig(
+            loader.ConfigValue(
+                "cfg_emoji",
+                "🪐",
+                "Change emoji when opening config",
+                validator=loader.validators.String(),
+            ),
+        )
+
     @staticmethod
     def prep_value(value: typing.Any) -> typing.Any:
         if isinstance(value, str):
@@ -968,7 +978,7 @@ class HerokuConfigMod(loader.Module):
     async def configcmd(self, message: Message):
         args = utils.get_args_raw(message)
         if self.lookup(args) and hasattr(self.lookup(args), "config"):
-            form = await self.inline.form("🪐", message, silent=True)
+            form = await self.inline.form(self.config["cfg_emoji"], message, silent=True)
             mod = self.lookup(args)
             if isinstance(mod, loader.Library):
                 type_ = "library"

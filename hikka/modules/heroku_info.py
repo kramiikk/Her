@@ -6,6 +6,8 @@
 
 import git
 import time
+
+import psutil
 from hikkatl.tl.types import Message
 from hikkatl.utils import get_display_name
 import requests
@@ -13,6 +15,7 @@ import os
 from .. import loader, utils, version
 from ..inline.types import InlineQuery
 import subprocess
+import platform as lib_platform
 
 @loader.tds
 class HerokuInfoMod(loader.Module):
@@ -32,17 +35,17 @@ class HerokuInfoMod(loader.Module):
                 "https://imgur.com/a/7LBPJiq.png",
                 lambda: self.strings("_cfg_banner"),
             ),
-            
-            loader.ConfigValue(
-                "pp_to_banner",
-                False,
-                validator=loader.validators.Boolean(),
-            ),
 
             loader.ConfigValue(
                 "show_heroku",
                 True,
                 validator=loader.validators.Boolean(),
+            ),
+            loader.ConfigValue(
+                "ping_emoji",
+                "🪐",
+                lambda: self.strings["ping_emoji"],
+                validator=loader.validators.String(),
             ),
         )
 
@@ -51,7 +54,7 @@ class HerokuInfoMod(loader.Module):
             repo = git.Repo(search_parent_directories=True)
             diff = repo.git.log([f"HEAD..origin/{version.branch}", "--oneline"])
             upd = (
-                self.strings("update_required") if diff else self.strings("up-to-date")
+                self.strings("update_required").format(prefix=self.get_prefix()) if diff else self.strings("up-to-date")
             )
         except Exception:
             upd = ""
@@ -80,7 +83,7 @@ class HerokuInfoMod(loader.Module):
             ("✌️", "<emoji document_id=5469986291380657759>✌️</emoji>"),
             ("💎", "<emoji document_id=5471952986970267163>💎</emoji>"),
             ("🛡", "<emoji document_id=5282731554135615450>🌩</emoji>"),
-            ("💘", "<emoji document_id=5452140079495518256>💘</emoji>"),
+            ("💘", "<emoji document_id=5449538944221863995>💘</emoji>"),
             ("🌼", "<emoji document_id=5224219153077914783>❤️</emoji>"),
             ("🎡", "<emoji document_id=5226711870492126219>🎡</emoji>"),
             ("🐧", "<emoji document_id=5361541227604878624>🐧</emoji>")
@@ -103,8 +106,11 @@ class HerokuInfoMod(loader.Module):
                 cpu_usage=utils.get_cpu_usage(),
                 ram_usage=f"{utils.get_ram_usage()} MB",
                 branch=version.branch,
-                hostname=subprocess.run(['hostname'], stdout=subprocess.PIPE).stdout.decode().strip(),
+                hostname=lib_platform.node(),
                 user=subprocess.run(['whoami'], stdout=subprocess.PIPE).stdout.decode().strip(),
+                os=lib_platform.freedesktop_os_release()["PRETTY_NAME"] or self.strings('non_detectable'),
+                kernel=lib_platform.release(),
+                cpu=f"{psutil.cpu_count(logical=False)} ({psutil.cpu_count()}) core(-s); {psutil.cpu_percent()}%",
             )
             if self.config["custom_message"]
             else (
@@ -141,37 +147,6 @@ class HerokuInfoMod(loader.Module):
             )
         )
 
-    async def upload_pp_to_oxo(self, photo):
-        save_path = "profile_photo.jpg"
-        await self._client.download_media(photo, file=save_path)
-
-        try:
-            with open(save_path, 'rb') as file:
-                oxo = await utils.run_sync(
-                    requests.post,
-                    "https://0x0.st",
-                    files={"file": file},
-                    data={"secret": True},
-                )
-
-            if oxo.status_code == 200:
-                return oxo.text.strip()
-            else:
-                return "https://imgur.com/a/7LBPJiq.png"
-
-        except Exception:
-            return "https://imgur.com/H56KRbM"
-
-        finally:
-            if os.path.exists(save_path):
-                os.remove(save_path)
-
-    async def get_pp_for_banner(self):
-        photos = await self._client.get_profile_photos('me')
-        if photos:
-            return await self.upload_pp_to_oxo(photos[0])
-        return "https://imgur.com/a/7LBPJiq.png"
-
     async def info(self, _: InlineQuery) -> dict:
         """Send userbot info"""
 
@@ -191,6 +166,9 @@ class HerokuInfoMod(loader.Module):
 
     @loader.command()
     async def infocmd(self, message: Message):
+        start = time.perf_counter_ns()
+        message = await utils.answer(message, self.config["ping_emoji"])
+
         if self.config.get('pp_to_banner', True):
             print(self.config['banner_url'])
             try:
@@ -203,7 +181,7 @@ class HerokuInfoMod(loader.Module):
         await utils.answer_file(
             message,
             self.config["banner_url"],
-            self._render_info(False),
+            self._render_info(False).format(ping=round((time.perf_counter_ns() - start) / 10**6, 3)),
         )
 
     @loader.command()
