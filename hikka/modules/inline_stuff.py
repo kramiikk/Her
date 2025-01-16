@@ -31,22 +31,22 @@ class InlineStuff(loader.Module):
 
     @loader.watcher("out", "only_inline", contains="Opening gallery...")
     async def gallery_watcher(self, message: Message):
-        self.logger.info(f"Получено сообщение: {message.raw_text}")
+        logger.info(f"Получено сообщение: {message.raw_text}")
         if message.via_bot_id != self.inline.bot_id:
-            self.logger.info("Сообщение не от inline бота, пропуск.")
+            logger.info("Сообщение не от inline бота, пропуск.")
             return
 
         match = re.search(r"#id: ([a-zA-Z0-9]+)", message.raw_text)
         if not match:
-            self.logger.error("Не удалось извлечь ID из сообщения.")
+            logger.error("Не удалось извлечь ID из сообщения.")
             return
 
         id_ = match[1]
-        self.logger.info(f"Извлеченный ID: {id_}")
-        self.logger.info(f"Ключи в self.inline._custom_map: {self.inline._custom_map.keys()}")
+        logger.info(f"Извлеченный ID: {id_}")
+        logger.info(f"Ключи в self.inline._custom_map: {self.inline._custom_map.keys()}")
 
         if id_ not in self.inline._custom_map:
-            self.logger.error(f"ID '{id_}' не найден в self.inline._custom_map")
+            logger.error(f"ID '{id_}' не найден в self.inline._custom_map")
             return
 
         m = await message.respond("🪐", reply_to=utils.get_topic(message))
