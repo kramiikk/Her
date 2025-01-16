@@ -215,7 +215,6 @@ presets:
   _service_desc: "Really useful modules — account management, link shortener, search engine, etc."
   _downloaders_title: "📥 Downloaders"
   _downloaders_desc: "The collection of tools which will help you download/upload files from/to different sources — YouTube, TikTok, Instagram, Spotify, VK Music, etc."
-  welcome: "👋 <b>Hi there! Tired of scrolling through endless modules in channels? Let me suggest you some pre-made collections. If you need to call this menu again, simply send /presets to this bot!</b>"
   preset: "<b>{}:</b>\nℹ️ <i>{}</i>\n\n⚒ <b>Modules in this collection:</b>\n\n{}"
   back: "🔙 Back"
   install: "📦 Install"

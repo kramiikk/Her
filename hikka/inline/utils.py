@@ -538,48 +538,6 @@ class Utils(InlineUnit):
         else:
             return True
 
-    async def _delete_unit_message(
-        self,
-        call: typing.Optional[CallbackQuery] = None,
-        unit_id: typing.Optional[str] = None,
-        chat_id: typing.Optional[int] = None,
-        message_id: typing.Optional[int] = None,
-    ) -> bool:
-        """Params `self`, `unit_id` are for internal use only, do not try to pass them"""
-        if getattr(getattr(call, "message", None), "chat", None):
-            try:
-                await self.bot.delete_message(
-                    chat_id=call.message.chat.id,
-                    message_id=call.message.message_id,
-                )
-            except Exception:
-                return False
-
-            return True
-
-        if chat_id and message_id:
-            try:
-                await self.bot.delete_message(chat_id=chat_id, message_id=message_id)
-            except Exception:
-                return False
-
-            return True
-
-        if not unit_id and hasattr(call, "unit_id") and call.unit_id:
-            unit_id = call.unit_id
-
-        try:
-            message_id, peer, _, _ = resolve_inline_message_id(
-                self._units[unit_id]["inline_message_id"]
-            )
-
-            await self._client.delete_messages(peer, [message_id])
-            await self._unload_unit(unit_id)
-        except Exception:
-            return False
-
-        return True
-
     async def _unload_unit(self, unit_id: str) -> bool:
         """Params `self`, `unit_id` are for internal use only, do not try to pass them"""
         try:

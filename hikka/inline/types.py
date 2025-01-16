@@ -47,12 +47,6 @@ class InlineMessage:
             **kwargs,
         )
 
-    async def delete(self) -> bool:
-        return await self.inline_manager._delete_unit_message(
-            self,
-            unit_id=self.unit_id,
-        )
-
     async def unload(self) -> bool:
         return await self.inline_manager._unload_unit(unit_id=self.unit_id)
 
@@ -92,14 +86,6 @@ class BotInlineMessage:
             chat_id=self.chat_id,
             message_id=self.message_id,
             **kwargs,
-        )
-
-    async def delete(self) -> bool:
-        return await self.inline_manager._delete_unit_message(
-            self,
-            unit_id=self.unit_id,
-            chat_id=self.chat_id,
-            message_id=self.message_id,
         )
 
     async def unload(self, *args, **kwargs) -> bool:

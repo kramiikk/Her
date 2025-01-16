@@ -160,8 +160,6 @@ class InlineManager(
             logger.critical("Initialization of inline manager failed!", exc_info=True)
             return False
 
-        await self._client.delete_messages(self.bot_username, m)
-
         self._dp.register_inline_handler(
             self._inline_handler,
             lambda _: True,

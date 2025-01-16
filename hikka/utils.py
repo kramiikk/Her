@@ -643,22 +643,6 @@ async def set_avatar(
         )
     )
 
-    await fw_protect()
-
-    try:
-        await client.delete_messages(
-            peer,
-            message_ids=[
-                next(
-                    update
-                    for update in res.updates
-                    if isinstance(update, UpdateNewChannelMessage)
-                ).message.id
-            ],
-        )
-    except Exception:
-        pass
-
     return True
 
 
