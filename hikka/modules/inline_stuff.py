@@ -4,6 +4,7 @@
 # You can redistribute it and/or modify it under the terms of the GNU AGPLv3
 # 🔑 https://www.gnu.org/licenses/agpl-3.0.html
 
+import logging
 import re
 import string
 
@@ -14,6 +15,7 @@ from hikkatl.tl.types import Message
 from .. import loader, utils
 from ..inline.types import BotInlineMessage
 
+logger = logging.getLogger(__name__)
 
 @loader.tds
 class InlineStuff(loader.Module):
