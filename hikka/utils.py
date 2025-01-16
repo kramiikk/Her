@@ -436,7 +436,6 @@ async def answer(
             disable_security=True,
         )
     """
-    # Compatibility with FTG\GeekTG
 
     if isinstance(message, list) and message:
         message = message[0]

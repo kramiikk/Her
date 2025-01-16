@@ -220,7 +220,7 @@ class Strings:
     def __call__(
         self,
         key: str,
-        _: typing.Optional[typing.Any] = None,  # Compatibility tweak for FTG\GeekTG
+        _: typing.Optional[typing.Any] = None,
     ) -> str:
         return self.__getitem__(key)
 

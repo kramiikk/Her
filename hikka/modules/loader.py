@@ -33,7 +33,6 @@ from hikkatl.tl.types import Channel, Message, PeerUser
 
 from .. import loader, main, utils
 from .._local_storage import RemoteStorage
-from ..compat import geek
 from ..inline.types import InlineCall
 from ..types import CoreOverwriteError, CoreUnloadError
 
@@ -556,7 +555,6 @@ class LoaderMod(loader.Module):
             uid = name.replace("%", "%%").replace(".", "%d")
 
         module_name = f"hikka.modules.{uid}"
-        doc = geek.compat(doc)
 
         async def core_overwrite(e: CoreOverwriteError):
             nonlocal message
