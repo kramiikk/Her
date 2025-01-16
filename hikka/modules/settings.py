@@ -267,5 +267,5 @@ class CoreMod(loader.Module):
     async def cleardb(self, message: Message):
         self._db.clear()
         self._db.save()
-        await utils.answer(call, self.strings("db_cleared"))
+        await utils.answer(self.strings("db_cleared"))
         
