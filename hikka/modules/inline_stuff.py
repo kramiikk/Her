@@ -31,9 +31,7 @@ class InlineStuff(loader.Module):
 
     @loader.watcher("out", "only_inline", contains="Opening gallery...")
     async def gallery_watcher(self, message: Message):
-        logger.info(f"Получено сообщение: {message.raw_text}")
         if message.via_bot_id != self.inline.bot_id:
-            logger.info("Сообщение не от inline бота, пропуск.")
             return
 
         match = re.search(r"#id: ([a-zA-Z0-9]+)", message.raw_text)

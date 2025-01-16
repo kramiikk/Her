@@ -20,6 +20,7 @@ from hikkatl.tl.functions.contacts import UnblockRequest
 from hikkatl.tl.types import Message
 from hikkatl.utils import get_display_name
 
+from .. import utils
 from ..database import Database
 from ..tl_cache import CustomTelegramClient
 from ..translations import Translator
@@ -250,4 +251,12 @@ class InlineManager(
         self._error_events.pop(unit_id, None)
 
         if exception:
-            raise exception
+            raise exception  # skipcq: PYL-E0702
+        if not q:
+            raise Exception("No query results")
+        return await q[0].click(
+            utils.get_chat_id(message) if isinstance(message, Message) else message,
+            reply_to=(
+                message.reply_to_msg_id if isinstance(message, Message) else None
+            ),
+        )
