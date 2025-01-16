@@ -84,7 +84,7 @@ class CoreMod(loader.Module):
         module = self.allmodules.get_classname(module)
         return f"{str(chatid)}.{module}" if module else chatid
 
-    @loader.command(alias="hikka", ru_doc="Информация о Хере", en_doc="Information of Her", ua_doc="Інформація про Хер", de_doc="Informationen über Her")
+    @loader.command()
     async def hercmd(self, message: Message):
         await utils.answer_file(
             message,
