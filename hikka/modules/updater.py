@@ -64,7 +64,6 @@ class UpdaterMod(loader.Module):
                             "callback": self.inline_restart,
                             "args": (secure_boot,),
                         },
-                        {"text": self.strings("cancel"), "action": "close"},
                     ],
                 )
             ):
@@ -209,7 +208,6 @@ class UpdaterMod(loader.Module):
                             "text": self.strings("btn_update"),
                             "callback": self.inline_update,
                         },
-                        {"text": self.strings("cancel"), "action": "close"},
                     ],
                 )
             ):

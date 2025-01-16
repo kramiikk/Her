@@ -109,17 +109,7 @@ class UpdateNotifier(loader.Module):
             self._notified = self._pending
             self.set("ignore_permanent", False)
 
-            await self._delete_all_upd_messages()
-
             self.set("upd_msg", m.message_id)
-
-    async def _delete_all_upd_messages(self):
-        for client in self.allclients:
-            with contextlib.suppress(Exception):
-                await client.loader.inline.bot.delete_message(
-                    client.tg_id,
-                    client.loader.db.get("UpdateNotifier", "upd_msg"),
-                )
 
     @loader.callback_handler()
     async def update(self, call: InlineCall):
@@ -131,8 +121,6 @@ class UpdateNotifier(loader.Module):
             self.set("ignore_permanent", self.get_latest())
             await call.answer(self.strings("latest_disabled"))
             return
-
-        await self._delete_all_upd_messages()
 
         await self.invoke("update", "-f", peer=self.inline.bot_username)
 

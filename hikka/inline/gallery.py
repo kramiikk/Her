@@ -505,10 +505,6 @@ class Gallery(InlineUnit):
             await self._gallery_slideshow(call, unit_id)
             return
 
-        if page == "close":
-            await self._delete_unit_message(call, unit_id=unit_id)
-            return
-
         if page < 0:
             await call.answer("No way back")
             return
@@ -649,7 +645,6 @@ class Gallery(InlineUnit):
                         ]
                     ]
                 )
-                + [[{"text": "🔻 Close", "callback": callback, "args": ("close",)}]]
             )
         )
 

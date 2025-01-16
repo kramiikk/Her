@@ -148,7 +148,6 @@ class HerSecurityMod(loader.Module):
                 ],
                 2,
             )
-            + [[{"text": self.strings("close_menu"), "action": "close"}]]
             if is_inline
             else utils.chunks(
                 [
@@ -166,14 +165,6 @@ class HerSecurityMod(loader.Module):
                 ],
                 2,
             )
-            + [
-                [
-                    {
-                        "text": self.strings("close_menu"),
-                        "action": "close",
-                    }
-                ]
-            ]
         )
 
     def _build_markup_global(
@@ -190,7 +181,7 @@ class HerSecurityMod(loader.Module):
                 for group, level in self._get_current_bm(is_inline).items()
             ],
             2,
-        ) + [[{"text": self.strings("close_menu"), "action": "close"}]]
+        )
 
     def _get_current_bm(self, is_inline: bool = False) -> dict:
         return self._perms_map(
@@ -549,10 +540,6 @@ class HerSecurityMod(loader.Module):
                 ttl=10 * 60,
                 reply_markup=[
                     {
-                        "text": self.strings("cancel"),
-                        "action": "close",
-                    },
-                    {
                         "text": self.strings("confirm"),
                         "callback": self._add_to_group,
                         "args": (group, True, user.id),
@@ -574,10 +561,6 @@ class HerSecurityMod(loader.Module):
                 + self.strings("suggest_nonick")
             ),
             reply_markup=[
-                {
-                    "text": self.strings("cancel"),
-                    "action": "close",
-                },
                 {
                     "text": self.strings("enable_nonick_btn"),
                     "callback": self._enable_nonick,
@@ -829,8 +812,7 @@ class HerSecurityMod(loader.Module):
                     "text": self.strings("confirm_btn"),
                     "callback": self._add_rule,
                     "args": (target_type, target, rule, duration),
-                },
-                {"text": self.strings("cancel_btn"), "action": "close"},
+                }
             ],
         )
 

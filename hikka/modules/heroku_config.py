@@ -112,8 +112,7 @@ class HerConfigMod(loader.Module):
                         "callback": self.inline__configure,
                         "args": (mod,),
                         "kwargs": {"obj_type": obj_type},
-                    },
-                    {"text": self.strings("close_btn"), "action": "close"},
+                    }
                 ]
             ],
             inline_message_id=inline_message_id,
@@ -144,8 +143,7 @@ class HerConfigMod(loader.Module):
                         "callback": self.inline__configure,
                         "args": (mod,),
                         "kwargs": {"obj_type": obj_type},
-                    },
-                    {"text": self.strings("close_btn"), "action": "close"},
+                    }
                 ]
             ],
         )
@@ -264,8 +262,7 @@ class HerConfigMod(loader.Module):
                     "callback": self.inline__configure,
                     "args": (mod,),
                     "kwargs": {"obj_type": obj_type},
-                },
-                {"text": self.strings("close_btn"), "action": "close"},
+                }
             ],
         ]
 
@@ -316,8 +313,7 @@ class HerConfigMod(loader.Module):
                         "callback": self.inline__configure,
                         "args": (mod,),
                         "kwargs": {"obj_type": obj_type},
-                    },
-                    {"text": self.strings("close_btn"), "action": "close"},
+                    }
                 ]
             ],
             inline_message_id=inline_message_id,
@@ -382,8 +378,7 @@ class HerConfigMod(loader.Module):
                         "callback": self.inline__configure,
                         "args": (mod,),
                         "kwargs": {"obj_type": obj_type},
-                    },
-                    {"text": self.strings("close_btn"), "action": "close"},
+                    }
                 ]
             ],
             inline_message_id=inline_message_id,
@@ -449,8 +444,7 @@ class HerConfigMod(loader.Module):
                     "callback": self.inline__configure,
                     "args": (mod,),
                     "kwargs": {"obj_type": obj_type},
-                },
-                {"text": self.strings("close_btn"), "action": "close"},
+                }
             ],
         ]
 
@@ -491,8 +485,7 @@ class HerConfigMod(loader.Module):
                         "callback": self.inline__configure,
                         "args": (mod,),
                         "kwargs": {"obj_type": obj_type},
-                    },
-                    {"text": self.strings("close_btn"), "action": "close"},
+                    }
                 ]
             ],
         )
@@ -593,8 +586,7 @@ class HerConfigMod(loader.Module):
                     "callback": self.inline__configure,
                     "args": (mod,),
                     "kwargs": {"obj_type": obj_type},
-                },
-                {"text": self.strings("close_btn"), "action": "close"},
+                }
             ],
         ]
 
@@ -662,8 +654,7 @@ class HerConfigMod(loader.Module):
                     "callback": self.inline__configure,
                     "args": (mod,),
                     "kwargs": {"obj_type": obj_type},
-                },
-                {"text": self.strings("close_btn"), "action": "close"},
+                }
             ],
         ]
 
@@ -826,8 +817,7 @@ class HerConfigMod(loader.Module):
                         "callback": self.inline__configure,
                         "args": (mod,),
                         "kwargs": {"obj_type": obj_type},
-                    },
-                    {"text": self.strings("close_btn"), "action": "close"},
+                    }
                 ],
             ],
         )
@@ -870,8 +860,7 @@ class HerConfigMod(loader.Module):
                         "text": self.strings("back_btn"),
                         "callback": self.inline__global_config,
                         "kwargs": {"obj_type": obj_type},
-                    },
-                    {"text": self.strings("close_btn"), "action": "close"},
+                    }
                 ]
             ],
         )
@@ -905,8 +894,7 @@ class HerConfigMod(loader.Module):
                     if self.allmodules.libraries
                     and any(hasattr(lib, "config") for lib in self.allmodules.libraries)
                     else []
-                ),
-                [{"text": self.strings("close_btn"), "action": "close"}],
+                )
             ],
         )
 
@@ -962,8 +950,7 @@ class HerConfigMod(loader.Module):
                 {
                     "text": self.strings("back_btn"),
                     "callback": self.inline__choose_category,
-                },
-                {"text": self.strings("close_btn"), "action": "close"},
+                }
             ]
         ]
 

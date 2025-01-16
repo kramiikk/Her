@@ -518,11 +518,7 @@ class LoaderMod(loader.Module):
                             {
                                 "text": self.lookup("updater").strings("btn_update"),
                                 "callback": self.lookup("updater").inline_update,
-                            },
-                            {
-                                "text": self.lookup("updater").strings("cancel"),
-                                "action": "close",
-                            },
+                            }
                         ],
                     )
                 return
@@ -1080,12 +1076,8 @@ class LoaderMod(loader.Module):
                 {
                     "text": self.strings("clearmodules"),
                     "callback": self._inline__clearmodules,
-                },
-                {
-                    "text": self.strings("cancel"),
-                    "action": "close",
-                },
-            ],
+                }
+            ]
         )
 
     @loader.command()

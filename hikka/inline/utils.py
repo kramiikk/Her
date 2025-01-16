@@ -79,9 +79,6 @@ class Utils(InlineUnit):
                     return None
 
                 if "callback" not in button:
-                    if button.get("action") == "close":
-                        button["callback"] = self._close_unit_handler
-
                     if button.get("action") == "unload":
                         button["callback"] = self._unload_unit_handler
 

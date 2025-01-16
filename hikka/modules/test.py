@@ -244,8 +244,7 @@ class TestMod(loader.Module):
                             ]
                         ],
                         2,
-                    )
-                    + [[{"text": self.strings("cancel"), "action": "close"}]],
+                    ),
                     message=message,
                 ):
                     raise
@@ -291,7 +290,6 @@ class TestMod(loader.Module):
                             "callback": self.logs,
                             "args": [True, lvl],
                         },
-                        {"text": self.strings("cancel"), "action": "close"},
                     ],
                 }
                 if isinstance(message, Message):

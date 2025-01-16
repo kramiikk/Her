@@ -274,12 +274,8 @@ class CoreMod(loader.Module):
                 {
                     "text": self.strings("cleardb_confirm"),
                     "callback": self._inline__cleardb,
-                },
-                {
-                    "text": self.strings("cancel"),
-                    "action": "close",
-                },
-            ],
+                }
+            ]
         )
 
     async def _inline__cleardb(self, call: InlineCall):

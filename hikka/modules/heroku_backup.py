@@ -30,35 +30,6 @@ class HerBackupMod(loader.Module):
     strings = {"name": "HerBackup"}
 
     async def client_ready(self):
-        if not self.get("period"):
-            await self.inline.bot.send_photo(
-                self.tg_id,
-                photo="https://imgur.com/a/wfiqkDa.png",
-                caption=self.strings("period"),
-                reply_markup=self.inline.generate_markup(
-                    utils.chunks(
-                        [
-                            {
-                                "text": f"🕰 {i} h",
-                                "callback": self._set_backup_period,
-                                "args": (i,),
-                            }
-                            for i in [1, 2, 4, 6, 8, 12, 24, 48, 168]
-                        ],
-                        3,
-                    )
-                    + [
-                        [
-                            {
-                                "text": "🚫 Never",
-                                "callback": self._set_backup_period,
-                                "args": (0,),
-                            }
-                        ]
-                    ]
-                ),
-            )
-
         self._backup_channel, _ = await utils.asset_channel(
             self._client,
             "her-backups",
@@ -70,37 +41,8 @@ class HerBackupMod(loader.Module):
             invite_bot=True,
         )
 
-    async def _set_backup_period(self, call: BotInlineCall, value: int):
-        if not value:
-            self.set("period", "disabled")
-            await call.answer(self.strings("never"), show_alert=True)
-            return
-
-        self.set("period", value * 60 * 60)
+        self.set("period", 168 * 60 * 60)
         self.set("last_backup", round(time.time()))
-
-        await call.answer(self.strings("saved"), show_alert=True)
-
-    @loader.command()
-    async def set_backup_period(self, message: Message):
-        """[time] | set your backup bd period"""
-        if (
-            not (args := utils.get_args_raw(message))
-            or not args.isdigit()
-            or int(args) not in range(200)
-        ):
-            await utils.answer(message, self.strings("invalid_args"))
-            return
-
-        if not int(args):
-            self.set("period", "disabled")
-            await utils.answer(message, f"<b>{self.strings('never')}</b>")
-            return
-
-        period = int(args) * 60 * 60
-        self.set("period", period)
-        self.set("last_backup", round(time.time()))
-        await utils.answer(message, f"<b>{self.strings('saved')}</b>")
 
     @loader.loop(interval=1, autostart=True)
     async def handler(self):
@@ -138,7 +80,7 @@ class HerBackupMod(loader.Module):
                             }
                         ]
                     ]
-                ),
+                )
             )
 
             self.set("last_backup", round(time.time()))

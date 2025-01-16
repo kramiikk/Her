@@ -85,54 +85,6 @@ class HerSettingsMod(loader.Module):
 
         restart()
 
-    async def _uninstall_confirm_step_2(self, call: InlineCall):
-        await call.edit(
-            self.strings("deauth_confirm_step2"),
-            utils.chunks(
-                list(
-                    sorted(
-                        [
-                            {
-                                "text": self.strings("deauth_yes"),
-                                "callback": self._uninstall,
-                            },
-                            *[
-                                {
-                                    "text": self.strings(f"deauth_no_{i}"),
-                                    "action": "close",
-                                }
-                                for i in range(1, 4)
-                            ],
-                        ],
-                        key=lambda _: random.random(),
-                    )
-                ),
-                2,
-            )
-            + [
-                [
-                    {
-                        "text": self.strings("deauth_cancel"),
-                        "action": "close",
-                    }
-                ]
-            ],
-        )
-
-    @loader.command()
-    async def uninstall_her(self, message: Message):
-        await self.inline.form(
-            self.strings("deauth_confirm"),
-            message,
-            [
-                {
-                    "text": self.strings("deauth_confirm_btn"),
-                    "callback": self._uninstall_confirm_step_2,
-                },
-                {"text": self.strings("deauth_cancel"), "action": "close"},
-            ],
-        )
-
     @loader.command()
     async def watchers(self, message: Message):
         watchers, disabled_watchers = self.get_watchers()
@@ -459,9 +411,8 @@ class HerSettingsMod(loader.Module):
             await call.edit(
                 self.strings("confirm_update"),
                 reply_markup=[
-                    {"text": "🪂 Update", "callback": self.inline__update},
-                    {"text": "🚫 Cancel", "action": "close"},
-                ],
+                    {"text": "🪂 Update", "callback": self.inline__update}
+                ]
             )
             return
 
@@ -485,11 +436,7 @@ class HerSettingsMod(loader.Module):
                 {
                     "text": self.strings("core_protection_btn"),
                     "callback": self._remove_core_protection,
-                },
-                {
-                    "text": self.strings("btn_no"),
-                    "action": "close",
-                },
+                }
             ],
         )
 
@@ -502,8 +449,7 @@ class HerSettingsMod(loader.Module):
             await call.edit(
                 self.strings("confirm_restart"),
                 reply_markup=[
-                    {"text": "🔄 Restart", "callback": self.inline__restart},
-                    {"text": "🚫 Cancel", "action": "close"},
+                    {"text": "🔄 Restart", "callback": self.inline__restart}
                 ],
             )
             return
@@ -682,8 +628,7 @@ class HerSettingsMod(loader.Module):
                     "callback": self.inline__update,
                     "args": (True,),
                 },
-            ],
-            [{"text": self.strings("close_menu"), "action": "close"}],
+            ]
         ]
 
     @loader.command()

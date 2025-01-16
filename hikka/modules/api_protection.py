@@ -172,7 +172,7 @@ class APIRatelimiterMod(loader.Module):
                                     self.config["local_floodwait"],
                                     prefix=utils.escape_html(self.get_prefix()),
                                 )
-                            ),
+                            )
                         )
 
                         # It is intented to use time.sleep instead of asyncio.sleep
@@ -207,7 +207,6 @@ class APIRatelimiterMod(loader.Module):
             message=message,
             text=self.strings("u_sure"),
             reply_markup=[
-                {"text": self.strings("btn_no"), "action": "close"},
                 {"text": self.strings("btn_yes"), "callback": self._finish},
             ],
         )

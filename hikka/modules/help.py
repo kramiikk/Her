@@ -164,7 +164,7 @@ class Help(loader.Module):
                             utils.escape_html(inspect.getdoc(fun))
                             if fun.__doc__
                             else self.strings("undoc")
-                        ),
+                        )
                     )
                 )
 
