@@ -1,4 +1,3 @@
-# This file is a part of 
 # ©️ Dan Gazizullin, 2021-2023
 # This file is a part of Her
 # 🌐 https://github.com/hikariatama/Hikka

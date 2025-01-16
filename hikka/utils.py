@@ -1,6 +1,5 @@
 """Utilities"""
 
-# This file is a part of Her
 # ©️ Dan Gazizullin, 2021-2023
 # This file is a part of Her
 # 🌐 https://github.com/hikariatama/Hikka
@@ -378,7 +377,7 @@ async def answer_file(
         >>> await utils.answer_file(message, "test.txt")
         >>> await utils.answer_file(
             message,
-            "https://mods.hikariatama.ru/badges/artai.jpg",
+            "artai.jpg",
             "This is the cool module, check it out!",
         )
     """

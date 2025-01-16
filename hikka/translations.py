@@ -1,4 +1,3 @@
-# This file is a part of Her
 # ©️ Dan Gazizullin, 2021-2023
 # This file is a part of Her
 # 🌐 https://github.com/hikariatama/Hikka
@@ -173,9 +172,6 @@ class Strings:
     def __init__(self, mod: Module, translator: Translator):  # skipcq: PYL-W0621
         self._mod = mod
         self._translator = translator
-
-        if not translator:
-            logger.debug("Module %s got empty translator %s", mod, translator)
 
         self._base_strings = mod.strings  # Back 'em up, bc they will get replaced
         self.external_strings = {}
