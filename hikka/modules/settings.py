@@ -267,26 +267,7 @@ class CoreMod(loader.Module):
 
     @loader.command()
     async def cleardb(self, message: Message):
-        await self.inline.form(
-            self.strings("confirm_cleardb"),
-            message,
-            reply_markup=[
-                {
-                    "text": self.strings("cleardb_confirm"),
-                    "callback": self._inline__cleardb,
-                }
-            ]
-        )
-
-    async def _inline__cleardb(self, call: InlineCall):
         self._db.clear()
         self._db.save()
         await utils.answer(call, self.strings("db_cleared"))
-
-    async def installationcmd(self, message: Message):
-        """| Guide of installation"""
-
-        await self.client.send_file(
-            message.peer_id,
-            "https://imgur.com/a/HrrFair.png",
-            caption=self.strings["installation"].format('{}', prefix=self.get_prefix()), reply_to=getattr(message, "reply_to_msg_id", None),)
+        
