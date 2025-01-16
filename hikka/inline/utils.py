@@ -253,13 +253,11 @@ class Utils(InlineUnit):
             if not caller:
                 return None
 
-            logger.debug("Found caller: %s", caller)
-
             return lambda: self._client.dispatcher.security.get_flags(
                 getattr(caller, "__self__", caller),
             )
         except Exception:
-            logger.debug("Can't parse security mask in form", exc_info=True)
+            logger.error("Can't parse security mask in form", exc_info=True)
 
         return None
 

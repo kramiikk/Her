@@ -80,7 +80,6 @@ class Database(dict):
             return False
 
         await utils.run_sync(self._redis_save_sync)
-        logger.debug("Published db to Redis")
         return True
 
     async def _redis_save(self) -> bool:
@@ -90,7 +89,6 @@ class Database(dict):
 
         await asyncio.sleep(5)
         await utils.run_sync(self._redis_save_sync)
-        logger.debug("Published db to Redis")
         self._saving_task = None
         return True
 
@@ -146,10 +144,8 @@ class Database(dict):
 
         try:
             self.update(**json.loads(self._db_file.read_text()))
-        except json.decoder.JSONDecodeError:
+        except Exception:
             logger.warning("Database read failed! Creating new one...")
-        except FileNotFoundError:
-            logger.debug("Database file not found, creating new one...")
 
     def process_db_autofix(self, db: dict) -> bool:
         if not utils.is_serializable(db):

@@ -115,7 +115,7 @@ def replace_all_refs(replace_from: typing.Any, replace_to: typing.Any) -> typing
             replace_all_refs(referrer, newfn)
 
         else:
-            logger.debug("%s is not supported.", referrer)
+            logger.error("%s is not supported.", referrer)
 
     if hit is False:
         raise AttributeError(f"Object '{replace_from}' not found")

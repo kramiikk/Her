@@ -418,8 +418,6 @@ class Module:
                 )
                 requirements = [e.name]
 
-            logger.debug("Installing requirements: %s", requirements)
-
             if not requirements or _did_requirements:
                 _raise(e)
 
@@ -490,7 +488,6 @@ class Module:
                 and not isinstance(getattr(lib_obj, "version", None), tuple)
                 or old_lib.version >= lib_obj.version
             ):
-                logger.debug("Using existing instance of library %s", old_lib.name)
                 return old_lib
 
         if hasattr(lib_obj, "init"):
@@ -539,10 +536,6 @@ class Module:
                     await old_lib.on_lib_update(lib_obj)
 
                 replace_all_refs(old_lib, lib_obj)
-                logger.debug(
-                    "Replacing existing instance of library %s with updated object",
-                    lib_obj.name,
-                )
                 return lib_obj
 
         self.allmodules.libraries += [lib_obj]
@@ -803,12 +796,6 @@ class ConfigValue:
                         if not ignore_validation:
                             raise e
 
-                        logger.debug(
-                            "Config value was broken (%s), so it was reset to %s",
-                            value,
-                            self.default,
-                        )
-
                         value = self.default
                 else:
                     defaults = {
@@ -820,10 +807,6 @@ class ConfigValue:
                     }
 
                     if self.validator.internal_id in defaults:
-                        logger.debug(
-                            "Config value was None, so it was reset to %s",
-                            defaults[self.validator.internal_id],
-                        )
                         value = defaults[self.validator.internal_id]
 
             # This attribute will tell the `Loader` to save this value in db

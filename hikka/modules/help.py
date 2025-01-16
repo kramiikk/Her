@@ -240,7 +240,6 @@ class Help(loader.Module):
 
         for mod in self.allmodules.modules:
             if not hasattr(mod, "commands"):
-                logger.debug("Module %s is not inited yet", mod.__class__.__name__)
                 continue
 
             if mod.__class__.__name__ in self.get("hide", []) and not force:

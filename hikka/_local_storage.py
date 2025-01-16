@@ -75,8 +75,6 @@ class LocalStorage:
         with open(self._get_path(repo, module_name), "w") as f:
             f.write(module_code)
 
-        logger.debug("Saved module %s from %s to local cache.", module_name, repo)
-
     def fetch(self, repo: str, module_name: str) -> typing.Optional[str]:
         """
         Fetches module from disk.
@@ -99,10 +97,7 @@ class RemoteStorage:
 
     async def preload(self, urls: typing.List[str]):
         """Preloads modules from remote storage."""
-        logger.debug("Preloading modules from remote storage.")
         for url in urls:
-            logger.debug("Preloading module %s", url)
-
             with contextlib.suppress(Exception):
                 await self.fetch(url)
 
@@ -154,12 +149,7 @@ class RemoteStorage:
             )
             r.raise_for_status()
         except Exception:
-            logger.debug(
-                "Can't load module from remote storage. Trying local storage.",
-                exc_info=True,
-            )
             if module := self._local_storage.fetch(repo, module_name):
-                logger.debug("Module source loaded from local storage.")
                 return module
 
             raise

@@ -82,7 +82,6 @@ def owner(func: Command) -> Command:
 
 def _deprecated(name: str) -> callable:
     def decorator(func: Command) -> Command:
-        logger.debug("Using deprecated decorator `%s`, which will have no effect", name)
         return func
 
     return decorator
@@ -394,8 +393,6 @@ class SecurityManager:
         ):
             return True
 
-        logger.debug("Checking security match for %s", config)
-
         if config & SUDO or config & SUPPORT:
             if not self._last_warning or time.time() - self._last_warning > 60 * 60:
                 import warnings
@@ -464,49 +461,35 @@ class SecurityManager:
                             permission["rule_type"] == "command"
                             and permission["rule"] == command
                         ):
-                            logger.debug("sgroup match for %s", command)
                             return True
 
                         if (
                             permission["rule_type"] == "module"
                             and permission["rule"] == func.__self__.__class__.__name__
                         ):
-                            logger.debug(
-                                "sgroup match for %s", func.__self__.__class__.__name__
-                            )
                             return True
 
             for info in self._tsec_user.copy():
                 if info["target"] == user_id:
                     if info["rule_type"] == "command" and info["rule"] == command:
-                        logger.debug("tsec match for user %s", command)
                         return True
 
                     if (
                         info["rule_type"] == "module"
                         and info["rule"] == func.__self__.__class__.__name__
                     ):
-                        logger.debug(
-                            "tsec match for user %s",
-                            func.__self__.__class__.__name__,
-                        )
                         return True
 
             if chat:
                 for info in self._tsec_chat.copy():
                     if info["target"] == chat:
                         if info["rule_type"] == "command" and info["rule"] == command:
-                            logger.debug("tsec match for %s", command)
                             return True
 
                         if (
                             info["rule_type"] == "module"
                             and info["rule"] == func.__self__.__class__.__name__
                         ):
-                            logger.debug(
-                                "tsec match for %s",
-                                func.__self__.__class__.__name__,
-                            )
                             return True
 
         if f_group_member and message.is_group or f_pm and message.is_private:

@@ -184,13 +184,11 @@ class APIRatelimiterMod(loader.Module):
         self._client._call = new_call
         self._client._old_call_rewritten = old_call
         self._client._call._hikka_overwritten = True
-        logger.debug("Successfully installed ratelimiter")
 
     async def on_unload(self):
         if hasattr(self._client, "_old_call_rewritten"):
             self._client._call = self._client._old_call_rewritten
             delattr(self._client, "_old_call_rewritten")
-            logger.debug("Successfully uninstalled ratelimiter")
 
     @loader.command()
     async def suspend_api_protect(self, message: Message):

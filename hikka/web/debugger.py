@@ -26,11 +26,9 @@ class ServerThread(Thread):
         self.server = server
 
     def run(self):
-        logger.debug("Starting werkzeug debug server")
         self.server.serve_forever()
 
     def shutdown(self):
-        logger.debug("Shutting down werkzeug debug server")
         self.server.shutdown()
 
 
@@ -58,7 +56,6 @@ class WebDebugger:
         self._url = url
 
     def _create_server(self) -> BaseWSGIServer:
-        logger.debug("Creating new werkzeug server instance")
         os.environ["WERKZEUG_DEBUG_PIN"] = self.pin
         os.environ["WERKZEUG_RUN_MAIN"] = "true"
 
@@ -99,7 +96,6 @@ class WebDebugger:
         return self._url or f"http://127.0.0.1:{self.port}"
 
     def feed(self, exc_type, exc_value, exc_traceback) -> str:
-        logger.debug("Feeding exception %s to werkzeug debugger", exc_type)
         id_ = utils.rand(8)
         self.exceptions[id_] = exc_type(exc_value).with_traceback(exc_traceback)
         return self.url.strip("/") + f"?ex_id={id_}"

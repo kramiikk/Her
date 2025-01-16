@@ -288,7 +288,6 @@ class Form(InlineUnit):
         perms_map = None if manual_security else self._find_caller_sec_map()
 
         if not reply_markup and not ttl:
-            logger.debug("Patching form reply markup with empty data")
             base_reply_markup = copy.deepcopy(reply_markup) or None
             reply_markup = self._validate_markup({"text": "­", "data": "­"})
         else:
@@ -301,10 +300,6 @@ class Form(InlineUnit):
             )
             and not ttl
         ):
-            logger.debug(
-                "Patching form ttl to 10 minutes, because it doesn't contain any"
-                " buttons"
-            )
             ttl = 10 * 60
 
         self._units[unit_id] = {

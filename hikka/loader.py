@@ -169,22 +169,17 @@ class InfiniteLoop:
 
     def stop(self, *args, **kwargs):
         if self._task:
-            logger.debug("Stopped loop for method %s", self.func)
             self._wait_for_stop = asyncio.Event()
             self.status = False
             self._task.add_done_callback(self._stop)
             self._task.cancel()
             return asyncio.ensure_future(self._wait_for_stop.wait())
 
-        logger.debug("Loop is not running")
         return asyncio.ensure_future(stop_placeholder())
 
     def start(self, *args, **kwargs):
         if not self._task:
-            logger.debug("Started loop for method %s", self.func)
             self._task = asyncio.ensure_future(self.actual_loop(*args, **kwargs))
-        else:
-            logger.debug("Attempted to start already running loop")
 
     async def actual_loop(self, *args, **kwargs):
         # Wait for loader to set attribute
@@ -522,19 +517,6 @@ class Modules:
             self.callback_handlers = callback_handlers
             self.watchers = watchers
 
-            logger.debug(
-                (
-                    "Reloaded %s commands,"
-                    " %s inline handlers,"
-                    " %s callback handlers and"
-                    " %s watchers"
-                ),
-                len(self.commands),
-                len(self.inline_handlers),
-                len(self.callback_handlers),
-                len(self.watchers),
-            )
-
     async def register_all(
         self,
         mods: typing.Optional[typing.List[str]] = None,
@@ -591,8 +573,6 @@ class Modules:
                 user_friendly_origin = (
                     "<core {}>" if origin == "<core>" else "<file {}>"
                 ).format(module_name)
-
-                logger.debug("Loading %s from filesystem", module_name)
 
                 spec = importlib.machinery.ModuleSpec(
                     module_name,
@@ -651,8 +631,6 @@ class Modules:
             if origin == "<string>":
                 Path(path).write_text(spec.loader.data.decode())
 
-                logger.debug("Saved class %s to path %s", cls_name, path)
-
         return ret
 
     def add_aliases(self, aliases: dict):
@@ -666,12 +644,6 @@ class Modules:
         for name, handler in utils.iter_attrs(instance):
             if getattr(handler, "is_raw_handler", False):
                 self.client.dispatcher.raw_handlers.append(handler)
-                logger.debug(
-                    "Registered raw handler %s for %s. ID: %s",
-                    name,
-                    instance.__class__.__name__,
-                    handler.id,
-                )
 
     @property
     def _remove_core_protection(self) -> bool:
@@ -708,42 +680,9 @@ class Modules:
 
     def register_inline_stuff(self, instance: Module):
         for name, func in instance.hikka_inline_handlers.copy().items():
-            if name.lower() in self.inline_handlers:
-                if (
-                    hasattr(func, "__self__")
-                    and hasattr(self.inline_handlers[name], "__self__")
-                    and (
-                        func.__self__.__class__.__name__
-                        != self.inline_handlers[name].__self__.__class__.__name__
-                    )
-                ):
-                    logger.debug(
-                        "Duplicate inline_handler %s of %s",
-                        name,
-                        instance.__class__.__name__,
-                    )
-
-                logger.debug(
-                    "Replacing inline_handler %s for %s",
-                    self.inline_handlers[name],
-                    instance.__class__.__name__,
-                )
-
             self.inline_handlers.update({name.lower(): func})
 
         for name, func in instance.hikka_callback_handlers.copy().items():
-            if name.lower() in self.callback_handlers and (
-                hasattr(func, "__self__")
-                and hasattr(self.callback_handlers[name], "__self__")
-                and func.__self__.__class__.__name__
-                != self.callback_handlers[name].__self__.__class__.__name__
-            ):
-                logger.debug(
-                    "Duplicate callback_handler %s of %s",
-                    name,
-                    instance.__class__.__name__,
-                )
-
             self.callback_handlers.update({name.lower(): func})
 
     def unregister_inline_stuff(self, instance: Module, purpose: str):
@@ -755,12 +694,6 @@ class Modules:
                 == self.inline_handlers[name].__self__.__class__.__name__
             ):
                 del self.inline_handlers[name.lower()]
-                logger.debug(
-                    "Unregistered inline_handler %s of %s for %s",
-                    name,
-                    instance.__class__.__name__,
-                    purpose,
-                )
 
         for name, func in instance.hikka_callback_handlers.copy().items():
             if name.lower() in self.callback_handlers and (
@@ -770,18 +703,11 @@ class Modules:
                 == self.callback_handlers[name].__self__.__class__.__name__
             ):
                 del self.callback_handlers[name.lower()]
-                logger.debug(
-                    "Unregistered callback_handler %s of %s for %s",
-                    name,
-                    instance.__class__.__name__,
-                    purpose,
-                )
 
     def register_watchers(self, instance: Module):
         """Register watcher from instance"""
         for _watcher in self.watchers:
             if _watcher.__self__.__class__.__name__ == instance.__class__.__name__:
-                logger.debug("Removing watcher %s for update", _watcher)
                 self.watchers.remove(_watcher)
 
         for _watcher in instance.hikka_watchers.values():
@@ -835,18 +761,12 @@ class Modules:
                         )
                     )
 
-                logger.debug("Removing module %s for update", module)
                 await module.on_unload()
 
                 self.modules.remove(module)
                 for _, method in utils.iter_attrs(module):
                     if isinstance(method, InfiniteLoop):
                         method.stop()
-                        logger.debug(
-                            "Stopped loop in module %s, method %s",
-                            module,
-                            method,
-                        )
 
         self.modules += [instance]
 
@@ -984,13 +904,10 @@ class Modules:
             if no_self_unload:
                 raise e
 
-            logger.debug("Unloading %s, because it raised SelfUnload", mod)
             self.modules.remove(mod)
         except SelfSuspend as e:
             if no_self_unload:
                 raise e
-
-            logger.debug("Suspending %s, because it raised SelfSuspend", mod)
             return
         except Exception as e:
             logger.exception(
@@ -1010,8 +927,6 @@ class Modules:
 
                 if method.autostart:
                     method.start()
-
-                logger.debug("Added module %s to method %s", mod, method)
 
         self.unregister_commands(mod, "update")
         self.unregister_raw_handlers(mod, "update")
@@ -1053,9 +968,7 @@ class Modules:
 
                 if os.path.isfile(path):
                     os.remove(path)
-                    logger.debug("Removed %s file at path %s", name, path)
 
-                logger.debug("Removing module %s for unload", module)
                 self.modules.remove(module)
 
                 await module.on_unload()
@@ -1065,30 +978,16 @@ class Modules:
                 self.unregister_commands(module, "unload")
                 self.unregister_watchers(module, "unload")
                 self.unregister_inline_stuff(module, "unload")
-
-        logger.debug("Worked: %s", worked)
         return worked
 
     def unregister_loops(self, instance: Module, purpose: str):
         for name, method in utils.iter_attrs(instance):
             if isinstance(method, InfiniteLoop):
-                logger.debug(
-                    "Stopping loop for %s in module %s, method %s",
-                    purpose,
-                    instance.__class__.__name__,
-                    name,
-                )
                 method.stop()
 
     def unregister_commands(self, instance: Module, purpose: str):
         for name, cmd in self.commands.copy().items():
             if cmd.__self__.__class__.__name__ == instance.__class__.__name__:
-                logger.debug(
-                    "Removing command %s of module %s for %s",
-                    name,
-                    instance.__class__.__name__,
-                    purpose,
-                )
                 del self.commands[name]
                 for alias, _command in self.aliases.copy().items():
                     if _command == name:
@@ -1097,12 +996,6 @@ class Modules:
     def unregister_watchers(self, instance: Module, purpose: str):
         for _watcher in self.watchers.copy():
             if _watcher.__self__.__class__.__name__ == instance.__class__.__name__:
-                logger.debug(
-                    "Removing watcher %s of module %s for %s",
-                    _watcher,
-                    instance.__class__.__name__,
-                    purpose,
-                )
                 self.watchers.remove(_watcher)
 
     def unregister_raw_handlers(self, instance: Module, purpose: str):
@@ -1110,12 +1003,6 @@ class Modules:
         for handler in self.client.dispatcher.raw_handlers:
             if handler.__self__.__class__.__name__ == instance.__class__.__name__:
                 self.client.dispatcher.raw_handlers.remove(handler)
-                logger.debug(
-                    "Unregistered raw handler of module %s for %s. ID: %s",
-                    instance.__class__.__name__,
-                    purpose,
-                    handler.id,
-                )
 
     def add_alias(self, alias: str, cmd: str) -> bool:
         """Make an alias"""
@@ -1137,13 +1024,6 @@ class Modules:
             return False
 
         for module in self.modules:
-            try:
-                module.config_complete(reload_dynamic_translate=True)
-            except Exception as e:
-                logger.debug(
-                    "Can't complete dynamic translations reload of %s due to %s",
-                    module,
-                    e,
-                )
+            module.config_complete(reload_dynamic_translate=True)
 
         return True

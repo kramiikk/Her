@@ -533,7 +533,6 @@ class Gallery(InlineUnit):
                 - self._units[unit_id]["current_index"]
                 < self._units[unit_id].get("preload", 0) // 2
             ):
-                logger.debug("Started preload for gallery %s", unit_id)
                 asyncio.ensure_future(self._load_gallery_photos(unit_id))
 
         try:
@@ -543,7 +542,6 @@ class Gallery(InlineUnit):
                 reply_markup=self._gallery_markup(unit_id),
             )
         except BadRequest:
-            logger.debug("Error fetching photo content, attempting load next one")
             del self._units[unit_id]["photos"][self._units[unit_id]["current_index"]]
             self._units[unit_id]["current_index"] -= 1
             return await self._gallery_page(call, page, unit_id)

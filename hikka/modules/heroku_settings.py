@@ -62,10 +62,6 @@ class HerSettingsMod(loader.Module):
                 m = await conv.send_message(msg)
                 r = await conv.get_response()
 
-                logger.debug(">> %s", m.raw_text)
-                logger.debug("<< %s", r.raw_text)
-
-
         folders = await self._client(GetDialogFiltersRequest())
 
         if any(folder.title == "her" for folder in folders):

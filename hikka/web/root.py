@@ -215,12 +215,10 @@ class Web:
     async def _qr_login_poll(self):
         logged_in = False
         self._2fa_needed = False
-        logger.debug("Waiting for QR login to complete")
         while not logged_in:
             try:
                 logged_in = await self._qr_login.wait(10)
             except asyncio.TimeoutError:
-                logger.debug("Recreating QR login")
                 try:
                     await self._qr_login.recreate()
                 except SessionPasswordNeededError:
@@ -229,8 +227,6 @@ class Web:
             except SessionPasswordNeededError:
                 self._2fa_needed = True
                 break
-
-        logger.debug("QR login completed. 2FA needed: %s", self._2fa_needed)
         self._qr_login = True
 
     async def init_qr_login(self, request: web.Request) -> web.Response:
@@ -248,7 +244,6 @@ class Web:
                 self._qr_task = None
 
             self._2fa_needed = False
-            logger.debug("QR login cancelled, new session created")
 
         client = self._get_client()
         self._pending_client = client
@@ -353,8 +348,6 @@ class Web:
 
         text = await request.text()
 
-        logger.debug("2FA code received for QR login: %s", text)
-
         try:
             await self._pending_client._on_login(
                 (
@@ -369,19 +362,16 @@ class Web:
                 ).user
             )
         except PasswordHashInvalidError:
-            logger.debug("Invalid 2FA code")
             return web.Response(
                 status=403,
                 body="Invalid 2FA password",
             )
         except FloodWaitError as e:
-            logger.debug("FloodWait for 2FA code")
             return web.Response(
                 status=421,
                 body=(self._render_fw_error(e)),
             )
 
-        logger.debug("2FA code accepted, logging in")
         await main.hikka.save_client_session(self._pending_client)
         return web.Response()
 

@@ -28,9 +28,6 @@ class TokenObtainment(InlineUnit):
             m = await conv.send_message("/newbot")
             r = await conv.get_response()
 
-            logger.debug(">> %s", m.raw_text)
-            logger.debug("<< %s", r.raw_text)
-
             if "20" in r.raw_text:
                 return False
 
@@ -59,9 +56,6 @@ class TokenObtainment(InlineUnit):
                 m = await conv.send_message(msg)
                 r = await conv.get_response()
 
-                logger.debug(">> %s", m.raw_text)
-                logger.debug("<< %s", r.raw_text)
-
             try:
                 from .. import main
                 await asyncio.sleep(random.uniform(13, 33))
@@ -70,16 +64,11 @@ class TokenObtainment(InlineUnit):
                 m = await conv.send_file(main.BASE_PATH / "assets" / "her-ava.png")
                 r = await conv.get_response()
 
-                logger.debug(">> <Photo>")
-                logger.debug("<< %s", r.raw_text)
             except Exception:
                 await fw_protect()
                 await asyncio.sleep(random.uniform(13, 33))
                 m = await conv.send_message("/cancel")
                 r = await conv.get_response()
-
-                logger.debug(">> %s", m.raw_text)
-                logger.debug("<< %s", r.raw_text)
 
         return await self._assert_token(False)
 
@@ -114,9 +103,6 @@ class TokenObtainment(InlineUnit):
 
             r = await conv.get_response()
 
-            logger.debug(">> %s", m.raw_text)
-            logger.debug("<< %s", r.raw_text)
-
             if not hasattr(r, "reply_markup") or not hasattr(r.reply_markup, "rows"):
                 await conv.cancel_all()
 
@@ -144,9 +130,6 @@ class TokenObtainment(InlineUnit):
                     m = await conv.send_message(button.text)
                     r = await conv.get_response()
 
-                    logger.debug(">> %s", m.raw_text)
-                    logger.debug("<< %s", r.raw_text)
-
                     if revoke_token:
                         await asyncio.sleep(random.uniform(13, 33))
                         await fw_protect()
@@ -154,18 +137,12 @@ class TokenObtainment(InlineUnit):
                         m = await conv.send_message("/revoke")
                         r = await conv.get_response()
 
-                        logger.debug(">> %s", m.raw_text)
-                        logger.debug("<< %s", r.raw_text)
-
 
                         await asyncio.sleep(random.uniform(13, 33))
                         await fw_protect()
 
                         m = await conv.send_message(button.text)
                         r = await conv.get_response()
-
-                        logger.debug(">> %s", m.raw_text)
-                        logger.debug("<< %s", r.raw_text)
 
                     token = r.raw_text.splitlines()[1]
 
@@ -187,9 +164,6 @@ class TokenObtainment(InlineUnit):
                         m = await conv.send_message(msg)
                         r = await conv.get_response()
 
-                        logger.debug(">> %s", m.raw_text)
-                        logger.debug("<< %s", r.raw_text)
-
                     try:
                         await asyncio.sleep(random.uniform(13, 33))
                         await fw_protect()
@@ -199,17 +173,11 @@ class TokenObtainment(InlineUnit):
                             main.BASE_PATH / "assets" / "her-ava.png"
                         )
                         r = await conv.get_response()
-
-                        logger.debug(">> <Photo>")
-                        logger.debug("<< %s", r.raw_text)
                     except Exception:
                         await asyncio.sleep(random.uniform(13, 33))
                         await fw_protect()
                         m = await conv.send_message("/cancel")
                         r = await conv.get_response()
-
-                        logger.debug(">> %s", m.raw_text)
-                        logger.debug("<< %s", r.raw_text)
 
                     return True
 

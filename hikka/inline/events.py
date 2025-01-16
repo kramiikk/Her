@@ -260,7 +260,7 @@ class Events(InlineUnit):
                                 func=unit.get(
                                     "perms_map",
                                     lambda: self._client.dispatcher.security._default,
-                                )(),  # we call it so we can get reloaded rights in runtime
+                                )(),
                                 user=call.from_user.id,
                             )
                             if "message" in unit

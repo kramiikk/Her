@@ -137,11 +137,9 @@ class SudoMessageEditor(MessageEditor):
         self.authmsg = None
 
     def update_process(self, process):
-        logger.debug("got sproc obj %s", process)
         self.process = process
 
     async def update_stderr(self, stderr):
-        logger.debug("stderr update " + stderr)
         self.stderr = stderr
         lines = stderr.strip().split("\n")
         lastline = lines[-1]
@@ -154,21 +152,18 @@ class SudoMessageEditor(MessageEditor):
             and lastlines[0] == self.PASS_REQ
             and self.state == 1
         ):
-            logger.debug("switching state to 0")
             await self.authmsg.edit(self.strings("auth_failed"))
             self.state = 0
             handled = True
 
         if lastlines[0] == self.PASS_REQ and self.state == 0:
-            logger.debug("Success to find sudo log!")
             text = self.strings("auth_needed").format(self._tg_id)
 
             try:
                 await utils.answer(self.message, text)
             except hikkatl.errors.rpcerrorlist.MessageNotModifiedError as e:
-                logger.debug(e)
+                logger.error(e)
 
-            logger.debug("edited message with link to self")
             command = "<code>" + utils.escape_html(self.command) + "</code>"
             user = utils.escape_html(lastlines[1][:-1])
 
@@ -176,7 +171,6 @@ class SudoMessageEditor(MessageEditor):
                 "me",
                 self.strings("auth_msg").format(command, user),
             )
-            logger.debug("sent message to self")
 
             self.message[0].client.remove_event_handler(self.on_message_edited)
             self.message[0].client.add_event_handler(
@@ -184,25 +178,20 @@ class SudoMessageEditor(MessageEditor):
                 hikkatl.events.messageedited.MessageEdited(chats=["me"]),
             )
 
-            logger.debug("registered handler")
             handled = True
 
         if len(lines) > 1 and (
             re.fullmatch(self.TOO_MANY_TRIES, lastline) and self.state in {1, 3, 4}
         ):
-            logger.debug("password wrong lots of times")
             await utils.answer(self.message, self.strings("auth_locked"))
             self.state = 2
             handled = True
 
         if not handled:
-            logger.debug("Didn't find sudo log.")
             if self.authmsg is not None:
                 self.authmsg = None
             self.state = 2
             await self.redraw()
-
-        logger.debug(self.state)
 
     async def update_stdout(self, stdout):
         self.stdout = stdout
@@ -219,8 +208,6 @@ class SudoMessageEditor(MessageEditor):
         # Message contains sensitive information.
         if self.authmsg is None:
             return
-
-        logger.debug("got message edit update in self %s", str(message.id))
 
         if hash_msg(message) == hash_msg(self.authmsg):
             # The user has provided interactive authentication. Send password to stdin for sudo.
@@ -246,8 +233,6 @@ class RawMessageEditor(SudoMessageEditor):
         self.show_done = show_done
 
     async def redraw(self):
-        logger.debug(self.rc)
-
         if self.rc is None:
             text = (
                 "<code>"
@@ -269,8 +254,6 @@ class RawMessageEditor(SudoMessageEditor):
 
         if self.rc is not None and self.show_done:
             text += "\n" + self.strings("done")
-
-        logger.debug(text)
 
         with contextlib.suppress(
             hikkatl.errors.rpcerrorlist.MessageNotModifiedError,

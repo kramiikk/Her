@@ -43,16 +43,14 @@ class ProxyPasser:
         except Exception:
             logger.exception("Failed to kill proxy pass process")
         else:
-            logger.debug("Proxy pass tunnel killed")
+            logger.info("Proxy pass tunnel killed")
 
     async def _process_stream(self, stdout_line: str) -> None:
-        logger.debug(stdout_line)
         regex = r"tunneled.*?(https:\/\/.+)"
 
         if re.search(regex, stdout_line):
             self._tunnel_url = re.search(regex, stdout_line)[1]
             self._change_url_callback(self._tunnel_url)
-            logger.debug("Proxy pass tunneled: %s", self._tunnel_url)
             self._url_available.set()
 
     async def get_url(self, port: int, no_retry: bool = False) -> typing.Optional[str]:
@@ -64,8 +62,7 @@ class ProxyPasser:
                     return self._tunnel_url
                 else:
                     self.kill()
-            # вырезана проверка на контейнер
-            logger.debug("Starting proxy pass shell for port %d", port)
+
             self._sproc = await asyncio.create_subprocess_shell(
                 (
                     "ssh -o StrictHostKeyChecking=no -R"
@@ -79,7 +76,6 @@ class ProxyPasser:
             utils.atexit(self.kill)
 
             self._url_available = asyncio.Event()
-            logger.debug("Starting proxy pass reader for port %d", port)
             asyncio.ensure_future(
                 self._read_stream(
                     self._process_stream,
@@ -95,9 +91,5 @@ class ProxyPasser:
                 self._tunnel_url = None
                 if no_retry:
                     return None
-
                 return await self.get_url(port, no_retry=True)
-
-            logger.debug("Proxy pass tunnel url to port %d: %s", port, self._tunnel_url)
-
             return self._tunnel_url

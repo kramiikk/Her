@@ -353,7 +353,6 @@ class CommandDispatcher:
             return False
 
         if message.is_channel and message.edit_date and not message.is_group and not message.out:
-            logger.debug("Ignoring edit in channel by other user")
             return False
         message.message = prefix + txt + message.message[len(prefix + command) :]
 

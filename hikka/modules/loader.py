@@ -105,7 +105,6 @@ class LoaderMod(loader.Module):
                 ),
             )
         )
-        logger.debug("Modules: %s", modules)
         asyncio.ensure_future(self._storage.preload(modules))
 
     async def client_ready(self):
@@ -218,7 +217,6 @@ class LoaderMod(loader.Module):
 
     async def _get_modules_to_load(self):
         todo = self.get("loaded_modules", {})
-        logger.debug("Loading modules: %s", todo)
         return todo
 
     async def _get_repo(self, repo: str) -> str:
@@ -238,11 +236,6 @@ class LoaderMod(loader.Module):
         )
 
         if not str(res.status_code).startswith("2"):
-            logger.debug(
-                "Can't load repo %s contents because of %s status code",
-                repo,
-                res.status_code,
-            )
             return []
 
         self._links_cache[repo] = {
@@ -543,10 +536,6 @@ class LoaderMod(loader.Module):
                     )
                 )
             except Exception:
-                logger.debug(
-                    "Can't parse classname from code, using legacy uid instead",
-                    exc_info=True,
-                )
                 uid = "__extmod_" + str(uuid.uuid4())
         else:
             if name.startswith(self.config["MODULES_REPO"]):
@@ -620,8 +609,6 @@ class LoaderMod(loader.Module):
 
                 if not requirements:
                     raise Exception("Nothing to install") from e
-
-                logger.debug("Installing requirements: %s", requirements)
 
                 if did_requirements:
                     if message is not None:
@@ -771,7 +758,6 @@ class LoaderMod(loader.Module):
                     )
                 return
             except loader.SelfUnload as e:
-                logger.debug("Unloading %s, because it raised `SelfUnload`", instance)
                 with contextlib.suppress(Exception):
                     await self.allmodules.unload_module(instance.__class__.__name__)
 
@@ -788,7 +774,6 @@ class LoaderMod(loader.Module):
                     )
                 return
             except loader.SelfSuspend as e:
-                logger.debug("Suspending %s, because it raised `SelfSuspend`", instance)
                 if message:
                     await utils.answer(
                         message,
@@ -1141,7 +1126,7 @@ class LoaderMod(loader.Module):
             try:
                 shutil.rmtree(file.path)
             except Exception:
-                logger.debug("Failed to remove %s", file.path, exc_info=True)
+                logger.error("Failed to remove %s", file.path, exc_info=True)
 
         await utils.answer(call, self.strings("all_modules_deleted"))
         await self.lookup("Updater").restart_common(call)

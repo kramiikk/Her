@@ -242,10 +242,6 @@ class CustomTelegramClient(TelegramClient):
                     if getattr(entity, attr, None)
                 )
             except StopIteration:
-                logger.debug(
-                    "Can't parse hashable from entity %s, using legacy resolve",
-                    entity,
-                )
                 return await super().get_entity(entity)
         else:
             hashable_entity = entity
@@ -262,11 +258,6 @@ class CustomTelegramClient(TelegramClient):
                 or self._hikka_entity_cache[hashable_entity].ts + exp > time.time()
             )
         ):
-            logger.debug(
-                "Using cached entity %s (%s)",
-                entity,
-                type(self._hikka_entity_cache[hashable_entity].entity).__name__,
-            )
             return copy.deepcopy(self._hikka_entity_cache[hashable_entity].entity)
 
         resolved_entity = await super().get_entity(entity)
@@ -274,17 +265,11 @@ class CustomTelegramClient(TelegramClient):
         if resolved_entity:
             cache_record = CacheRecordEntity(hashable_entity, resolved_entity, exp)
             self._hikka_entity_cache[hashable_entity] = cache_record
-            logger.debug("Saved hashable_entity %s to cache", hashable_entity)
 
             if getattr(resolved_entity, "id", None):
-                logger.debug("Saved resolved_entity id %s to cache", resolved_entity.id)
                 self._hikka_entity_cache[resolved_entity.id] = cache_record
 
             if getattr(resolved_entity, "username", None):
-                logger.debug(
-                    "Saved resolved_entity username @%s to cache",
-                    resolved_entity.username,
-                )
                 self._hikka_entity_cache[f"@{resolved_entity.username}"] = cache_record
                 self._hikka_entity_cache[resolved_entity.username] = cache_record
 
@@ -320,10 +305,6 @@ class CustomTelegramClient(TelegramClient):
                     if getattr(entity, attr, None)
                 )
             except StopIteration:
-                logger.debug(
-                    "Can't parse hashable from entity %s, using legacy method",
-                    entity,
-                )
                 return await self.get_permissions(entity, user)
 
             try:
@@ -333,10 +314,6 @@ class CustomTelegramClient(TelegramClient):
                     if getattr(user, attr, None)
                 )
             except StopIteration:
-                logger.debug(
-                    "Can't parse hashable from user %s, using legacy method",
-                    user,
-                )
                 return await self.get_permissions(entity, user)
         else:
             hashable_entity = entity
@@ -359,7 +336,6 @@ class CustomTelegramClient(TelegramClient):
                 > time.time()
             )
         ):
-            logger.debug("Using cached perms %s (%s)", hashable_entity, hashable_user)
             return copy.deepcopy(
                 self._hikka_perms_cache[hashable_entity][hashable_user].perms
             )
@@ -376,7 +352,6 @@ class CustomTelegramClient(TelegramClient):
             self._hikka_perms_cache.setdefault(hashable_entity, {})[hashable_user] = (
                 cache_record
             )
-            logger.debug("Saved hashable_entity %s perms to cache", hashable_entity)
 
             def save_user(key: typing.Union[str, int]):
                 nonlocal self, cache_record, user, hashable_user
@@ -392,14 +367,9 @@ class CustomTelegramClient(TelegramClient):
                     )
 
             if getattr(entity, "id", None):
-                logger.debug("Saved resolved_entity id %s perms to cache", entity.id)
                 save_user(entity.id)
 
             if getattr(entity, "username", None):
-                logger.debug(
-                    "Saved resolved_entity username @%s perms to cache",
-                    entity.username,
-                )
                 save_user(f"@{entity.username}")
                 save_user(entity.username)
 
@@ -427,13 +397,6 @@ class CustomTelegramClient(TelegramClient):
                     if getattr(entity, attr, None)
                 )
             except StopIteration:
-                logger.debug(
-                    (
-                        "Can't parse hashable from entity %s, using legacy fullchannel"
-                        " request"
-                    ),
-                    entity,
-                )
                 return await self(GetFullChannelRequest(channel=entity))
         else:
             hashable_entity = entity
@@ -479,13 +442,6 @@ class CustomTelegramClient(TelegramClient):
                     if getattr(entity, attr, None)
                 )
             except StopIteration:
-                logger.debug(
-                    (
-                        "Can't parse hashable from entity %s, using legacy fulluser"
-                        " request"
-                    ),
-                    entity,
-                )
                 return await self(GetFullUserRequest(entity))
         else:
             hashable_entity = entity
@@ -517,7 +473,6 @@ class CustomTelegramClient(TelegramClient):
         """
         Finds the message object from the frame
         """
-        logger.debug("Finding message object in frame %s", frame)
         return next(
             (
                 obj
@@ -538,7 +493,6 @@ class CustomTelegramClient(TelegramClient):
         Finds the message object from the stack
         """
         chat_id = (await self.get_entity(chat, exp=0)).id
-        logger.debug("Finding message object in stack for chat %s", chat_id)
         return next(
             (
                 self._find_message_obj_in_frame(chat_id, frame_info)
@@ -577,11 +531,7 @@ class CustomTelegramClient(TelegramClient):
             if no_retry:
                 raise
 
-            logger.debug("Topic deleted, trying to guess topic id")
-
             topic = await self._find_topic_in_stack(args[0], stack)
-
-            logger.debug("Guessed topic id: %s", topic)
 
             if not topic:
                 raise
@@ -654,11 +604,6 @@ class CustomTelegramClient(TelegramClient):
                 ),
                 None,
             ):
-                logger.debug(
-                    "🎉 I protected you from unintented %s (%s)!",
-                    item.__class__.__name__,
-                    item,
-                )
                 continue
 
             new_request += [item]

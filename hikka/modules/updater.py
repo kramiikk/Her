@@ -162,8 +162,6 @@ class UpdaterMod(loader.Module):
 
     @staticmethod
     def req_common():
-        # Now we have downloaded new code, install requirements
-        logger.debug("Installing new requirements...")
         try:
             subprocess.run(
                 [
@@ -282,7 +280,6 @@ class UpdaterMod(loader.Module):
         self.set("do_not_create", True)
 
     async def update_complete(self):
-        logger.debug("Self update successful! Edit message")
         start = self.get("restart_ts")
         try:
             took = round(time.time() - start)

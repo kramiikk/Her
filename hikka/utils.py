@@ -265,7 +265,7 @@ async def get_user(message: Message) -> typing.Optional[User]:
     try:
         return await message.get_sender()
     except ValueError:  # Not in database. Lets go looking for them.
-        logger.debug("User not in session cache. Searching...")
+        logger.warning("User not in session cache. Searching...")
 
     if isinstance(message.peer_id, PeerUser):
         await message.client.get_dialogs()
