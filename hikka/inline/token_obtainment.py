@@ -7,6 +7,7 @@
 import asyncio
 import logging
 import re
+import random
 
 from hikkatl.errors.rpcerrorlist import YouBlockedUserError
 from hikkatl.tl.functions.contacts import UnblockRequest
@@ -22,6 +23,7 @@ class TokenObtainment(InlineUnit):
     async def _create_bot(self):
         logger.info("User doesn't have bot, attempting creating new one")
         async with self._client.conversation("@BotFather", exclusive=False) as conv:
+            await asyncio.sleep(random.uniform(13, 30))
             await fw_protect()
             m = await conv.send_message("/newbot")
             r = await conv.get_response()
@@ -34,9 +36,6 @@ class TokenObtainment(InlineUnit):
 
             await fw_protect()
 
-            await m.delete()
-            await r.delete()
-
             if self._db.get("hikka.inline", "custom_bot", False):
                 username = self._db.get("hikka.inline", "custom_bot").strip("@")
                 username = f"@{username}"
@@ -45,11 +44,9 @@ class TokenObtainment(InlineUnit):
                 except ValueError:
                     pass
                 else:
-                    uid = utils.rand(6)
-                    username = f"@her_{uid}_bot"
+                    username = f"@h{utils.rand(2)}er{utils.rand(2)}bot"
             else:
-                uid = utils.rand(6)
-                username = f"@her_{uid}_bot"
+                username = f"@h{utils.rand(2)}er{utils.rand(2)}bot"
 
             for msg in [
                 f"🪐 Her userbot"[:64],
@@ -57,6 +54,7 @@ class TokenObtainment(InlineUnit):
                 "/setuserpic",
                 username,
             ]:
+                await asyncio.sleep(random.uniform(13, 33))
                 await fw_protect()
                 m = await conv.send_message(msg)
                 r = await conv.get_response()
@@ -64,13 +62,10 @@ class TokenObtainment(InlineUnit):
                 logger.debug(">> %s", m.raw_text)
                 logger.debug("<< %s", r.raw_text)
 
-                await fw_protect()
-                await m.delete()
-                await r.delete()
-
             try:
-                await fw_protect()
                 from .. import main
+                await asyncio.sleep(random.uniform(13, 33))
+                await fw_protect()
 
                 m = await conv.send_file(main.BASE_PATH / "assets" / "her-ava.png")
                 r = await conv.get_response()
@@ -79,16 +74,12 @@ class TokenObtainment(InlineUnit):
                 logger.debug("<< %s", r.raw_text)
             except Exception:
                 await fw_protect()
+                await asyncio.sleep(random.uniform(13, 33))
                 m = await conv.send_message("/cancel")
                 r = await conv.get_response()
 
                 logger.debug(">> %s", m.raw_text)
                 logger.debug("<< %s", r.raw_text)
-
-            await fw_protect()
-
-            await m.delete()
-            await r.delete()
 
         return await self._assert_token(False)
 
@@ -112,10 +103,12 @@ class TokenObtainment(InlineUnit):
 
         async with self._client.conversation("@BotFather", exclusive=False) as conv:
             try:
+                await asyncio.sleep(random.uniform(13, 33))
                 await fw_protect()
                 m = await conv.send_message("/token")
             except YouBlockedUserError:
                 await self._client(UnblockRequest(id="@BotFather"))
+                await asyncio.sleep(random.uniform(13, 33))
                 await fw_protect()
                 m = await conv.send_message("/token")
 
@@ -123,11 +116,6 @@ class TokenObtainment(InlineUnit):
 
             logger.debug(">> %s", m.raw_text)
             logger.debug("<< %s", r.raw_text)
-
-            await fw_protect()
-
-            await m.delete()
-            await r.delete()
 
             if not hasattr(r, "reply_markup") or not hasattr(r.reply_markup, "rows"):
                 await conv.cancel_all()
@@ -147,9 +135,10 @@ class TokenObtainment(InlineUnit):
                         "hikka.inline",
                         "custom_bot",
                         False,
-                    ) and not re.search(r"@her_[0-9a-zA-Z]{6}_bot", button.text):
+                    ) and not re.search(r"@h[0-9a-zA-Z]{7}bot", button.text):
                         continue
 
+                    await asyncio.sleep(random.uniform(13, 33))
                     await fw_protect()
 
                     m = await conv.send_message(button.text)
@@ -159,10 +148,7 @@ class TokenObtainment(InlineUnit):
                     logger.debug("<< %s", r.raw_text)
 
                     if revoke_token:
-                        await fw_protect()
-                        await m.delete()
-                        await r.delete()
-
+                        await asyncio.sleep(random.uniform(13, 33))
                         await fw_protect()
 
                         m = await conv.send_message("/revoke")
@@ -171,11 +157,8 @@ class TokenObtainment(InlineUnit):
                         logger.debug(">> %s", m.raw_text)
                         logger.debug("<< %s", r.raw_text)
 
-                        await fw_protect()
 
-                        await m.delete()
-                        await r.delete()
-
+                        await asyncio.sleep(random.uniform(13, 33))
                         await fw_protect()
 
                         m = await conv.send_message(button.text)
@@ -189,11 +172,6 @@ class TokenObtainment(InlineUnit):
                     self._db.set("hikka.inline", "bot_token", token)
                     self._token = token
 
-                    await fw_protect()
-
-                    await m.delete()
-                    await r.delete()
-
                     for msg in [
                         "/setinline",
                         button.text,
@@ -204,6 +182,7 @@ class TokenObtainment(InlineUnit):
                         "/setuserpic",
                         button.text,
                     ]:
+                        await asyncio.sleep(random.uniform(13, 33))
                         await fw_protect()
                         m = await conv.send_message(msg)
                         r = await conv.get_response()
@@ -211,12 +190,8 @@ class TokenObtainment(InlineUnit):
                         logger.debug(">> %s", m.raw_text)
                         logger.debug("<< %s", r.raw_text)
 
-                        await fw_protect()
-
-                        await m.delete()
-                        await r.delete()
-
                     try:
+                        await asyncio.sleep(random.uniform(13, 33))
                         await fw_protect()
                         from .. import main
 
@@ -228,17 +203,13 @@ class TokenObtainment(InlineUnit):
                         logger.debug(">> <Photo>")
                         logger.debug("<< %s", r.raw_text)
                     except Exception:
+                        await asyncio.sleep(random.uniform(13, 33))
                         await fw_protect()
                         m = await conv.send_message("/cancel")
                         r = await conv.get_response()
 
                         logger.debug(">> %s", m.raw_text)
                         logger.debug("<< %s", r.raw_text)
-
-                    await fw_protect()
-
-                    await m.delete()
-                    await r.delete()
 
                     return True
 

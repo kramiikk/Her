@@ -791,21 +791,26 @@ class Her:
             diff = repo.git.log([f"HEAD..origin/{version.branch}", "--oneline"])
             upd = "Update required" if diff else "Up-to-date"
 
-            info = (
+            logo = (
+                "  /\  /\ ___  _ __ \n"
+                " / /_/ // _ \| '__|\n"
+                "/ __  /|  __/| |   \n"
+                "\/ /_/  \___||_|   \n\n"
                 f"• Build: {build[:7]}\n"
                 f"• Version: {'.'.join(list(map(str, list(__version__))))}\n"
                 f"• {upd}\n"
             )
 
+            web_url = (
+                f"🔗 Web url: {self.web.url}"
+                if self.web and hasattr(self.web, "url")
+                else ""
+            )
+
             if not self.omit_log:
-                print(info)
-                web_url = (
-                    f"🔗 Web url: {self.web.url}"
-                    if self.web and hasattr(self.web, "url")
-                    else ""
-                )
+                print(logo)
                 logging.debug(
-                    "\n🪐 Her %s #%s (%s) started\n%s",
+                    "\n🪐 Heroku %s #%s (%s) started\n%s",
                     ".".join(list(map(str, list(__version__)))),
                     build[:7],
                     upd,
