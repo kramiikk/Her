@@ -21,7 +21,6 @@ MSG_TOO_OLD_DELTA = 300
 
 class MTProtoState(MTProtoStateOrig):
     def encrypt_message_data(self, data):
-        logging.debug("Skipping encryption...")
         return data
 
     def decrypt_message_data(self, body):
@@ -29,8 +28,6 @@ class MTProtoState(MTProtoStateOrig):
 
         if len(body) < 8:
             raise InvalidBufferError(body)
-
-        logging.debug("Got raw data: %s", body)
 
         reader = BinaryReader(body)
         remote_msg_id = reader.read_long()

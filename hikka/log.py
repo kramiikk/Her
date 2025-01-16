@@ -37,7 +37,7 @@ def getlines(filename: str, module_globals=None) -> str:
                     )
                 )
     except Exception:
-        logging.debug("Can't get lines for %s", filename, exc_info=True)
+        logging.error("Can't get lines for %s", filename, exc_info=True)
 
     return old(filename, module_globals)
 

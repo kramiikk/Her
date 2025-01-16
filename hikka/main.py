@@ -331,7 +331,6 @@ def parse_arguments() -> dict:
         help="Do not print colorful output using ANSI escapes",
     )
     arguments = parser.parse_args()
-    logging.debug(arguments)
     return arguments
 
 
@@ -398,11 +397,6 @@ class Her:
             and self.arguments.proxy_port is not None
             and self.arguments.proxy_secret is not None
         ):
-            logging.debug(
-                "Using proxy: %s:%s",
-                self.arguments.proxy_host,
-                self.arguments.proxy_port,
-            )
             self.proxy, self.conn = (
                 (
                     self.arguments.proxy_host,
@@ -448,7 +442,6 @@ class Her:
                 save_config_key("api_id", int(api_id))
                 save_config_key("api_hash", api_hash)
                 (Path(BASE_DIR) / "api_token.txt").unlink()
-                logging.debug("Migrated api_token.txt to config.json")
 
             api_token = api_token_type(
                 get_config_key("api_id"),
@@ -796,22 +789,24 @@ class Her:
                     f"• {upd}\n"
                 )
                 print(info)
-                web_url = (
-                    f"🔗 Web url: {self.web.url}"
-                    if self.web and hasattr(self.web, "url")
-                    else ""
-                )
-                logging.debug(
-                    "\n🪐 Heroku %s #%s (%s) started\n%s",
-                    ".".join(list(map(str, list(__version__)))),
-                    build[:7],
-                    upd,
-                    web_url,
-                )
                 self.omit_log = True
 
-            logging.debug(
-                "· Started for %s · Prefix: «%s» ·",
+            web_url = (
+                f"🔗 Web url: {self.web.url}"
+                if self.web and hasattr(self.web, "url")
+                else ""
+            )
+
+            logging.info(
+                "\n🪐 Heroku %s #%s (%s) started\n%s",
+                ".".join(list(map(str, list(__version__)))),
+                build[:7],
+                upd,
+                web_url,
+            )
+
+            logging.info(
+                "· For %s · Prefix: «%s» ·",
                 client.tg_id,
                 client.hikka_db.get(__name__, "command_prefix", False) or ".",
             )
@@ -862,9 +857,6 @@ class Her:
         db = database.Database(client)
         client.hikka_db = db
         await db.init()
-
-        logging.debug("Got DB")
-        logging.debug("Loading logging config...")
 
         translator = Translator(client, db)
 
