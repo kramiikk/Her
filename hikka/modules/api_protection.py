@@ -212,39 +212,6 @@ class APIRatelimiterMod(loader.Module):
             ],
         )
 
-    @property
-    def _debugger(self) -> WebDebugger:
-        return logging.getLogger().handlers[0].web_debugger
-
-    async def _show_pin(self, call: InlineCall):
-        await call.answer(f"Werkzeug PIN: {self._debugger.pin}", show_alert=True)
-
-    @loader.command()
-    async def debugger(self, message: Message):
-        if not self._debugger:
-            await utils.answer(message, self.strings("debugger_disabled"))
-            return
-
-        await self.inline.form(
-            message=message,
-            text=self.strings("web_pin"),
-            reply_markup=[
-                [
-                    {
-                        "text": self.strings("web_pin_btn"),
-                        "callback": self._show_pin,
-                    }
-                ],
-                [
-                    {"text": self.strings("proxied_url"), "url": self._debugger.url},
-                    {
-                        "text": self.strings("local_url"),
-                        "url": f"http://127.0.0.1:{self._debugger.port}",
-                    },
-                ],
-            ],
-        )
-
     async def _finish(self, call: InlineCall):
         state = self.get("disable_protection", True)
         self.set("disable_protection", not state)

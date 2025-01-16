@@ -789,20 +789,18 @@ class Her:
             diff = repo.git.log([f"HEAD..origin/{version.branch}", "--oneline"])
             upd = "Update required" if diff else "Up-to-date"
 
-            info = (
-                f"• Build: {build[:7]}\n"
-                f"• Version: {'.'.join(list(map(str, list(__version__))))}\n"
-                f"• {upd}\n"
-            )
-
-            web_url = (
-                f"🔗 Web url: {self.web.url}"
-                if self.web and hasattr(self.web, "url")
-                else ""
-            )
-
             if not self.omit_log:
+                info = (
+                    f"• Build: {build[:7]}\n"
+                    f"• Version: {'.'.join(list(map(str, list(__version__))))}\n"
+                    f"• {upd}\n"
+                )
                 print(info)
+                web_url = (
+                    f"🔗 Web url: {self.web.url}"
+                    if self.web and hasattr(self.web, "url")
+                    else ""
+                )
                 logging.debug(
                     "\n🪐 Heroku %s #%s (%s) started\n%s",
                     ".".join(list(map(str, list(__version__)))),
@@ -811,22 +809,6 @@ class Her:
                     web_url,
                 )
                 self.omit_log = True
-
-            await client.hikka_inline.bot.send_photo(
-                logging.getLogger().handlers[0].get_logid_by_client(client.tg_id),
-                "https://imgur.com/a/uUF9zYL.png",
-                caption=(
-                    "🪐 <b>Her {} started!</b>\n\n⚙ <b>GitHub commit SHA: <a"
-                    ' href="https://github.com/kramiikk/Her/commit/{}">{}</a></b>\n🔎'
-                    " <b>Update status: {}</b>\n<b>{}</b>".format(
-                        ".".join(list(map(str, list(__version__)))),
-                        build,
-                        build[:7],
-                        upd,
-                        web_url,
-                    )
-                ),
-            )
 
             logging.debug(
                 "· Started for %s · Prefix: «%s» ·",

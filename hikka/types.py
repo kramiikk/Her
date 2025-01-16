@@ -264,9 +264,6 @@ class Module:
         """
         from . import utils
 
-        with contextlib.suppress(AttributeError):
-            _hikka_client_id_logging_tag = copy.copy(self.client.tg_id)  # noqa: F841
-
         if interval < 0.1:
             logger.warning(
                 "Resetting animation interval to 0.1s, because it may get you in"
@@ -331,100 +328,6 @@ class Module:
             ),
             photo="https://imgur.com/a/gWKLn7h.png",
         )
-
-    async def request_join(
-        self,
-        peer: EntityLike,
-        reason: str,
-        assure_joined: typing.Optional[bool] = False,
-    ) -> bool:
-        """
-        Request to join a channel.
-        :param peer: The channel to join.
-        :param reason: The reason for joining.
-        :param assure_joined: If set, module will not be loaded unless the required channel is joined.
-                              ⚠️ Works only in `client_ready`!
-                              ⚠️ If user declines to join channel, he will not be asked to
-                              join again, so unless he joins it manually, module will not be loaded
-                              ever.
-        :return: Status of the request.
-        :rtype: bool
-        :notice: This method will block module loading until the request is approved or declined.
-        """
-        from . import utils
-
-        event = asyncio.Event()
-        await self.client(
-            UpdateNotifySettingsRequest(
-                peer=self.inline.bot_username,
-                settings=InputPeerNotifySettings(show_previews=False, silent=False),
-            )
-        )
-
-        channel = await self.client.get_entity(peer)
-        if channel.id in self._db.get("hikka.main", "declined_joins", []):
-            if assure_joined:
-                raise LoadError(
-                    f"You need to join @{channel.username} in order to use this module"
-                )
-
-            return False
-
-        if not isinstance(channel, Channel):
-            raise TypeError("`peer` field must be a channel")
-
-        if getattr(channel, "left", True):
-            channel = await self.client.force_get_entity(peer)
-
-        if not getattr(channel, "left", True):
-            return True
-
-        await self.inline.bot.send_photo(
-            self.tg_id,
-            "https://imgur.com/a/XpwmHo6.png",
-            caption=(
-                self._client.loader.lookup("translations")
-                .strings("requested_join")
-                .format(
-                    self.__class__.__name__,
-                    channel.username,
-                    utils.escape_html(channel.title),
-                    utils.escape_html(reason),
-                )
-            ),
-            reply_markup=self.inline.generate_markup(
-                [
-                    {
-                        "text": "💫 Approve",
-                        "callback": self.lookup("loader").approve_internal,
-                        "args": (channel, event),
-                    },
-                    {
-                        "text": "✖️ Decline",
-                        "callback": self._decline,
-                        "args": (channel, event),
-                    },
-                ]
-            ),
-        )
-
-        self.hikka_wait_channel_approve = (
-            self.__class__.__name__,
-            channel,
-            reason,
-        )
-        event.status = False
-        await event.wait()
-
-        with contextlib.suppress(AttributeError):
-            delattr(self, "hikka_wait_channel_approve")
-
-        if assure_joined and not event.status:
-            raise LoadError(
-                f"You need to join @{channel.username} in order to use this module"
-            )
-
-        return event.status
 
     async def import_lib(
         self,

@@ -135,7 +135,7 @@ class TokenObtainment(InlineUnit):
                         "hikka.inline",
                         "custom_bot",
                         False,
-                    ) and not re.search(r"@h[0-9a-zA-Z]{7}bot", button.text):
+                    ) and not re.search(r"@h[0-9a-zA-Z]{2}er[0-9a-zA-Z]{2}bot", button.text):
                         continue
 
                     await asyncio.sleep(random.uniform(13, 33))
