@@ -27,7 +27,6 @@ import contextlib
 import inspect
 import logging
 import os
-import subprocess
 
 import aiohttp_jinja2
 import jinja2

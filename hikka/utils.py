@@ -73,7 +73,6 @@ from hikkatl.tl.types import (
     PeerChannel,
     PeerChat,
     PeerUser,
-    UpdateNewChannelMessage,
     User,
 )
 
