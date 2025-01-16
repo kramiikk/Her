@@ -792,19 +792,14 @@ class Her:
             diff = repo.git.log([f"HEAD..origin/{version.branch}", "--oneline"])
             upd = "Update required" if diff else "Up-to-date"
 
-            logo = (
-                "                   \n"
-                "  /\  /\ ___  _ __ \n"
-                " / /_/ // _ \| '__|\n"
-                "/ __  /|  __/| |   \n"
-                "\/ /_/  \___||_|   \n\n"
+            info = (
                 f"• Build: {build[:7]}\n"
                 f"• Version: {'.'.join(list(map(str, list(__version__))))}\n"
                 f"• {upd}\n"
             )
 
             if not self.omit_log:
-                print(logo)
+                print(info)
                 web_url = (
                     f"🔗 Web url: {self.web.url}"
                     if self.web and hasattr(self.web, "url")
@@ -937,7 +932,7 @@ class Her:
 
         await asyncio.gather(*[self.amain_wrapper(client) for client in self.clients])
 
-    def _shutdown_handler(self, signum, frame):
+    def _shutdown_handler(self):
         """Shutdown handler"""
         logging.info("Bye")
         for client in self.clients:
