@@ -977,7 +977,7 @@ class HerConfigMod(loader.Module):
 
         await self.inline__choose_category(message)
 
-    @loader.command(alias="fcfg")
+    @loader.command()
     async def fconfig(self, message: Message):
         args = utils.get_args_raw(message).split(maxsplit=2)
 

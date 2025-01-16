@@ -147,7 +147,7 @@ class Evaluator(loader.Module):
 
     strings = {"name": "Evaluator"}
 
-    @loader.command(alias="eval")
+    @loader.command()
     async def e(self, message: Message):
         try:
             result = await meval(
