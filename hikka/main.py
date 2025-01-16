@@ -798,7 +798,7 @@ class Her:
             )
 
             logging.info(
-                "\n🪐 Heroku %s #%s (%s) started\n%s",
+                "\n🪐 Her %s #%s (%s) started\n%s",
                 ".".join(list(map(str, list(__version__)))),
                 build[:7],
                 upd,
