@@ -157,7 +157,7 @@ class HerInfoMod(loader.Module):
                 else {"message": self._render_info(True)}
             ),
             "thumb": (
-                "https://github.com/hikariatama/Hikka/raw/master/assets/hikka_pfp.png"
+                "https://raw.githubusercontent.com/kramiikk/Her/refs/heads/main/assets/her-ava.png"
             ),
             "reply_markup": self._get_mark(),
         }

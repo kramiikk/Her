@@ -158,8 +158,6 @@ class SudoMessageEditor(MessageEditor):
             await self.authmsg.edit(self.strings("auth_failed"))
             self.state = 0
             handled = True
-            await asyncio.sleep(2)
-            await self.authmsg.delete()
 
         if lastlines[0] == self.PASS_REQ and self.state == 0:
             logger.debug("Success to find sudo log!")
@@ -194,14 +192,12 @@ class SudoMessageEditor(MessageEditor):
         ):
             logger.debug("password wrong lots of times")
             await utils.answer(self.message, self.strings("auth_locked"))
-            await self.authmsg.delete()
             self.state = 2
             handled = True
 
         if not handled:
             logger.debug("Didn't find sudo log.")
             if self.authmsg is not None:
-                await self.authmsg[0].delete()
                 self.authmsg = None
             self.state = 2
             await self.redraw()
@@ -215,7 +211,6 @@ class SudoMessageEditor(MessageEditor):
             self.state = 3  # Means that we got stdout only
 
         if self.authmsg is not None:
-            await self.authmsg.delete()
             self.authmsg = None
 
         await self.redraw()
@@ -229,11 +224,7 @@ class SudoMessageEditor(MessageEditor):
 
         if hash_msg(message) == hash_msg(self.authmsg):
             # The user has provided interactive authentication. Send password to stdin for sudo.
-            try:
-                self.authmsg = await utils.answer(message, self.strings("auth_ongoing"))
-            except hikkatl.errors.rpcerrorlist.MessageNotModifiedError:
-                # Try to clear personal info if the edit fails
-                await message.delete()
+            self.authmsg = await utils.answer(message, self.strings("auth_ongoing"))
 
             self.state = 1
             self.process.stdin.write(

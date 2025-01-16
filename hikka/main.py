@@ -44,7 +44,7 @@ from hikkatl.tl.functions.account import GetPasswordRequest
 from hikkatl.tl.functions.auth import CheckPasswordRequest
 
 from . import database, loader, utils, version
-from ._internal import print_banner, restart
+from ._internal import restart
 from .dispatcher import CommandDispatcher
 from .qr import QRCode
 from .secure import patcher
@@ -657,7 +657,6 @@ class Her:
                 return await self._phone_login(client)
 
             if qr_logined:
-                print_banner("2fa.txt")
                 password = await client(GetPasswordRequest())
                 while True:
                     _2fa = getpass(
@@ -696,7 +695,6 @@ class Her:
                     else:
                         break
 
-            print_banner("success.txt")
             print("\033[0;92mLogged in successfully!\033[0m")
             await self.save_client_session(client)
             self.clients += [client]
@@ -791,11 +789,7 @@ class Her:
             diff = repo.git.log([f"HEAD..origin/{version.branch}", "--oneline"])
             upd = "Update required" if diff else "Up-to-date"
 
-            logo = (
-                "  /\  /\ ___  _ __ \n"
-                " / /_/ // _ \| '__|\n"
-                "/ __  /|  __/| |   \n"
-                "\/ /_/  \___||_|   \n\n"
+            info = (
                 f"• Build: {build[:7]}\n"
                 f"• Version: {'.'.join(list(map(str, list(__version__))))}\n"
                 f"• {upd}\n"
@@ -808,7 +802,7 @@ class Her:
             )
 
             if not self.omit_log:
-                print(logo)
+                print(info)
                 logging.debug(
                     "\n🪐 Heroku %s #%s (%s) started\n%s",
                     ".".join(list(map(str, list(__version__)))),

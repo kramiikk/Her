@@ -315,12 +315,6 @@ class Gallery(InlineUnit):
         self._units[unit_id]["chat"] = utils.get_chat_id(m)
         self._units[unit_id]["message_id"] = m.id
 
-        if isinstance(message, Message) and message.out:
-            await message.delete()
-
-        if status_message and not message.out:
-            await status_message.delete()
-
         if not isinstance(next_handler, ListGalleryHelper):
             asyncio.ensure_future(self._load_gallery_photos(unit_id))
 

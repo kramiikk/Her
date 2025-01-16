@@ -333,9 +333,6 @@ class TestMod(loader.Module):
             ),
         )
 
-        if getattr(message, "out", True):
-            await message.delete()
-
         if isinstance(message, Message):
             await utils.answer(
                 message,
@@ -370,7 +367,6 @@ class TestMod(loader.Module):
         banner = self.config["banner_url"]
         
         if banner != "her":
-            await message.delete()
             await self.client.send_file(
                 message.peer_id,
                 banner,

@@ -74,14 +74,12 @@ class HerBackupMod(loader.Module):
         if not value:
             self.set("period", "disabled")
             await call.answer(self.strings("never"), show_alert=True)
-            await call.delete()
             return
 
         self.set("period", value * 60 * 60)
         self.set("last_backup", round(time.time()))
 
         await call.answer(self.strings("saved"), show_alert=True)
-        await call.delete()
 
     @loader.command()
     async def set_backup_period(self, message: Message):

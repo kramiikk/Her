@@ -403,9 +403,6 @@ async def answer_file(
 
         raise
 
-    with contextlib.suppress(Exception):
-        await message.delete()
-
     return response
 
 
@@ -519,9 +516,6 @@ async def answer(
                     reply_to=kwargs.get("reply_to") or get_topic(message),
                 )
 
-                if message.out:
-                    await message.delete()
-
                 return result
 
         result = await (message.edit if edit else message.respond)(
@@ -557,8 +551,6 @@ async def answer(
                 getattr(message, "reply_to_msg_id", get_topic(message)),
             )
             result = await message.client.send_file(message.peer_id, response, **kwargs)
-            if message.out:
-                await message.delete()
 
     return result
 

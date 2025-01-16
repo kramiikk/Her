@@ -126,7 +126,6 @@ class Presets(loader.Module):
         await call.edit(self.strings("welcome"), reply_markup=self._markup)
 
     async def _install(self, call: InlineCall, preset: str):
-        await call.delete()
         m = await self._client.send_message(
             self.inline.bot_id,
             self.strings("installing").format(preset),

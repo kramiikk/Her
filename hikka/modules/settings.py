@@ -294,5 +294,3 @@ class CoreMod(loader.Module):
             message.peer_id,
             "https://imgur.com/a/HrrFair.png",
             caption=self.strings["installation"].format('{}', prefix=self.get_prefix()), reply_to=getattr(message, "reply_to_msg_id", None),)
-    
-        await message.delete()

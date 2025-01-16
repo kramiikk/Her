@@ -222,9 +222,6 @@ class Utils(InlineUnit):
 
     generate_markup = _generate_markup
 
-    async def _close_unit_handler(self, call: InlineCall):
-        await call.delete()
-
     async def _unload_unit_handler(self, call: InlineCall):
         await call.unload()
 

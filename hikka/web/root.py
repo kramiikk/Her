@@ -137,9 +137,6 @@ class Web:
 
             r = await conv.get_response()
 
-            await m.delete()
-            await r.delete()
-
             if not hasattr(r, "reply_markup") or not hasattr(r.reply_markup, "rows"):
                 return False
 
@@ -150,9 +147,6 @@ class Web:
 
                     m = await conv.send_message("/cancel")
                     r = await conv.get_response()
-
-                    await m.delete()
-                    await r.delete()
 
                     return True
 

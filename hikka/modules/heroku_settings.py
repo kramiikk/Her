@@ -65,10 +65,6 @@ class HerSettingsMod(loader.Module):
                 logger.debug(">> %s", m.raw_text)
                 logger.debug("<< %s", r.raw_text)
 
-                await fw_protect()
-
-                await m.delete()
-                await r.delete()
 
         async for dialog in self._client.iter_dialogs(
             None,
@@ -500,7 +496,6 @@ class HerSettingsMod(loader.Module):
             return
 
         await call.answer("You userbot is being updated...", show_alert=True)
-        await call.delete()
         await self.invoke("update", "-f", peer="me")
 
     async def _remove_core_protection(self, call: InlineCall):
@@ -544,7 +539,6 @@ class HerSettingsMod(loader.Module):
             return
 
         await call.answer("You userbot is being restarted...", show_alert=True)
-        await call.delete()
         await self.invoke("restart", "-f", peer="me")
 
     def _get_settings_markup(self) -> list:

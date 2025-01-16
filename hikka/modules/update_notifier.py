@@ -134,9 +134,6 @@ class UpdateNotifier(loader.Module):
 
         await self._delete_all_upd_messages()
 
-        with contextlib.suppress(Exception):
-            await call.delete()
-
         await self.invoke("update", "-f", peer=self.inline.bot_username)
 
     @loader.command()

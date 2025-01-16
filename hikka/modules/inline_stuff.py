@@ -26,9 +26,6 @@ class InlineStuff(loader.Module):
         "only_inline",
         contains="This message will be deleted automatically",
     )
-    async def watcher(self, message: Message):
-        if message.via_bot_id == self.inline.bot_id:
-            await message.delete()
 
     @loader.watcher("out", "only_inline", contains="Opening gallery...")
     async def gallery_watcher(self, message: Message):
@@ -36,8 +33,6 @@ class InlineStuff(loader.Module):
             return
 
         id_ = re.search(r"#id: ([a-zA-Z0-9]+)", message.raw_text)[1]
-
-        await message.delete()
 
         m = await message.respond("🪐", reply_to=utils.get_topic(message))
 
@@ -62,9 +57,6 @@ class InlineStuff(loader.Module):
 
             r = await conv.get_response()
 
-            await m.delete()
-            await r.delete()
-
             if not hasattr(r, "reply_markup") or not hasattr(r.reply_markup, "rows"):
                 return False
 
@@ -75,9 +67,6 @@ class InlineStuff(loader.Module):
 
                     m = await conv.send_message("/cancel")
                     r = await conv.get_response()
-
-                    await m.delete()
-                    await r.delete()
 
                     return True
 
