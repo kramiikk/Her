@@ -36,7 +36,7 @@ class HerBackupMod(loader.Module):
             "📼 Your database backups will appear here",
             silent=True,
             archive=True,
-            avatar="https://raw.githubusercontent.com/kramiikk/Her/refs/heads/main/assets/her-backups.png",
+            avatar="https://raw.githubusercontent.com/coddrago/Heroku/refs/heads/master/assets/heroku-backups.png",
             _folder="hikka",
             invite_bot=True,
         )

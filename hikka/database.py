@@ -115,7 +115,7 @@ class Database(dict):
                 "her-assets",
                 "🌆 Your Her assets will be stored here",
                 archive=True,
-                avatar="https://raw.githubusercontent.com/kramiikk/Her/refs/heads/main/assets/her-assets.png" 
+                avatar="https://raw.githubusercontent.com/coddrago/Heroku/refs/heads/master/assets/heroku-assets.png" 
             )
         except ChannelsTooMuchError:
             self._assets = None
