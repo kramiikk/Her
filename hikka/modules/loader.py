@@ -29,7 +29,7 @@ from urllib.parse import urlparse
 import requests
 from hikkatl.errors.rpcerrorlist import MediaCaptionTooLongError
 from hikkatl.tl.functions.channels import JoinChannelRequest
-from hikkatl.tl.types import Channel, Message, PeerUser
+from hikkatl.tl.types import Channel, Message
 
 from .. import loader, main, utils
 from .._local_storage import RemoteStorage

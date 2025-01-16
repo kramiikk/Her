@@ -190,15 +190,6 @@ class APIRatelimiterMod(loader.Module):
             delattr(self._client, "_old_call_rewritten")
 
     @loader.command()
-    async def suspend_api_protect(self, message: Message):
-        if not (args := utils.get_args_raw(message)) or not args.isdigit():
-            await utils.answer(message, self.strings("args_invalid"))
-            return
-
-        self._suspend_until = time.perf_counter() + int(args)
-        await utils.answer(message, self.strings("suspended_for").format(args))
-
-    @loader.command()
     async def api_fw_protection(self, message: Message):
         await self.inline.form(
             message=message,

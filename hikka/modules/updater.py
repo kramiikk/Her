@@ -16,11 +16,7 @@ import typing
 import git
 from git import GitCommandError, Repo
 from hikkatl.extensions.html import CUSTOM_EMOJIS
-from hikkatl.tl.functions.messages import (
-    GetDialogFiltersRequest,
-    UpdateDialogFilterRequest,
-)
-from hikkatl.tl.types import DialogFilter, Message
+from hikkatl.tl.types import Message
 
 from .. import loader, main, utils, version
 from .._internal import restart

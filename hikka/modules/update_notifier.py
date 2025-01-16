@@ -5,7 +5,6 @@
 # 🔑 https://www.gnu.org/licenses/agpl-3.0.html
 
 import asyncio
-import contextlib
 
 import git
 
