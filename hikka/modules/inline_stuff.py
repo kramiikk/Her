@@ -4,7 +4,6 @@
 # You can redistribute it and/or modify it under the terms of the GNU AGPLv3
 # 🔑 https://www.gnu.org/licenses/agpl-3.0.html
 
-import logging
 import re
 import string
 
@@ -15,7 +14,6 @@ from hikkatl.tl.types import Message
 from .. import loader, utils
 from ..inline.types import BotInlineMessage
 
-logger = logging.getLogger(__name__)
 
 @loader.tds
 class InlineStuff(loader.Module):
@@ -36,15 +34,11 @@ class InlineStuff(loader.Module):
 
         match = re.search(r"#id: ([a-zA-Z0-9]+)", message.raw_text)
         if not match:
-            logger.error("Не удалось извлечь ID из сообщения.")
             return
 
         id_ = match[1]
-        logger.info(f"Извлеченный ID: {id_}")
-        logger.info(f"Ключи в self.inline._custom_map: {self.inline._custom_map.keys()}")
 
         if id_ not in self.inline._custom_map:
-            logger.error(f"ID '{id_}' не найден в self.inline._custom_map")
             return
 
         m = await message.respond("🪐", reply_to=utils.get_topic(message))
