@@ -25,7 +25,7 @@ class TokenObtainment(InlineUnit):
         async with self._client.conversation("@BotFather", exclusive=False) as conv:
             await asyncio.sleep(random.uniform(13, 30))
             await fw_protect()
-            m = await conv.send_message("/newbot")
+            await conv.send_message("/newbot")
             r = await conv.get_response()
 
             if "20" in r.raw_text:
@@ -48,26 +48,10 @@ class TokenObtainment(InlineUnit):
             for msg in [
                 f"🪐 Her userbot"[:64],
                 username,
-                "/setuserpic",
-                username,
             ]:
                 await asyncio.sleep(random.uniform(13, 33))
                 await fw_protect()
-                m = await conv.send_message(msg)
-                r = await conv.get_response()
-
-            try:
-                from .. import main
-                await asyncio.sleep(random.uniform(13, 33))
-                await fw_protect()
-
-                m = await conv.send_file("https://raw.githubusercontent.com/coddrago/Heroku/refs/heads/master/assets/heroku-ava.png")
-                r = await conv.get_response()
-
-            except Exception:
-                await fw_protect()
-                await asyncio.sleep(random.uniform(13, 33))
-                m = await conv.send_message("/cancel")
+                await conv.send_message(msg)
                 r = await conv.get_response()
 
         return await self._assert_token(False)
@@ -156,27 +140,10 @@ class TokenObtainment(InlineUnit):
                         "/setinlinefeedback",
                         button.text,
                         "Enabled",
-                        "/setuserpic",
-                        button.text,
                     ]:
                         await asyncio.sleep(random.uniform(13, 33))
                         await fw_protect()
                         await conv.send_message(msg)
-                        await conv.get_response()
-
-                    try:
-                        await asyncio.sleep(random.uniform(13, 33))
-                        await fw_protect()
-                        from .. import main
-
-                        await conv.send_file(
-                            "https://raw.githubusercontent.com/coddrago/Heroku/refs/heads/master/assets/heroku-ava.png"
-                        )
-                        await conv.get_response()
-                    except Exception:
-                        await asyncio.sleep(random.uniform(13, 33))
-                        await fw_protect()
-                        await conv.send_message("/cancel")
                         await conv.get_response()
 
                     return True
