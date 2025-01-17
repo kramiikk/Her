@@ -462,7 +462,7 @@ class BroadcastManager:
                 f"  ├ Сообщений: {len(code.messages)}\n"
                 f"  ├ Интервал: {code.interval[0]}-{code.interval[1]} мин\n"
                 f"  ├ Режим: {code.send_mode}\n"
-                f"  └ Все сообщения: {'да' if code.batch_mode else 'нет'}\n\n"
+                f"  └ Все сообщения разом: {'да' if code.batch_mode else 'нет'}\n\n"
             )
         await message.edit(response)
 
