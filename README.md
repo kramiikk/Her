@@ -7,9 +7,10 @@
 <h2><img src="https://github.com/hikariatama/assets/raw/master/1326-command-window-line-flat.webp" height="54" align="middle"> Installation</h2>
 
 <b>Manual installation (no script):</b>
-<code>apt update && apt install git python3 -y && git clone https://github.com/kramiikk/Her && cd Her && pip install -r requirements.txt && python3 -m hikka</code>
+<code>apt update && apt install git python3 -y && git clone https://github.com/kramiikk/Her && cd Her && pip install -r requirements.txt && python3 -m hikka --no-web</code>
 
-<i>If you are on VPS\VDS, type <code>--proxy-pass</code> in the end of command to open SSH tunnel to your Her web interface, or use <code>--no-web</code> to complete setup in console</i>
+<b>Termux:</b>
+<code>termux-wake-lock && export AIOHTTP_NO_EXTENSIONS=1 && pkg upgr -y && pkg install tur-repo && pkg update && pkg install python3.10 && pkg i wget ncurses-utils python3.10 -y && pkg update && pkg install openssl -y && pkg install git && clear && . <(wget -qO- https://raw.githubusercontent.com/kramiikk/Her/refs/heads/main/termux.sh)</code>
 
 <hr>
 <h2 border="none"><img src="https://github.com/hikariatama/assets/raw/master/1312-micro-sd-card-flat.webp" height="54" align="middle"> Requirements</h2>
