@@ -10,7 +10,6 @@ import git
 
 from .. import loader, utils, version
 from ..inline.types import InlineCall
-from ..types import Message
 
 
 @loader.tds
@@ -122,13 +121,3 @@ class UpdateNotifier(loader.Module):
             return
 
         await self.invoke("update", "-f", peer=self.inline.bot_username)
-
-    @loader.command()
-    async def changelog(self, message: Message):
-        """Shows the changelog of the last major update"""
-        with open('CHANGELOG.md', mode='r', encoding='utf-8') as f:
-            changelog = f.read().split('##')[1].strip()
-        if (await self._client.get_me()).premium:
-            changelog.replace('🌑 Her', '<emoji document_id=5192765204898783881>🌘</emoji><emoji document_id=5195311729663286630>🌘</emoji><emoji document_id=5195045669324201904>🌘</emoji>')
-
-        await utils.answer(message, self.strings('changelog').format(changelog))

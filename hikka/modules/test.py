@@ -7,8 +7,6 @@
 import inspect
 import logging
 import os
-import random
-import subprocess
 import time
 import typing
 from io import BytesIO
@@ -73,30 +71,6 @@ class TestMod(loader.Module):
                 "Ignore common errors (e.g. 'TypeError' in telethon)",
                 validator=loader.validators.Boolean(),
                 on_change=self._pass_config_to_logger,
-            ),
-            loader.ConfigValue(
-                "Text_Of_Ping",
-                "<emoji document_id=5920515922505765329>⚡️</emoji> <b>𝙿𝚒𝚗𝚐: </b><code>{ping}</code><b> 𝚖𝚜 </b>\n<emoji document_id=5900104897885376843>🕓</emoji><b> 𝚄𝚙𝚝𝚒𝚖𝚎: </b><code>{uptime}</code>",
-                lambda: self.strings["configping"],
-                validator=loader.validators.String(),
-            ),
-            loader.ConfigValue(
-                "hint",
-                None,
-                lambda: self.strings["hint"],
-                validator=loader.validators.String(),
-            ),
-            loader.ConfigValue(
-                "ping_emoji",
-                "🪐",
-                lambda: self.strings["ping_emoji"],
-                validator=loader.validators.String(),
-            ),
-            loader.ConfigValue(
-                "banner_url",
-                "her",
-                lambda: self.strings["banner_url"],
-                validator=loader.validators.String(),
             ),
         )
 
@@ -355,42 +329,3 @@ class TestMod(loader.Module):
             time.sleep(time_sleep)
         except ValueError:
             await utils.answer(message, self.strings("suspend_invalid_time"))
-
-    @loader.command()
-    async def ping(self, message: Message):
-        """- Find out your userbot ping"""
-        start = time.perf_counter_ns()
-        message = await utils.answer(message, self.config["ping_emoji"])
-        banner = self.config["banner_url"]
-        
-        if banner != "her":
-            await self.client.send_file(
-                message.peer_id,
-                banner,
-                caption = self.config["Text_Of_Ping"].format(
-                    ping=round((time.perf_counter_ns() - start) / 10**6, 3),
-                    uptime=utils.formatted_uptime(),
-                    ping_hint=(
-                        (self.config["hint"]) if random.choice([0, 0, 1]) == 1 else ""
-                    ),
-                    hostname=subprocess.run(['hostname'], stdout=subprocess.PIPE).stdout.decode().strip(),
-                    user=subprocess.run(['whoami'], stdout=subprocess.PIPE).stdout.decode().strip(),
-        ),
-                reply_to=getattr(message, "reply_to_msg_id", None),
-            )
-
-        else:
-            await utils.answer(
-                message,
-                self.config["Text_Of_Ping"].format(
-                    ping=round((time.perf_counter_ns() - start) / 10**6, 3),
-                    uptime=utils.formatted_uptime(),
-                    ping_hint=(
-                        (self.config["hint"]) if random.choice([0, 0, 1]) == 1 else ""
-                    ),
-                    hostname=subprocess.run(['hostname'], stdout=subprocess.PIPE).stdout.decode().strip(),
-                    user=subprocess.run(['whoami'], stdout=subprocess.PIPE).stdout.decode().strip(),
-        ),
-            )
-
-        self._pass_config_to_logger()
