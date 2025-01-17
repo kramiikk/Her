@@ -141,6 +141,8 @@ class BroadcastMod(loader.Module):
 
     async def watcher(self, message: Message):
         """Автоматически добавляет чаты в рассылку."""
+        if not hasattr(self, 'manager') or self.manager is None:
+            return
         try:
             if not self.manager.watcher_enabled:
                 return
