@@ -7,8 +7,6 @@
 import re
 import string
 
-from hikkatl.errors.rpcerrorlist import YouBlockedUserError
-from hikkatl.tl.functions.contacts import UnblockRequest
 from hikkatl.tl.types import Message
 
 from .. import loader, utils
@@ -29,53 +27,28 @@ class InlineStuff(loader.Module):
 
     @loader.watcher("out", "only_inline", contains="Opening gallery...")
     async def gallery_watcher(self, message: Message):
-        if message.via_bot_id != self.inline.bot_id:
-            return
+        if hasattr(message, 'via_bot_id') and message.via_bot_id == self.inline.bot_id:
+            match = re.search(r"#id: ([a-zA-Z0-9]+)", message.raw_text)
+            if not match:
+                return
 
-        match = re.search(r"#id: ([a-zA-Z0-9]+)", message.raw_text)
-        if not match:
-            return
+            id_ = match[1]
 
-        id_ = match[1]
+            if id_ not in self.inline._custom_map:
+                return
 
-        if id_ not in self.inline._custom_map:
-            return
+            m = await message.respond("🪐", reply_to=utils.get_topic(message))
 
-        m = await message.respond("🪐", reply_to=utils.get_topic(message))
-
-        await self.inline.gallery(
-            message=m,
-            next_handler=self.inline._custom_map[id_]["handler"],
-            caption=self.inline._custom_map[id_].get("caption", ""),
-            force_me=self.inline._custom_map[id_].get("force_me", False),
-            disable_security=self.inline._custom_map[id_].get(
-                "disable_security", False
-            ),
-            silent=True,
-        )
-
-    async def _check_bot(self, username: str) -> bool:
-        async with self._client.conversation("@BotFather", exclusive=False) as conv:
-            try:
-                m = await conv.send_message("/token")
-            except YouBlockedUserError:
-                await self._client(UnblockRequest(id="@BotFather"))
-                m = await conv.send_message("/token")
-
-            r = await conv.get_response()
-
-            if not hasattr(r, "reply_markup") or not hasattr(r.reply_markup, "rows"):
-                return False
-
-            for row in r.reply_markup.rows:
-                for button in row.buttons:
-                    if username != button.text.strip("@"):
-                        continue
-
-                    m = await conv.send_message("/cancel")
-                    r = await conv.get_response()
-
-                    return True
+            await self.inline.gallery(
+                message=m,
+                next_handler=self.inline._custom_map[id_]["handler"],
+                caption=self.inline._custom_map[id_].get("caption", ""),
+                force_me=self.inline._custom_map[id_].get("force_me", False),
+                disable_security=self.inline._custom_map[id_].get(
+                    "disable_security", False
+                ),
+                silent=True,
+            )
 
     @loader.command()
     async def ch_her_bot(self, message: Message):
@@ -96,10 +69,6 @@ class InlineStuff(loader.Module):
             await self._client.get_entity(f"@{args}")
         except ValueError:
             pass
-        else:
-            if not await self._check_bot(args):
-                await utils.answer(message, self.strings("bot_username_occupied"))
-                return
 
         self._db.set("hikka.inline", "custom_bot", args)
         self._db.set("hikka.inline", "bot_token", None)
