@@ -323,7 +323,7 @@ class Help(loader.Module):
             message,
             (self.config["desc_icon"] + " {}\n <blockquote>{}</blockquote><blockquote>{}</blockquote>").format(
                 reply,
-                "".join(core_ + plain_ + (no_commands_ if force else [])),
+                "".join(core_ + plain_ + (no_commands_ if force else [])).strip(),
                 (
                     ""
                     if self.lookup("Loader").fully_loaded
