@@ -4,11 +4,9 @@
 # You can redistribute it and/or modify it under the terms of the GNU AGPLv3
 # 🔑 https://www.gnu.org/licenses/agpl-3.0.html
 
-import hikkatl
-from hikkatl.extensions.html import CUSTOM_EMOJIS
 from hikkatl.tl.types import Message
 
-from .. import loader, main, utils, version
+from .. import loader, main, utils
 
 
 @loader.tds
@@ -83,23 +81,6 @@ class CoreMod(loader.Module):
 
         module = self.allmodules.get_classname(module)
         return f"{str(chatid)}.{module}" if module else chatid
-
-    @loader.command()
-    async def hercmd(self, message: Message):
-        await utils.answer_file(
-            message,
-            "https://imgur.com/a/i0Mq22X.png",
-            self.strings("hikka").format(
-                (
-                    utils.get_platform_emoji()
-                    if self._client.hikka_me.premium and CUSTOM_EMOJIS
-                    else "🪐 <b>Her userbot</b>"
-                ),
-                *version.__version__,
-                utils.get_commit_url(),
-                f"{hikkatl.__version__} #{hikkatl.tl.alltlobjects.LAYER}",
-            )
-        )
 
     @loader.command()
     async def blacklist(self, message: Message):
