@@ -282,7 +282,7 @@ class UpdaterMod(loader.Module):
         except Exception:
             took = "n/a"
 
-        msg = self.strings("success").format(utils.ascii_face(), took)
+        msg = "Restart successful!"
         ms = self.get("selfupdatemsg")
 
         if ":" in str(ms):
@@ -307,9 +307,6 @@ class UpdaterMod(loader.Module):
         self.set("restart_ts", None)
 
         ms = self.get("selfupdatemsg")
-        msg = self.strings(
-            "secure_boot_complete" if secure_boot else "full_success"
-        ).format(utils.ascii_face(), took)
 
         if ms is None:
             return
