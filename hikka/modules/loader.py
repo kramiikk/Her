@@ -446,27 +446,6 @@ class LoaderMod(loader.Module):
                 ),
             )
 
-    async def approve_internal(
-        self,
-        call: InlineCall,
-        channel: "hints.EntityLike",  # type: ignore  # noqa
-        event: asyncio.Event,
-    ):
-        """
-        Don't you dare call it externally
-        """
-        await self._client(JoinChannelRequest(channel))
-        event.status = True
-        event.set()
-
-        await call.edit(
-            (
-                "💫 <b>Joined <a"
-                f' href="https://t.me/{channel.username}">{utils.escape_html(channel.title)}</a></b>'
-            ),
-            photo="https://imgur.com/a/gWKLn7h.png",
-        )
-
     async def load_module(
         self,
         doc: str,
@@ -1155,40 +1134,6 @@ class LoaderMod(loader.Module):
 
         self.fully_loaded = True
 
-    def flush_cache(self) -> int:
-        """Flush the cache of links to modules"""
-        count = sum(map(len, self._links_cache.values()))
-        self._links_cache = {}
-        return count
-
-    def inspect_cache(self) -> int:
-        """Inspect the cache of links to modules"""
-        return sum(map(len, self._links_cache.values()))
-
-    async def reload_core(self) -> int:
-        """Forcefully reload all core modules"""
-        self.fully_loaded = False
-
-        if self._secure_boot:
-            self._db.set(loader.__name__, "secure_boot", True)
-
-        if not self._db.get(main.__name__, "remove_core_protection", False):
-            for module in self.allmodules.modules:
-                if module.__origin__.startswith("<core"):
-                    module.__origin__ = "<reload-core>"
-
-        loaded = await self.allmodules.register_all(no_external=True)
-        for instance in loaded:
-            self.allmodules.send_config_one(instance)
-            await self.allmodules.send_ready_one(
-                instance,
-                no_self_unload=False,
-                from_dlmod=False,
-            )
-
-        self.fully_loaded = True
-        return len(loaded)
-
     @loader.command()
     async def mlcmd(self, message: Message):
         """| send module via file"""
@@ -1286,41 +1231,3 @@ class LoaderMod(loader.Module):
             caption=text,
             reply_to=getattr(message, "reply_to_msg_id", None),
         )
-
-    def _format_result(
-        self,
-        result: dict,
-        query: str,
-        no_translate: bool = False,
-    ) -> str:
-        commands = "\n".join(
-            [
-                f"▫️ <code>{utils.escape_html(self.get_prefix())}{utils.escape_html(cmd)}</code>:"
-                f" <b>{utils.escape_html(cmd_doc)}</b>"
-                for cmd, cmd_doc in result["module"]["commands"].items()
-            ]
-        )
-
-        kwargs = {
-            "name": utils.escape_html(result["module"]["name"]),
-            "dev": utils.escape_html(result["module"]["dev"]),
-            "commands": commands,
-            "cls_doc": utils.escape_html(result["module"]["cls_doc"]),
-            "mhash": result["module"]["hash"],
-            "query": utils.escape_html(query),
-            "prefix": utils.escape_html(self.get_prefix()),
-        }
-
-        strings = (
-            self.strings.get("result", "en")
-            if self.config["translate"] and not no_translate
-            else self.strings("result")
-        )
-
-        text = strings.format(**kwargs)
-
-        if len(text) > 1980:
-            kwargs["commands"] = "..."
-            text = strings.format(**kwargs)
-
-        return text

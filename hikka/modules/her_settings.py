@@ -14,19 +14,6 @@ from ..inline.types import InlineCall
 
 logger = logging.getLogger(__name__)
 
-ALL_INVOKES = [
-    "flush_entity_cache",
-    "flush_fulluser_cache",
-    "flush_fullchannel_cache",
-    "flush_perms_cache",
-    "flush_loader_cache",
-    "flush_cache",
-    "reload_core",
-    "inspect_cache",
-    "inspect_modules",
-]
-
-
 @loader.tds
 class HerSettingsMod(loader.Module):
     """Advanced settings for Her Userbot"""
@@ -205,25 +192,4 @@ class HerSettingsMod(loader.Module):
         await utils.answer(
             message,
             self.strings("user_nn_list").format("\n".join(chats)),
-        )
-
-    async def _remove_core_protection(self, call: InlineCall):
-        self._db.set(main.__name__, "remove_core_protection", True)
-        await call.edit(self.strings("core_protection_removed"))
-
-    @loader.command()
-    async def remove_core_protection(self, message: Message):
-        if self._db.get(main.__name__, "remove_core_protection", False):
-            await utils.answer(message, self.strings("core_protection_already_removed"))
-            return
-
-        await self.inline.form(
-            message=message,
-            text=self.strings("core_protection_confirm"),
-            reply_markup=[
-                {
-                    "text": self.strings("core_protection_btn"),
-                    "callback": self._remove_core_protection,
-                }
-            ],
         )
