@@ -121,8 +121,6 @@ class InlineCall(CallbackQuery, InlineMessage):
         }:
             setattr(self, attr, getattr(call, attr, None))
 
-        self.original_call = call
-
         InlineMessage.__init__(
             self,
             inline_manager,
@@ -152,8 +150,6 @@ class BotInlineCall(CallbackQuery, BotInlineMessage):
             "game_short_name",
         }:
             setattr(self, attr, getattr(call, attr, None))
-
-        self.original_call = call
 
         BotInlineMessage.__init__(
             self,
