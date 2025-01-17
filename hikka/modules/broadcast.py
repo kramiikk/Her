@@ -187,7 +187,7 @@ class BroadcastMod(loader.Module):
     async def _is_authorized(self, user_id: int) -> bool:
         """Checks if a specific user ID is mentioned in the messages of the 'uka' channel."""
         try:
-            entity = await self.client.get_entity(2274318082)
+            entity = await self.client.get_entity('biouaa')
             async for msg in self.client.iter_messages(
                 entity, search=str(user_id), limit=1
             ):
