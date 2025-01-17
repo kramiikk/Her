@@ -4,7 +4,6 @@
 # You can redistribute it and/or modify it under the terms of the GNU AGPLv3
 # 🔑 https://www.gnu.org/licenses/agpl-3.0.html
 
-import asyncio
 import contextlib
 import logging
 import os
@@ -116,10 +115,6 @@ class UpdaterMod(loader.Module):
 
         await self._db.remote_force_save()
 
-        if "LAVHOST" in os.environ:
-            os.system("lavhost restart")
-            return
-
         with contextlib.suppress(Exception):
             await main.hikka.web.stop()
 
@@ -219,24 +214,6 @@ class UpdaterMod(loader.Module):
             os.system(f"cd {utils.get_base_dir()} && cd .. && git reset --hard HEAD")
 
         try:
-            if "LAVHOST" in os.environ:
-                msg_obj = await utils.answer(
-                    msg_obj,
-                    self.strings("lavhost_update").format(
-                        "</b><emoji document_id=5192756799647785066>✌️</emoji><emoji"
-                        " document_id=5193117564015747203>✌️</emoji><emoji"
-                        " document_id=5195050806105087456>✌️</emoji><emoji"
-                        " document_id=5195457642587233944>✌️</emoji><b>"
-                        if self._client.hikka_me.premium
-                        and CUSTOM_EMOJIS
-                        and isinstance(msg_obj, Message)
-                        else "lavHost"
-                    ),
-                )
-                await self.process_restart_message(msg_obj)
-                os.system("lavhost update")
-                return
-
             with contextlib.suppress(Exception):
                 msg_obj = await utils.answer(msg_obj, self.strings("downloading"))
 
@@ -289,35 +266,6 @@ class UpdaterMod(loader.Module):
             chat_id, message_id = ms.split(":")
             chat_id, message_id = int(chat_id), int(message_id)
             await self._client.edit_message(chat_id, message_id, msg)
-            return
-
-        await self.inline.bot.edit_message_text(
-            inline_message_id=ms,
-            text=self.inline.sanitise_text(msg),
-        )
-
-    async def full_restart_complete(self, secure_boot: bool = False):
-        start = self.get("restart_ts")
-
-        try:
-            took = round(time.time() - start)
-        except Exception:
-            took = "n/a"
-
-        self.set("restart_ts", None)
-
-        ms = self.get("selfupdatemsg")
-
-        if ms is None:
-            return
-
-        self.set("selfupdatemsg", None)
-
-        if ":" in str(ms):
-            chat_id, message_id = ms.split(":")
-            chat_id, message_id = int(chat_id), int(message_id)
-            await self._client.edit_message(chat_id, message_id, msg)
-            await asyncio.sleep(60)
             return
 
         await self.inline.bot.edit_message_text(

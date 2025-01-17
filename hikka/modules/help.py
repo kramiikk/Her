@@ -327,7 +327,7 @@ class Help(loader.Module):
                 (
                     ""
                     if self.lookup("Loader").fully_loaded
-                    else f"\n\n{self.strings('partial_load')}"
+                    else f"\n{self.strings('partial_load')}"
                 ),
             ),
         )

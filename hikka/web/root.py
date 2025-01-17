@@ -81,20 +81,15 @@ class Web:
     def _platform_emoji(self) -> str:
         return {
             "vds": "https://github.com/iamcal/emoji-data/raw/master/img-apple-64/1fa90.png",
-            "lavhost": "https://github.com/hikariatama/assets/raw/master/victory-hand_270c-fe0f.png",
             "termux": "https://github.com/hikariatama/assets/raw/master/smiling-face-with-sunglasses_1f60e.png",
             "docker": "https://github.com/hikariatama/assets/raw/master/spouting-whale_1f433.png",
         }[
             (
-                "lavhost"
-                if "LAVHOST" in os.environ
-                else (
-                    "termux"
-                    if "com.termux" in os.environ.get("PREFIX", "")
-                    else "docker"
-                    if "DOCKER" in os.environ
-                    else "vds"
-                )
+                "termux"
+                if "com.termux" in os.environ.get("PREFIX", "")
+                else "docker"
+                if "DOCKER" in os.environ
+                else "vds"
             )
         ]
 
@@ -103,7 +98,6 @@ class Web:
         return {
             "skip_creds": self.api_token is not None,
             "tg_done": bool(self.client_data),
-            "lavhost": "LAVHOST" in os.environ,
             "platform_emoji": self._platform_emoji,
         }
 
@@ -230,9 +224,6 @@ class Web:
         self._qr_login = True
 
     async def init_qr_login(self, request: web.Request) -> web.Response:
-        if self.client_data and "LAVHOST" in os.environ:
-            return web.Response(status=403, body="Forbidden by host EULA")
-
         if not self._check_session(request):
             return web.Response(status=401)
 
@@ -292,17 +283,11 @@ class Web:
         )
 
     async def can_add(self, request: web.Request) -> web.Response:
-        if self.client_data and "LAVHOST" in os.environ:
-            return web.Response(status=403, body="Forbidden by host EULA")
-
         return web.Response(status=200, body="Yes")
 
     async def send_tg_code(self, request: web.Request) -> web.Response:
         if not self._check_session(request):
             return web.Response(status=401, body="Authorization required")
-
-        if self.client_data and "LAVHOST" in os.environ:
-            return web.Response(status=403, body="Forbidden by host EULA")
 
         if self._pending_client:
             return web.Response(status=208, body="Already pending")

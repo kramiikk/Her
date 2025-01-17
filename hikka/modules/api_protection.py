@@ -14,11 +14,9 @@ import typing
 
 from hikkatl.tl import functions
 from hikkatl.tl.tlobject import TLRequest
-from hikkatl.tl.types import Message
 from hikkatl.utils import is_list_like
 
 from .. import loader, utils
-from ..inline.types import InlineCall
 
 logger = logging.getLogger(__name__)
 
@@ -130,10 +128,6 @@ class APIRatelimiterMod(loader.Module):
             for r in req:
                 if (
                     time.perf_counter() > self._suspend_until
-                    and not self.get(
-                        "disable_protection",
-                        True,
-                    )
                     and (
                         r.__module__.rsplit(".", maxsplit=1)[1]
                         in {"messages", "account", "channels"}
@@ -188,18 +182,3 @@ class APIRatelimiterMod(loader.Module):
         if hasattr(self._client, "_old_call_rewritten"):
             self._client._call = self._client._old_call_rewritten
             delattr(self._client, "_old_call_rewritten")
-
-    @loader.command()
-    async def api_fw_protection(self, message: Message):
-        await self.inline.form(
-            message=message,
-            text=self.strings("u_sure"),
-            reply_markup=[
-                {"text": self.strings("btn_yes"), "callback": self._finish},
-            ],
-        )
-
-    async def _finish(self, call: InlineCall):
-        state = self.get("disable_protection", True)
-        self.set("disable_protection", not state)
-        await call.edit(self.strings("on" if state else "off"))
