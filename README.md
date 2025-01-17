@@ -6,7 +6,7 @@
 <hr>
 <h2><img src="https://github.com/hikariatama/assets/raw/master/1326-command-window-line-flat.webp" height="54" align="middle"> Installation</h2>
 
-<b>Manual installation (no script):</b>
+<b>Installation:</b>
 <code>apt update && apt install git python3 -y && git clone https://github.com/kramiikk/Her && cd Her && pip install -r requirements.txt && python3 -m hikka --no-web</code>
 
 <b>Termux:</b>
