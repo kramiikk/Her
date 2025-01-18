@@ -23,15 +23,7 @@ logger = logging.getLogger(__name__)
 class UpdaterMod(loader.Module):
     """Updates itself"""
 
-    strings = {"name": "Updater",
-               "restart_confirm": "Вы уверены, что хотите перезапустить бота?",
-               "secure_boot_confirm": "Вы уверены, что хотите перезапустить бота в безопасном режиме?",
-               "btn_restart": "Перезапустить",
-               "update_confirm": "Обнаружено обновление с <code>{}</code> ({}) на <code>{}</code> ({})\\. Обновить?",
-               "no_update": "Обновлений не найдено.",
-               "btn_update": "Обновить",
-               "source": "Исходный код бота: <a href=\"{}\">GitHub</a>",
-               "origin_cfg_doc": "Ссылка на репозиторий с исходным кодом бота"}
+    strings = {"name": "Updater"}
 
     def __init__(self):
         self.config = loader.ModuleConfig(
@@ -143,8 +135,6 @@ class UpdaterMod(loader.Module):
                     return
 
                 logger.critical("Got update loop. Update manually via .terminal")
-        else:
-            await utils.answer(message, self.strings("no_update"))
 
     @loader.command()
     async def source(self, message: Message):

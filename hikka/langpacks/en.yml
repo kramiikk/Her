@@ -365,7 +365,6 @@ updater:
   restart_confirm: "❓ <b>Are you sure you want to restart?</b>"
   secure_boot_confirm: "❓ <b>Are you sure you want to restart in secure boot mode?</b>"
   update_confirm: "❓ <b>Are you sure you want to update?\n\n<a href=\"https://github.com/kramiikk/Her/commit/{}\">{}</a> ⤑ <a href=\"https://github.com/kramiikk/Her/commit/{}\">{}</a></b>"
-  no_update: "🚸 <b>You are on the latest version, pull updates anyway?</b>"
   cancel: "🚫 Cancel"
   full_success: "<emoji document_id=6028215594707324419>👍</emoji> <b>Userbot is fully loaded! {}</b>\n<i>Full restart took {}s</i>"
   secure_boot_complete: "<emoji document_id=5472308992514464048>🔐</emoji> <b>Secure boot completed! {}</b>\n<i>Restart took {}s</i>"
