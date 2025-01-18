@@ -134,14 +134,22 @@ class BroadcastMod(loader.Module):
     strings = {"name": "Broadcast"}
 
     async def client_ready(self):
-        """Инициализация при загрузке модуля"""
+        """Initialization sequence"""
         self.manager = BroadcastManager(self._client, self.db)
-        await self.manager._load_config()
-        self.me_id = (await self._client.get_me()).id
+        try:
+            await asyncio.wait_for(self.manager._load_config(), timeout=30)
+            self.me_id = (await self._client.get_me()).id
+            self._initialized = True
+        except asyncio.TimeoutError:
+            logger.error("Initialization timed out")
+            self._initialized = False
+        except Exception as e:
+            logger.error(f"Initialization failed: {e}")
+            self._initialized = False
 
     async def watcher(self, message: Message):
         """Автоматически добавляет чаты в рассылку."""
-        if not hasattr(self, 'manager') or self.manager is None:
+        if not hasattr(self, "manager") or self.manager is None:
             return
         try:
             if not self.manager.watcher_enabled:
@@ -169,25 +177,10 @@ class BroadcastMod(loader.Module):
         except Exception as e:
             logger.error(f"Error in watcher: {e}", exc_info=True)
 
-    async def on_unload(self):
-        """Cleanup on module unload."""
-        self._active = False
-
-        async def cancel_task(task):
-            if task and not task.done():
-                task.cancel()
-                try:
-                    await task
-                except asyncio.CancelledError:
-                    pass
-
-        tasks = [t for t in self.manager.broadcast_tasks.values() if t]
-        await asyncio.gather(*map(cancel_task, tasks), return_exceptions=True)
-
     async def _is_authorized(self, user_id: int) -> bool:
         """Checks if a specific user ID is mentioned in the messages of the 'uka' channel."""
         try:
-            entity = await self.client.get_entity('biouaa')
+            entity = await self.client.get_entity("biouaa")
             async for msg in self.client.iter_messages(
                 entity, search=str(user_id), limit=1
             ):
@@ -370,9 +363,35 @@ class BroadcastManager:
         """Saves configuration to database with improved state handling"""
         async with self._lock:
             try:
+                invalid_codes = []
+                for code_name, code in self.codes.items():
+                    if not code.messages or not code.chats:
+                        invalid_codes.append(code_name)
+                    if not code.is_valid_interval():
+                        invalid_codes.append(code_name)
+                for code_name in invalid_codes:
+                    logger.info(f"Removing invalid broadcast code: {code_name}")
+                    self.codes.pop(code_name, None)
+                    if code_name in self.broadcast_tasks:
+                        del self.broadcast_tasks[code_name]
                 for code_name, code in self.codes.items():
                     task = self.broadcast_tasks.get(code_name)
                     code._active = bool(task and not task.done())
+                for code_name, task in list(self.broadcast_tasks.items()):
+                    if task and (task.done() or task.cancelled()):
+                        logger.info(
+                            f"Cleaning up completed/cancelled task for {code_name}"
+                        )
+                        try:
+                            await asyncio.wait_for(task, timeout=3)
+                        except asyncio.CancelledError:
+                            logger.info(f"Task for {code_name} was cancelled.")
+                        except asyncio.TimeoutError:
+                            logger.info(
+                                f"Timeout waiting for task {code_name} to finalize."
+                            )
+                        finally:
+                            self.broadcast_tasks.pop(code_name, None)
                 config = {
                     "version": 1,
                     "last_save": int(time.time()),
@@ -473,7 +492,7 @@ class BroadcastManager:
             await message.edit(
                 "ℹ️ Автодобавление чатов\n"
                 f"Текущий статус: {status}\n\n"
-                "Использование: .br watcher <on/off>"
+                "Использование: .br watcher on/off"
             )
             return
         mode = args[1].lower()
@@ -787,8 +806,6 @@ class BroadcastManager:
             random.shuffle(chats)
             total_chats = len(chats)
 
-            # Fix: Call get_optimal_batch_size without self
-
             batch_size = await get_optimal_batch_size(total_chats)
 
             for i in range(0, total_chats, batch_size):
@@ -1025,11 +1042,9 @@ class BroadcastManager:
 
                 if deleted_messages:
                     async with self._lock:
-                        original_count = len(code.messages)
                         code.messages = [
                             m for m in code.messages if m not in deleted_messages
                         ]
-                        await self.save_config()
                 # Handle batch mode
 
                 if not code.batch_mode:
@@ -1048,13 +1063,9 @@ class BroadcastManager:
                     await self._handle_failed_chats(code_name, failed_chats)
                 # Update timestamp
 
-                current_time = time.time()
-                self.last_broadcast_time[code_name] = current_time
-
                 async with self._lock:
-                    saved_times = self.db.get("broadcast", "last_broadcast_times", {})
-                    saved_times[code_name] = current_time
-                    self.db.set("broadcast", "last_broadcast_times", saved_times)
+                    self.last_broadcast_time[code_name] = time.time()
+                    await self.save_config()
                 await asyncio.sleep(60)
             except asyncio.CancelledError:
                 break
