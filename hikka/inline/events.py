@@ -441,9 +441,9 @@ class Events(InlineUnit):
             for i in range(9, -1, -1):
                 countdown_text = str(i)
                 await inline_query.answer(
-                    [
+                    results=[
                         InlineQueryResultArticle(
-                            id=utils.rand(20),
+                            id=f"countdown-{i}-{utils.rand(8)}",  # Уникальный ID для каждого шага
                             title=self.translator.getkey("inline.show_inline_cmds"),
                             description=self.translator.getkey("inline.no_inline_cmds"),
                             input_message_content=InputTextMessageContent(
@@ -461,12 +461,12 @@ class Events(InlineUnit):
                     cache_time=0
                 )
                 if i > 0:
-                    await sleep(0.5)  # Задержка между сменами цифр
+                    await sleep(1)  # Увеличиваем задержку, чтобы Telegram успел обновить
 
             await inline_query.answer(
-                [
+                results=[
                     InlineQueryResultArticle(
-                        id=utils.rand(20),
+                        id=f"countdown-done-{utils.rand(8)}",  # Уникальный ID для финального сообщения
                         title=self.translator.getkey("inline.show_inline_cmds"),
                         description=self.translator.getkey("inline.no_inline_cmds"),
                         input_message_content=InputTextMessageContent(
