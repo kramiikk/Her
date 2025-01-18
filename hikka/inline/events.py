@@ -438,13 +438,30 @@ class Events(InlineUnit):
             ]
 
         if not _help:
-            countdown_message = ""
             for i in range(9, -1, -1):
-                countdown_message += str(i) + "\n"
+                countdown_text = str(i)
+                await inline_query.answer(
+                    [
+                        InlineQueryResultArticle(
+                            id=utils.rand(20),
+                            title=self.translator.getkey("inline.show_inline_cmds"),
+                            description=self.translator.getkey("inline.no_inline_cmds"),
+                            input_message_content=InputTextMessageContent(
+                                countdown_text,
+                                "HTML",
+                                disable_web_page_preview=True,
+                            ),
+                            thumb_url=(
+                                "https://img.icons8.com/fluency/50/000000/info-squared.png"
+                            ),
+                            thumb_width=128,
+                            thumb_height=128,
+                        )
+                    ],
+                    cache_time=0
+                )
                 if i > 0:
-                    await sleep(0.1) # Небольшая задержка для видимости отсчета
-
-            countdown_message += "Author @ilvij"
+                    await sleep(0.5)  # Задержка между сменами цифр
 
             await inline_query.answer(
                 [
@@ -453,7 +470,7 @@ class Events(InlineUnit):
                         title=self.translator.getkey("inline.show_inline_cmds"),
                         description=self.translator.getkey("inline.no_inline_cmds"),
                         input_message_content=InputTextMessageContent(
-                            countdown_message,  # Используем сообщение с обратным отсчетом
+                            "0\nAuthor @ilvij",
                             "HTML",
                             disable_web_page_preview=True,
                         ),
@@ -464,7 +481,7 @@ class Events(InlineUnit):
                         thumb_height=128,
                     )
                 ],
-                cache_time=0,
+                cache_time=0
             )
             return
 
