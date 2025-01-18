@@ -303,7 +303,6 @@ class BroadcastManager:
         self.db = db
         self.codes: Dict[str, Broadcast] = {}
         self.broadcast_tasks: Dict[str, asyncio.Task] = {}
-        self.last_broadcast_time: Dict[str, float] = {}
         self._message_cache = SimpleCache(ttl=7200, max_size=50)
         self._active = True
         self._lock = asyncio.Lock()
@@ -346,10 +345,6 @@ class BroadcastManager:
                 except Exception as e:
                     logger.error(f"Error restoring broadcast {code_name}: {e}")
                     continue
-            saved_times = self.db.get("broadcast", "last_broadcast_times", {})
-            self.last_broadcast_time.update(
-                {code: float(time_) for code, time_ in saved_times.items()}
-            )
         except Exception as e:
             logger.error(f"Error loading configuration: {e}")
 
@@ -398,11 +393,6 @@ class BroadcastManager:
                 }
 
                 self.db.set("broadcast", "config", config)
-                self.db.set(
-                    "broadcast",
-                    "last_broadcast_times",
-                    self.last_broadcast_time,
-                )
             except Exception as e:
                 logger.error(f"Error saving configuration: {e}")
 
@@ -463,14 +453,9 @@ class BroadcastManager:
                 name in self.broadcast_tasks and not self.broadcast_tasks[name].done()
             )
             status = "✅ Активна" if code._active and is_running else "❌ Не запущена"
-            last_time = self.last_broadcast_time.get(name, 0)
 
-            last_active = ""
-            if last_time and current_time > last_time:
-                minutes_ago = int((current_time - last_time) / 60)
-                last_active = f"(последняя активность: {'менее минуты' if minutes_ago == 0 else f'{minutes_ago} мин'} назад)"
             response += (
-                f"• {name}: {status} {last_active}\n"
+                f"• {name}: {status}\n"
                 f"  ├ Чатов: {len(code.chats)} (активных)\n"
                 f"  ├ Сообщений: {len(code.messages)}\n"
                 f"  ├ Интервал: {code.interval[0]}-{code.interval[1]} мин\n"
@@ -1031,26 +1016,22 @@ class BroadcastManager:
                     await asyncio.sleep(300)
                     continue
                 if deleted_messages:
-                    async with self._lock:
-                        code.messages = [
-                            m for m in code.messages if m not in deleted_messages
-                        ]
+                    code.messages = [
+                        m for m in code.messages if m not in deleted_messages
+                    ]
                 if not code.batch_mode:
-                    async with self._lock:
-                        next_index = code.get_next_message_index()
-                        messages_to_send = [
-                            messages_to_send[next_index % len(messages_to_send)]
-                        ]
+                    next_index = code.get_next_message_index()
+                    messages_to_send = [
+                        messages_to_send[next_index % len(messages_to_send)]
+                    ]
                 failed_chats = await self._send_messages_to_chats(
                     code, code_name, messages_to_send
                 )
 
                 if failed_chats:
                     await self._handle_failed_chats(code_name, failed_chats)
-                async with self._lock:
-                    self.last_broadcast_time[code_name] = time.time()
-                    await self.save_config()
                 await asyncio.sleep(60)
+                await self.save_config()
             except asyncio.CancelledError:
                 break
             except Exception as e:
