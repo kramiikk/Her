@@ -69,8 +69,6 @@ class SimpleCache:
             if time.time() - timestamp > self.ttl:
                 del self.cache[key]
                 return None
-            # Обновляем timestamp при каждом доступе
-
             self.cache[key] = (time.time(), value)
             self.cache.move_to_end(key)
             return value
@@ -80,14 +78,10 @@ class SimpleCache:
         async with self._lock:
             await self._maybe_cleanup()
 
-            # Если ключ уже существует, обновляем его
-
             if key in self.cache:
                 self.cache[key] = (time.time(), value)
                 self.cache.move_to_end(key)
                 return
-            # Проверяем размер кэша и удаляем старые записи при необходимости
-
             while len(self.cache) >= self.max_size:
                 oldest_key = next(iter(self.cache))
                 del self.cache[oldest_key]
@@ -748,8 +742,6 @@ class BroadcastManager:
             success_count: int = 0
             flood_wait_count: int = 0
 
-            # Fix: Remove self parameter from the nested function
-
             async def get_optimal_batch_size(total_chats: int) -> int:
                 minute_usage_percent = await self.minute_limiter.get_stats()
                 hour_usage_percent = await self.hour_limiter.get_stats()
@@ -1038,31 +1030,23 @@ class BroadcastManager:
                     )
                     await asyncio.sleep(300)
                     continue
-                # Remove deleted messages
-
                 if deleted_messages:
                     async with self._lock:
                         code.messages = [
                             m for m in code.messages if m not in deleted_messages
                         ]
-                # Handle batch mode
-
                 if not code.batch_mode:
                     async with self._lock:
                         next_index = code.get_next_message_index()
                         messages_to_send = [
                             messages_to_send[next_index % len(messages_to_send)]
                         ]
-                # Send messages
-
                 failed_chats = await self._send_messages_to_chats(
                     code, code_name, messages_to_send
                 )
 
                 if failed_chats:
                     await self._handle_failed_chats(code_name, failed_chats)
-                # Update timestamp
-
                 async with self._lock:
                     self.last_broadcast_time[code_name] = time.time()
                     await self.save_config()
@@ -1081,13 +1065,9 @@ class BroadcastManager:
         key = (msg_data["chat_id"], msg_data["message_id"])
 
         try:
-            # Проверяем кэш
-
             cached = await self._message_cache.get(key)
             if cached:
                 return cached
-            # Если нет в кэше - загружаем из Telegram
-
             message = await self.client.get_messages(
                 msg_data["chat_id"], ids=msg_data["message_id"]
             )
