@@ -355,18 +355,21 @@ class BroadcastManager:
             try:
                 codes_snapshot = self.codes.copy()
                 tasks_snapshot = self.broadcast_tasks.copy()
-
+                
                 invalid_codes = set()
                 for code_name, code in codes_snapshot.items():
                     if not code or not isinstance(code, Broadcast):
                         invalid_codes.add(code_name)
                         continue
-                    if not code.messages or not code.chats:
+
+                    if not code.messages and not code.chats:
                         invalid_codes.add(code_name)
                         continue
+                        
                     if not code.is_valid_interval():
                         invalid_codes.add(code_name)
                         continue
+
                 for code_name in invalid_codes:
                     codes_snapshot.pop(code_name, None)
                     task = tasks_snapshot.pop(code_name, None)
@@ -379,17 +382,16 @@ class BroadcastManager:
                             logger.info(f"Task cleanup for {code_name} completed")
                         except Exception as e:
                             logger.error(f"Error cleaning up task for {code_name}: {e}")
+
                 for code_name, code in codes_snapshot.items():
                     task = tasks_snapshot.get(code_name)
-                    code._active = bool(
-                        task and not task.done() and not task.cancelled()
-                    )
+                    code._active = bool(task and not task.done() and not task.cancelled())
+
                 finished_tasks = [
-                    code_name
-                    for code_name, task in tasks_snapshot.items()
+                    code_name for code_name, task in tasks_snapshot.items()
                     if task and (task.done() or task.cancelled())
                 ]
-
+                
                 for code_name in finished_tasks:
                     task = tasks_snapshot.pop(code_name)
                     try:
@@ -397,9 +399,8 @@ class BroadcastManager:
                     except (asyncio.CancelledError, asyncio.TimeoutError):
                         logger.info(f"Finished task cleanup for {code_name} completed")
                     except Exception as e:
-                        logger.error(
-                            f"Error cleaning finished task for {code_name}: {e}"
-                        )
+                        logger.error(f"Error cleaning finished task for {code_name}: {e}")
+
                 config = {
                     "version": 1,
                     "last_save": int(time.time()),
@@ -409,10 +410,9 @@ class BroadcastManager:
                         if isinstance(code, Broadcast)
                     },
                     "active_broadcasts": [
-                        name
-                        for name, code in codes_snapshot.items()
+                        name for name, code in codes_snapshot.items()
                         if code._active and name in tasks_snapshot
-                    ],
+                    ]
                 }
 
                 self.codes = codes_snapshot
@@ -425,6 +425,7 @@ class BroadcastManager:
                     f"Active broadcasts: {len(config['active_broadcasts'])}, "
                     f"Total codes: {len(config['codes'])}"
                 )
+
             except Exception as e:
                 logger.error(f"Critical error saving configuration: {e}", exc_info=True)
                 raise
