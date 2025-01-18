@@ -362,11 +362,7 @@ class BroadcastManager:
                         invalid_codes.add(code_name)
                         continue
 
-                    if not code.messages and not code.chats:
-                        invalid_codes.add(code_name)
-                        continue
-                        
-                    if not code.is_valid_interval():
+                    if not code.messages and not code.chats and not code._active:
                         invalid_codes.add(code_name)
                         continue
 
