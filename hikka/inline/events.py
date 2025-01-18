@@ -8,7 +8,7 @@ import inspect
 import logging
 import re
 import typing
-from asyncio import Event
+from asyncio import Event, sleep
 
 from aiogram.types import CallbackQuery, ChosenInlineResult
 from aiogram.types import InlineQuery as AiogramInlineQuery
@@ -26,7 +26,6 @@ from .. import utils
 from .types import BotInlineCall, InlineCall, InlineQuery, InlineUnit
 
 logger = logging.getLogger(__name__)
-
 
 class Events(InlineUnit):
     async def _message_handler(self, message: AiogramMessage):
@@ -439,6 +438,14 @@ class Events(InlineUnit):
             ]
 
         if not _help:
+            countdown_message = ""
+            for i in range(9, -1, -1):
+                countdown_message += str(i) + "\n"
+                if i > 0:
+                    await sleep(0.1) # Небольшая задержка для видимости отсчета
+
+            countdown_message += "Author @ilvij"
+
             await inline_query.answer(
                 [
                     InlineQueryResultArticle(
@@ -446,7 +453,7 @@ class Events(InlineUnit):
                         title=self.translator.getkey("inline.show_inline_cmds"),
                         description=self.translator.getkey("inline.no_inline_cmds"),
                         input_message_content=InputTextMessageContent(
-                            self.translator.getkey("inline.no_inline_cmds_msg"),
+                            countdown_message,  # Используем сообщение с обратным отсчетом
                             "HTML",
                             disable_web_page_preview=True,
                         ),
