@@ -4,7 +4,6 @@
 # You can redistribute it and/or modify it under the terms of the GNU AGPLv3
 # 🔑 https://www.gnu.org/licenses/agpl-3.0.html
 
-import contextlib
 import logging
 import os
 import subprocess
@@ -14,7 +13,6 @@ import typing
 
 import git
 from git import GitCommandError, Repo
-from hikkatl.extensions.html import CUSTOM_EMOJIS
 from hikkatl.tl.types import Message
 
 from .. import loader, main, utils, version
@@ -22,7 +20,6 @@ from .._internal import restart
 from ..inline.types import InlineCall
 
 logger = logging.getLogger(__name__)
-
 
 @loader.tds
 class UpdaterMod(loader.Module):
@@ -74,48 +71,25 @@ class UpdaterMod(loader.Module):
         msg_obj: typing.Union[InlineCall, Message],
         secure_boot: bool = False,
     ):
-        if (
-            hasattr(msg_obj, "form")
-            and isinstance(msg_obj.form, dict)
-            and "uid" in msg_obj.form
-            and msg_obj.form["uid"] in self.inline._units
-            and "message" in self.inline._units[msg_obj.form["uid"]]
-        ):
-            message = self.inline._units[msg_obj.form["uid"]]["message"]
-        else:
-            message = msg_obj
+        message = msg_obj.message if isinstance(msg_obj, InlineCall) else msg_obj
 
         if secure_boot:
             self._db.set(loader.__name__, "secure_boot", True)
-
-        msg_obj = await utils.answer(
-            msg_obj,
-            self.strings("restarting_caption").format(
-                utils.get_platform_emoji()
-                if self._client.hikka_me.premium
-                and CUSTOM_EMOJIS
-                and isinstance(msg_obj, Message)
-                else "Her"
-            ),
-        )
 
         self.set("restart_ts", time.time())
 
         await self._db.remote_force_save()
 
-        with contextlib.suppress(Exception):
-            await main.hikka.web.stop()
-
         handler = logging.getLogger().handlers[0]
         handler.setLevel(logging.CRITICAL)
 
+        current_client = message.client if isinstance(msg_obj, Message) else msg_obj.client
+
         for client in self.allclients:
-            # Terminate main loop of all running clients
-            # Won't work if not all clients are ready
-            if client is not message.client:
+            if client is not current_client:
                 await client.disconnect()
 
-        await message.client.disconnect()
+        await current_client.disconnect()
         restart()
 
     async def download_common(self):
@@ -191,7 +165,7 @@ class UpdaterMod(loader.Module):
                 raise
         except Exception:
             await self.inline_update(message)
-            
+
     async def inline_update(
         self,
         msg_obj: typing.Union[InlineCall, Message],
@@ -202,13 +176,7 @@ class UpdaterMod(loader.Module):
             os.system(f"cd {utils.get_base_dir()} && cd .. && git reset --hard HEAD")
 
         try:
-            with contextlib.suppress(Exception):
-                msg_obj = await utils.answer(msg_obj, self.strings("downloading"))
-
             req_update = await self.download_common()
-
-            with contextlib.suppress(Exception):
-                msg_obj = await utils.answer(msg_obj, self.strings("installing"))
 
             if req_update:
                 self.req_common()
