@@ -351,80 +351,79 @@ class BroadcastManager:
 
     async def save_config(self):
         """Saves configuration to database with improved reliability and state handling"""
-        async with self._lock:
-            try:
-                codes_snapshot = self.codes.copy()
-                tasks_snapshot = self.broadcast_tasks.copy()
-                
-                invalid_codes = set()
-                for code_name, code in codes_snapshot.items():
-                    if not code or not isinstance(code, Broadcast):
-                        invalid_codes.add(code_name)
-                        continue
+        try:
+            codes_snapshot = self.codes.copy()
+            tasks_snapshot = self.broadcast_tasks.copy()
+            
+            invalid_codes = set()
+            for code_name, code in codes_snapshot.items():
+                if not code or not isinstance(code, Broadcast):
+                    invalid_codes.add(code_name)
+                    continue
 
-                    if not code.messages and not code.chats and not code._active:
-                        invalid_codes.add(code_name)
-                        continue
+                if not code.messages and not code.chats and not code._active:
+                    invalid_codes.add(code_name)
+                    continue
 
-                for code_name in invalid_codes:
-                    codes_snapshot.pop(code_name, None)
-                    task = tasks_snapshot.pop(code_name, None)
-                    if task:
-                        try:
-                            if not task.done():
-                                task.cancel()
-                            await asyncio.wait_for(task, timeout=3)
-                        except (asyncio.CancelledError, asyncio.TimeoutError):
-                            logger.info(f"Task cleanup for {code_name} completed")
-                        except Exception as e:
-                            logger.error(f"Error cleaning up task for {code_name}: {e}")
-
-                for code_name, code in codes_snapshot.items():
-                    task = tasks_snapshot.get(code_name)
-                    code._active = bool(task and not task.done() and not task.cancelled())
-
-                finished_tasks = [
-                    code_name for code_name, task in tasks_snapshot.items()
-                    if task and (task.done() or task.cancelled())
-                ]
-                
-                for code_name in finished_tasks:
-                    task = tasks_snapshot.pop(code_name)
+            for code_name in invalid_codes:
+                codes_snapshot.pop(code_name, None)
+                task = tasks_snapshot.pop(code_name, None)
+                if task:
                     try:
+                        if not task.done():
+                            task.cancel()
                         await asyncio.wait_for(task, timeout=3)
                     except (asyncio.CancelledError, asyncio.TimeoutError):
-                        logger.info(f"Finished task cleanup for {code_name} completed")
+                        logger.info(f"Task cleanup for {code_name} completed")
                     except Exception as e:
-                        logger.error(f"Error cleaning finished task for {code_name}: {e}")
+                        logger.error(f"Error cleaning up task for {code_name}: {e}")
 
-                config = {
-                    "version": 1,
-                    "last_save": int(time.time()),
-                    "codes": {
-                        name: code.to_dict()
-                        for name, code in codes_snapshot.items()
-                        if isinstance(code, Broadcast)
-                    },
-                    "active_broadcasts": [
-                        name for name, code in codes_snapshot.items()
-                        if code._active and name in tasks_snapshot
-                    ]
-                }
+            for code_name, code in codes_snapshot.items():
+                task = tasks_snapshot.get(code_name)
+                code._active = bool(task and not task.done() and not task.cancelled())
 
-                self.codes = codes_snapshot
-                self.broadcast_tasks = tasks_snapshot
+            finished_tasks = [
+                code_name for code_name, task in tasks_snapshot.items()
+                if task and (task.done() or task.cancelled())
+            ]
+            
+            for code_name in finished_tasks:
+                task = tasks_snapshot.pop(code_name)
+                try:
+                    await asyncio.wait_for(task, timeout=3)
+                except (asyncio.CancelledError, asyncio.TimeoutError):
+                    logger.info(f"Finished task cleanup for {code_name} completed")
+                except Exception as e:
+                    logger.error(f"Error cleaning finished task for {code_name}: {e}")
 
-                self.db.set("broadcast", "config", config)
+            config = {
+                "version": 1,
+                "last_save": int(time.time()),
+                "codes": {
+                    name: code.to_dict()
+                    for name, code in codes_snapshot.items()
+                    if isinstance(code, Broadcast)
+                },
+                "active_broadcasts": [
+                    name for name, code in codes_snapshot.items()
+                    if code._active and name in tasks_snapshot
+                ]
+            }
 
-                logger.info(
-                    f"Configuration saved successfully. "
-                    f"Active broadcasts: {len(config['active_broadcasts'])}, "
-                    f"Total codes: {len(config['codes'])}"
-                )
+            self.codes = codes_snapshot
+            self.broadcast_tasks = tasks_snapshot
 
-            except Exception as e:
-                logger.error(f"Critical error saving configuration: {e}", exc_info=True)
-                raise
+            self.db.set("broadcast", "config", config)
+
+            logger.info(
+                f"Configuration saved successfully. "
+                f"Active broadcasts: {len(config['active_broadcasts'])}, "
+                f"Total codes: {len(config['codes'])}"
+            )
+
+        except Exception as e:
+            logger.error(f"Critical error saving configuration: {e}", exc_info=True)
+            raise
 
     async def handle_command(self, message: Message):
         """Обработчик команд для управления рассылкой"""
