@@ -221,10 +221,7 @@ class Broadcast:
                 return False
         self.messages.append(message_data)
 
-        return any(
-            m["chat_id"] == chat_id and m["message_id"] == message_id
-            for m in self.messages
-        )
+        return True
 
     def remove_message(self, message_id: int, chat_id: int) -> bool:
         """Удаляет сообщение из списка"""
@@ -353,50 +350,84 @@ class BroadcastManager:
             logger.error(f"Error loading configuration: {e}")
 
     async def save_config(self):
-        """Saves configuration to database with improved state handling"""
+        """Saves configuration to database with improved reliability and state handling"""
         async with self._lock:
             try:
-                invalid_codes = []
-                for code_name, code in self.codes.items():
+                codes_snapshot = self.codes.copy()
+                tasks_snapshot = self.broadcast_tasks.copy()
+
+                invalid_codes = set()
+                for code_name, code in codes_snapshot.items():
+                    if not code or not isinstance(code, Broadcast):
+                        invalid_codes.add(code_name)
+                        continue
                     if not code.messages or not code.chats:
-                        invalid_codes.append(code_name)
+                        invalid_codes.add(code_name)
+                        continue
                     if not code.is_valid_interval():
-                        invalid_codes.append(code_name)
+                        invalid_codes.add(code_name)
+                        continue
                 for code_name in invalid_codes:
-                    code = self.codes.get(code_name)
-                    if code and not code.messages:
-                        self.codes.pop(code_name, None)
-                        if code_name in self.broadcast_tasks:
-                            del self.broadcast_tasks[code_name]
-                for code_name, code in self.codes.items():
-                    task = self.broadcast_tasks.get(code_name)
-                    code._active = bool(task and not task.done())
-                for code_name, task in list(self.broadcast_tasks.items()):
-                    if task and (task.done() or task.cancelled()):
+                    codes_snapshot.pop(code_name, None)
+                    task = tasks_snapshot.pop(code_name, None)
+                    if task:
                         try:
+                            if not task.done():
+                                task.cancel()
                             await asyncio.wait_for(task, timeout=3)
-                        except asyncio.CancelledError:
-                            logger.info(f"Task for {code_name} was cancelled.")
-                        except asyncio.TimeoutError:
-                            logger.info(
-                                f"Timeout waiting for task {code_name} to finalize."
-                            )
-                        finally:
-                            self.broadcast_tasks.pop(code_name, None)
+                        except (asyncio.CancelledError, asyncio.TimeoutError):
+                            logger.info(f"Task cleanup for {code_name} completed")
+                        except Exception as e:
+                            logger.error(f"Error cleaning up task for {code_name}: {e}")
+                for code_name, code in codes_snapshot.items():
+                    task = tasks_snapshot.get(code_name)
+                    code._active = bool(
+                        task and not task.done() and not task.cancelled()
+                    )
+                finished_tasks = [
+                    code_name
+                    for code_name, task in tasks_snapshot.items()
+                    if task and (task.done() or task.cancelled())
+                ]
+
+                for code_name in finished_tasks:
+                    task = tasks_snapshot.pop(code_name)
+                    try:
+                        await asyncio.wait_for(task, timeout=3)
+                    except (asyncio.CancelledError, asyncio.TimeoutError):
+                        logger.info(f"Finished task cleanup for {code_name} completed")
+                    except Exception as e:
+                        logger.error(
+                            f"Error cleaning finished task for {code_name}: {e}"
+                        )
                 config = {
                     "version": 1,
                     "last_save": int(time.time()),
                     "codes": {
-                        name: code.to_dict() for name, code in self.codes.items()
+                        name: code.to_dict()
+                        for name, code in codes_snapshot.items()
+                        if isinstance(code, Broadcast)
                     },
                     "active_broadcasts": [
-                        name for name, code in self.codes.items() if code._active
+                        name
+                        for name, code in codes_snapshot.items()
+                        if code._active and name in tasks_snapshot
                     ],
                 }
 
+                self.codes = codes_snapshot
+                self.broadcast_tasks = tasks_snapshot
+
                 self.db.set("broadcast", "config", config)
+
+                logger.info(
+                    f"Configuration saved successfully. "
+                    f"Active broadcasts: {len(config['active_broadcasts'])}, "
+                    f"Total codes: {len(config['codes'])}"
+                )
             except Exception as e:
-                logger.error(f"Error saving configuration: {e}")
+                logger.error(f"Critical error saving configuration: {e}", exc_info=True)
+                raise
 
     async def handle_command(self, message: Message):
         """Обработчик команд для управления рассылкой"""
