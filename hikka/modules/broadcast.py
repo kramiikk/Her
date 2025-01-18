@@ -549,7 +549,6 @@ class BroadcastManager:
             if code.add_message(reply.chat_id, reply.id, grouped_ids):
                 if is_new:
                     self.codes[code_name] = code
-                await message.edit("fff")
                 await self.save_config()
                 await message.edit(
                     f"✅ {'Рассылка создана и с' if is_new else 'С'}ообщение добавлено"
@@ -741,6 +740,11 @@ class BroadcastManager:
         except Exception as e:
             logger.error(f"Ошибка при проверке разрешений для чата {chat_id}: {str(e)}")
             return False
+        
+    async def _calculate_and_sleep(self, min_interval: int, max_interval: int):
+        """Вычисляет время сна и засыпает."""
+        sleep_time = random.uniform(min_interval * 60, max_interval * 60)
+        await asyncio.sleep(max(60, sleep_time))
 
     async def _send_messages_to_chats(
         self,
@@ -825,9 +829,7 @@ class BroadcastManager:
                     tasks.append(task)
                 await asyncio.gather(*tasks)
 
-                min_interval, max_interval = code.interval
-                sleep_time = random.uniform(min_interval * 60, max_interval * 60)
-                await asyncio.sleep(max(60, sleep_time))
+                await self._calculate_and_sleep(code.interval[0], code.interval[1])
             return failed_chats
 
     async def _send_message(
@@ -1000,6 +1002,9 @@ class BroadcastManager:
 
     async def _broadcast_loop(self, code_name: str):
         """Main broadcast loop with enhanced debug logging"""
+        code = self.codes.get(code_name)
+        if code and code._active:
+            await self._calculate_and_sleep(code.interval[0], code.interval[1])
         while self._active:
             deleted_messages = []
             messages_to_send = []
