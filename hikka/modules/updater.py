@@ -9,15 +9,13 @@ import os
 import subprocess
 import sys
 import time
-import typing
 
 import git
 from git import GitCommandError, Repo
 from hikkatl.tl.types import Message
 
-from .. import loader, main, utils, version
+from .. import loader, utils, version
 from .._internal import restart
-from ..inline.types import InlineCall
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +23,15 @@ logger = logging.getLogger(__name__)
 class UpdaterMod(loader.Module):
     """Updates itself"""
 
-    strings = {"name": "Updater"}
+    strings = {"name": "Updater",
+               "restart_confirm": "Вы уверены, что хотите перезапустить бота?",
+               "secure_boot_confirm": "Вы уверены, что хотите перезапустить бота в безопасном режиме?",
+               "btn_restart": "Перезапустить",
+               "update_confirm": "Обнаружено обновление с <code>{}</code> ({}) на <code>{}</code> ({})\\. Обновить?",
+               "no_update": "Обновлений не найдено.",
+               "btn_update": "Обновить",
+               "source": "Исходный код бота: <a href=\"{}\">GitHub</a>",
+               "origin_cfg_doc": "Ссылка на репозиторий с исходным кодом бота"}
 
     def __init__(self):
         self.config = loader.ModuleConfig(
@@ -41,38 +47,13 @@ class UpdaterMod(loader.Module):
     async def restart(self, message: Message):
         args = utils.get_args_raw(message)
         secure_boot = any(trigger in args for trigger in {"--secure-boot", "-sb"})
-        try:
-            if (
-                "-f" in args
-                or not self.inline.init_complete
-                or not await self.inline.form(
-                    message=message,
-                    text=self.strings(
-                        "secure_boot_confirm" if secure_boot else "restart_confirm"
-                    ),
-                    reply_markup=[
-                        {
-                            "text": self.strings("btn_restart"),
-                            "callback": self.inline_restart,
-                            "args": (secure_boot,),
-                        },
-                    ],
-                )
-            ):
-                raise
-        except Exception:
-            await self.restart_common(message, secure_boot)
-
-    async def inline_restart(self, call: InlineCall, secure_boot: bool = False):
-        await self.restart_common(call, secure_boot=secure_boot)
+        await self.restart_common(message, secure_boot)
 
     async def restart_common(
         self,
-        msg_obj: typing.Union[InlineCall, Message],
+        msg_obj: Message, # Тип изменен на Message, так как InlineCall больше не используется
         secure_boot: bool = False,
     ):
-        message = msg_obj.message if isinstance(msg_obj, InlineCall) else msg_obj
-
         if secure_boot:
             self._db.set(loader.__name__, "secure_boot", True)
 
@@ -83,7 +64,7 @@ class UpdaterMod(loader.Module):
         handler = logging.getLogger().handlers[0]
         handler.setLevel(logging.CRITICAL)
 
-        current_client = message.client if isinstance(msg_obj, Message) else msg_obj.client
+        current_client = msg_obj.client
 
         for client in self.allclients:
             if client is not current_client:
@@ -136,58 +117,34 @@ class UpdaterMod(loader.Module):
 
     @loader.command()
     async def update(self, message: Message):
-        try:
-            args = utils.get_args_raw(message)
-            current = utils.get_git_hash()
-            upcoming = next(
-                git.Repo().iter_commits(f"origin/{version.branch}", max_count=1)
-            ).hexsha
-            if (
-                "-f" in args
-                or not self.inline.init_complete
-                or not await self.inline.form(
-                    message=message,
-                    text=(
-                        self.strings("update_confirm").format(
-                            current, current[:8], upcoming, upcoming[:8]
-                        )
-                        if upcoming != current
-                        else self.strings("no_update")
-                    ),
-                    reply_markup=[
-                        {
-                            "text": self.strings("btn_update"),
-                            "callback": self.inline_update,
-                        },
-                    ],
-                )
-            ):
-                raise
-        except Exception:
-            await self.inline_update(message)
+        current = utils.get_git_hash()
+        upcoming = next(
+            git.Repo().iter_commits(f"origin/{version.branch}", max_count=1)
+        ).hexsha
+        if upcoming != current:
+            # Логика inline_update перенесена сюда
+            hard = False  # По умолчанию hard=False
+            if hard:
+                os.system(f"cd {utils.get_base_dir()} && cd .. && git reset --hard HEAD")
 
-    async def inline_update(
-        self,
-        msg_obj: typing.Union[InlineCall, Message],
-        hard: bool = False,
-    ):
-        # We don't really care about asyncio at this point, as we are shutting down
-        if hard:
-            os.system(f"cd {utils.get_base_dir()} && cd .. && git reset --hard HEAD")
+            try:
+                req_update = await self.download_common()
 
-        try:
-            req_update = await self.download_common()
+                if req_update:
+                    self.req_common()
 
-            if req_update:
-                self.req_common()
+                await self.restart_common(message) # Используем основной метод restart_common
+            except GitCommandError:
+                if not hard:
+                    # Рекурсивный вызов update с hard=True
+                    # Важно отметить, что это потенциально может вызвать бесконечный цикл,
+                    # если проблема не связана с hard reset.
+                    await self.update(message)
+                    return
 
-            await self.restart_common(msg_obj)
-        except GitCommandError:
-            if not hard:
-                await self.inline_update(msg_obj, True)
-                return
-
-            logger.critical("Got update loop. Update manually via .terminal")
+                logger.critical("Got update loop. Update manually via .terminal")
+        else:
+            await utils.answer(message, self.strings("no_update"))
 
     @loader.command()
     async def source(self, message: Message):
