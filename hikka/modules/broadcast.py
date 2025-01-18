@@ -220,7 +220,11 @@ class Broadcast:
             if existing["chat_id"] == chat_id and existing["message_id"] == message_id:
                 return False
         self.messages.append(message_data)
-        return True
+
+        return any(
+            m["chat_id"] == chat_id and m["message_id"] == message_id
+            for m in self.messages
+        )
 
     def remove_message(self, message_id: int, chat_id: int) -> bool:
         """Удаляет сообщение из списка"""
@@ -358,11 +362,9 @@ class BroadcastManager:
                         invalid_codes.append(code_name)
                     if not code.is_valid_interval():
                         invalid_codes.append(code_name)
-                # Добавляем дополнительную проверку перед удалением
                 for code_name in invalid_codes:
                     code = self.codes.get(code_name)
                     if code and not code.messages:
-                        logger.info(f"Removing invalid broadcast code: {code_name}")
                         self.codes.pop(code_name, None)
                         if code_name in self.broadcast_tasks:
                             del self.broadcast_tasks[code_name]
@@ -371,9 +373,6 @@ class BroadcastManager:
                     code._active = bool(task and not task.done())
                 for code_name, task in list(self.broadcast_tasks.items()):
                     if task and (task.done() or task.cancelled()):
-                        logger.info(
-                            f"Cleaning up completed/cancelled task for {code_name}"
-                        )
                         try:
                             await asyncio.wait_for(task, timeout=3)
                         except asyncio.CancelledError:
@@ -486,22 +485,25 @@ class BroadcastManager:
             f"✅ Автодобавление чатов {'включено' if self.watcher_enabled else 'выключено'}"
         )
 
-    async def _handle_add_command(self, message: Message, code: Optional[Broadcast], code_name: str):
+    async def _handle_add_command(
+        self, message: Message, code: Optional[Broadcast], code_name: str
+    ):
         """Обработчик команды add"""
         async with self._lock:
             reply = await message.get_reply_message()
             if not reply:
-                await message.edit("❌ Ответьте на сообщение, которое нужно добавить в рассылку")
+                await message.edit(
+                    "❌ Ответьте на сообщение, которое нужно добавить в рассылку"
+                )
                 return
-            
             is_new = code is None
             if is_new:
                 code = Broadcast()
-            
             if len(code.messages) >= self.MAX_MESSAGES_PER_CODE:
-                await message.edit(f"❌ Достигнут лимит сообщений ({self.MAX_MESSAGES_PER_CODE})")
+                await message.edit(
+                    f"❌ Достигнут лимит сообщений ({self.MAX_MESSAGES_PER_CODE})"
+                )
                 return
-                
             grouped_id = getattr(reply, "grouped_id", None)
             grouped_ids = []
 
@@ -517,13 +519,14 @@ class BroadcastManager:
                         album_messages.append(album_msg)
                 album_messages.sort(key=lambda m: m.id)
                 grouped_ids = list(dict.fromkeys(msg.id for msg in album_messages))
-                
             if code.add_message(reply.chat_id, reply.id, grouped_ids):
                 if is_new:
                     self.codes[code_name] = code
-                    
+                await message.edit("fff")
                 await self.save_config()
-                await message.edit(f"✅ {'Рассылка создана и с' if is_new else 'С'}ообщение добавлено")
+                await message.edit(
+                    f"✅ {'Рассылка создана и с' if is_new else 'С'}ообщение добавлено"
+                )
             else:
                 await message.edit("❌ Это сообщение уже есть в рассылке")
 
@@ -721,9 +724,6 @@ class BroadcastManager:
         """Обновленный метод отправки сообщений в чаты"""
         async with self._semaphore:
             if not code:
-                logger.warning(
-                    f"[{code_name}][send_messages] No broadcast code provided"
-                )
                 return set()
             failed_chats: Set[int] = set()
             success_count: int = 0
@@ -880,9 +880,6 @@ class BroadcastManager:
             async with self._lock:
                 code = self.codes.get(code_name)
                 if not code:
-                    logger.warning(
-                        f"Код рассылки {code_name} не найден при обработке ошибок"
-                    )
                     return
                 code.chats -= failed_chats
                 await self.save_config()
@@ -934,7 +931,6 @@ class BroadcastManager:
     ) -> Tuple[List[Union[Message, List[Message]]], List[dict]]:
         """Обрабатывает пакет сообщений с оптимизированной загрузкой."""
         if not code:
-            logger.warning("Получен пустой объект рассылки при обработке сообщений")
             return [], messages
         messages_to_send = []
         deleted_messages = []
@@ -984,11 +980,9 @@ class BroadcastManager:
             try:
                 code = self.codes.get(code_name)
                 if not code or not code._active:
-                    logger.warning(f"[{code_name}] Code inactive or not found")
                     break
                 current_messages = code.messages.copy()
                 if not current_messages:
-                    logger.warning(f"[{code_name}] No messages to send")
                     await asyncio.sleep(300)
                     continue
                 try:
@@ -1005,9 +999,6 @@ class BroadcastManager:
                         messages_to_send.extend(batch_messages)
                         deleted_messages.extend(deleted)
                     if not messages_to_send:
-                        logger.error(
-                            f"[{code_name}] Failed to retrieve any valid messages"
-                        )
                         await asyncio.sleep(300)
                         continue
                 except Exception as batch_error:
