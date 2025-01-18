@@ -358,11 +358,14 @@ class BroadcastManager:
                         invalid_codes.append(code_name)
                     if not code.is_valid_interval():
                         invalid_codes.append(code_name)
+                # Добавляем дополнительную проверку перед удалением
                 for code_name in invalid_codes:
-                    logger.info(f"Removing invalid broadcast code: {code_name}")
-                    self.codes.pop(code_name, None)
-                    if code_name in self.broadcast_tasks:
-                        del self.broadcast_tasks[code_name]
+                    code = self.codes.get(code_name)
+                    if code and not code.messages:
+                        logger.info(f"Removing invalid broadcast code: {code_name}")
+                        self.codes.pop(code_name, None)
+                        if code_name in self.broadcast_tasks:
+                            del self.broadcast_tasks[code_name]
                 for code_name, code in self.codes.items():
                     task = self.broadcast_tasks.get(code_name)
                     code._active = bool(task and not task.done())
@@ -485,42 +488,44 @@ class BroadcastManager:
 
     async def _handle_add_command(self, message: Message, code: Optional[Broadcast], code_name: str):
         """Обработчик команды add"""
-        reply = await message.get_reply_message()
-        if not reply:
-            await message.edit("❌ Ответьте на сообщение, которое нужно добавить в рассылку")
-            return
-        
-        is_new = code is None
-        if is_new:
-            code = Broadcast()
-        
-        if len(code.messages) >= self.MAX_MESSAGES_PER_CODE:
-            await message.edit(f"❌ Достигнут лимит сообщений ({self.MAX_MESSAGES_PER_CODE})")
-            return
+        async with self._lock:
+            reply = await message.get_reply_message()
+            if not reply:
+                await message.edit("❌ Ответьте на сообщение, которое нужно добавить в рассылку")
+                return
             
-        grouped_id = getattr(reply, "grouped_id", None)
-        grouped_ids = []
-
-        if grouped_id:
-            album_messages = []
-            async for album_msg in message.client.iter_messages(
-                reply.chat_id,
-                min_id=max(0, reply.id - 10),
-                max_id=reply.id + 10,
-                limit=30,
-            ):
-                if getattr(album_msg, "grouped_id", None) == grouped_id:
-                    album_messages.append(album_msg)
-            album_messages.sort(key=lambda m: m.id)
-            grouped_ids = list(dict.fromkeys(msg.id for msg in album_messages))
-            
-        if code.add_message(reply.chat_id, reply.id, grouped_ids):
+            is_new = code is None
             if is_new:
-                self.codes[code_name] = code
-            await self.save_config()
-            await message.edit(f"✅ {'Рассылка создана и с' if is_new else 'С'}ообщение добавлено")
-        else:
-            await message.edit("❌ Это сообщение уже есть в рассылке")
+                code = Broadcast()
+            
+            if len(code.messages) >= self.MAX_MESSAGES_PER_CODE:
+                await message.edit(f"❌ Достигнут лимит сообщений ({self.MAX_MESSAGES_PER_CODE})")
+                return
+                
+            grouped_id = getattr(reply, "grouped_id", None)
+            grouped_ids = []
+
+            if grouped_id:
+                album_messages = []
+                async for album_msg in message.client.iter_messages(
+                    reply.chat_id,
+                    min_id=max(0, reply.id - 10),
+                    max_id=reply.id + 10,
+                    limit=30,
+                ):
+                    if getattr(album_msg, "grouped_id", None) == grouped_id:
+                        album_messages.append(album_msg)
+                album_messages.sort(key=lambda m: m.id)
+                grouped_ids = list(dict.fromkeys(msg.id for msg in album_messages))
+                
+            if code.add_message(reply.chat_id, reply.id, grouped_ids):
+                if is_new:
+                    self.codes[code_name] = code
+                    
+                await self.save_config()
+                await message.edit(f"✅ {'Рассылка создана и с' if is_new else 'С'}ообщение добавлено")
+            else:
+                await message.edit("❌ Это сообщение уже есть в рассылке")
 
     async def _handle_delete_command(self, message: Message, code_name: str):
         """Обработчик команды delete"""
