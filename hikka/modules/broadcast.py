@@ -483,25 +483,21 @@ class BroadcastManager:
             f"✅ Автодобавление чатов {'включено' if self.watcher_enabled else 'выключено'}"
         )
 
-    async def _handle_add_command(
-        self, message: Message, code: Optional[Broadcast], code_name: str
-    ):
+    async def _handle_add_command(self, message: Message, code: Optional[Broadcast], code_name: str):
         """Обработчик команды add"""
         reply = await message.get_reply_message()
         if not reply:
-            await message.edit(
-                "❌ Ответьте на сообщение, которое нужно добавить в рассылку"
-            )
+            await message.edit("❌ Ответьте на сообщение, которое нужно добавить в рассылку")
             return
+        
         is_new = code is None
         if is_new:
             code = Broadcast()
-            self.codes[code_name] = code
+        
         if len(code.messages) >= self.MAX_MESSAGES_PER_CODE:
-            await message.edit(
-                f"❌ Достигнут лимит сообщений ({self.MAX_MESSAGES_PER_CODE})"
-            )
+            await message.edit(f"❌ Достигнут лимит сообщений ({self.MAX_MESSAGES_PER_CODE})")
             return
+            
         grouped_id = getattr(reply, "grouped_id", None)
         grouped_ids = []
 
@@ -517,11 +513,12 @@ class BroadcastManager:
                     album_messages.append(album_msg)
             album_messages.sort(key=lambda m: m.id)
             grouped_ids = list(dict.fromkeys(msg.id for msg in album_messages))
+            
         if code.add_message(reply.chat_id, reply.id, grouped_ids):
+            if is_new:
+                self.codes[code_name] = code
             await self.save_config()
-            await message.edit(
-                f"✅ {'Рассылка создана и с' if is_new else 'С'}ообщение добавлено"
-            )
+            await message.edit(f"✅ {'Рассылка создана и с' if is_new else 'С'}ообщение добавлено")
         else:
             await message.edit("❌ Это сообщение уже есть в рассылке")
 
