@@ -415,12 +415,6 @@ class BroadcastManager:
 
             self.db.set("broadcast", "config", config)
 
-            logger.info(
-                f"Configuration saved successfully. "
-                f"Active broadcasts: {len(config['active_broadcasts'])}, "
-                f"Total codes: {len(config['codes'])}"
-            )
-
         except Exception as e:
             logger.error(f"Critical error saving configuration: {e}", exc_info=True)
             raise
