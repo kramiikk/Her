@@ -69,16 +69,6 @@ class UpdaterMod(loader.Module):
     async def inline_restart(self, call: InlineCall, secure_boot: bool = False):
         await self.restart_common(call, secure_boot=secure_boot)
 
-    async def process_restart_message(self, msg_obj: typing.Union[InlineCall, Message]):
-        self.set(
-            "selfupdatemsg",
-            (
-                msg_obj.inline_message_id
-                if hasattr(msg_obj, "inline_message_id")
-                else f"{utils.get_chat_id(msg_obj)}:{msg_obj.id}"
-            ),
-        )
-
     async def restart_common(
         self,
         msg_obj: typing.Union[InlineCall, Message],
@@ -108,8 +98,6 @@ class UpdaterMod(loader.Module):
                 else "Her"
             ),
         )
-
-        await self.process_restart_message(msg_obj)
 
         self.set("restart_ts", time.time())
 
@@ -241,34 +229,7 @@ class UpdaterMod(loader.Module):
         )
 
     async def client_ready(self):
-        if self.get("selfupdatemsg") is not None:
-            try:
-                await self.update_complete()
-            except Exception:
-                logger.exception("Failed to complete update!")
-
         if self.get("do_not_create", False):
             return
 
         self.set("do_not_create", True)
-
-    async def update_complete(self):
-        start = self.get("restart_ts")
-        try:
-            took = round(time.time() - start)
-        except Exception:
-            took = "n/a"
-
-        msg = "Restart successful!"
-        ms = self.get("selfupdatemsg")
-
-        if ":" in str(ms):
-            chat_id, message_id = ms.split(":")
-            chat_id, message_id = int(chat_id), int(message_id)
-            await self._client.edit_message(chat_id, message_id, msg)
-            return
-
-        await self.inline.bot.edit_message_text(
-            inline_message_id=ms,
-            text=self.inline.sanitise_text(msg),
-        )
