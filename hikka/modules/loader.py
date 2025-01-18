@@ -1,6 +1,6 @@
 """Loads and registers modules"""
 
-# ©️ Dan Gazizullin, 2021-2023
+# ©️ Dan Gazizullin, codrago 2021-2024
 # This file is a part of Her
 # 🌐 https://github.com/hikariatama/Hikka
 # You can redistribute it and/or modify it under the terms of the GNU AGPLv3

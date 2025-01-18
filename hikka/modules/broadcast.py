@@ -7,8 +7,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Set, Tuple, Union
 
-from telethon.tl.types import Message
-from telethon.errors import (
+from hikkatl.tl.types import Message
+from hikkatl.errors import (
     ChatWriteForbiddenError,
     UserBannedInChannelError,
     FloodWaitError,
