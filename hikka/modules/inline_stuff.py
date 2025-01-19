@@ -6,11 +6,14 @@
 
 import re
 import string
+import logging
 
 from hikkatl.tl.types import Message
 
 from .. import loader, utils
 from ..inline.types import BotInlineMessage
+
+logger = logging.getLogger(__name__)
 
 
 @loader.tds
@@ -75,10 +78,49 @@ class InlineStuff(loader.Module):
         await utils.answer(message, self.strings("bot_updated"))
 
     async def aiogram_watcher(self, message: BotInlineMessage):
-        if message.text != "/start":
-            return
-
-        await message.answer_photo(
-            "https://imgur.com/a/0gmlFYI.png",
-            caption=self.strings("this_is_hikka"),
+        """
+        Watches for bot interactions and forwards messages to owner
+        """
+        # Get bot instance
+        bot = self.inline.bot
+        
+        # Create user info text
+        user_info = (
+            f"👤 User: {message.from_user.full_name} (@{message.from_user.username})\n"
+            f"📱 User ID: `{message.from_user.id}`\n"
+            f"💬 Message: {message.text}\n"
         )
+        
+        # If this is a /start command, send the welcome message to user
+        if message.text == "/start":
+            await bot.send_photo(
+                chat_id=message.from_user.id,
+                photo="https://i.imgur.com/iv1aMNA.jpeg",
+                caption=self.strings("this_is")
+            )
+
+        try:
+            await bot.send_message(
+                chat_id=self.tg_id,
+                text=user_info,
+                parse_mode="MarkdownV2"
+            )
+        except Exception as e:
+            logger.error(f"Failed to forward message to owner: {e}")
+        
+        # Handle owner replies to forwarded messages
+        if message.reply_to_message and message.from_user.id == self.tg_id:
+            try:
+                # Extract original user's ID from the replied message
+                replied_text = message.reply_to_message.text
+                user_id_match = re.search(r"User ID: `(\d+)`", replied_text)
+                
+                if user_id_match:
+                    target_user_id = int(user_id_match.group(1))
+                    # Forward owner's reply to the user using bot
+                    await bot.send_message(
+                        chat_id=target_user_id,
+                        text=message.text
+                    )
+            except Exception as e:
+                logger.error(f"Failed to send reply to user: {e}")
