@@ -106,7 +106,7 @@ class InlineStuff(loader.Module):
                 chat_id=message.from_user.id,
                 photo="https://i.imgur.com/iv1aMNA.jpeg",
                 caption=self.strings("this_is"),
-                parse_mode="HTML"  # Added parse_mode for HTML tags
+                parse_mode="MarkdownV2"  # Changed from HTML to MarkdownV2 for consistency
             )
         
         try:
