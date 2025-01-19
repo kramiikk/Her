@@ -111,7 +111,7 @@ class APIRatelimiterMod(loader.Module):
         asyncio.ensure_future(self._install_protection())
 
     async def _install_protection(self):
-        await asyncio.sleep(30)  # Restart lock
+        await asyncio.sleep(13)  # Restart lock
         if hasattr(self._client._call, "_old_call_rewritten"):
             raise loader.SelfUnload("Already installed")
 

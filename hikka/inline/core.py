@@ -95,7 +95,7 @@ class InlineManager(
                 if (unit.get("ttl") or (time.time() + self._markup_ttl)) < time.time():
                     del self._units[unit_id]
 
-            await asyncio.sleep(5)
+            await asyncio.sleep(3)
 
     async def register_manager(
         self,

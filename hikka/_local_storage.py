@@ -101,7 +101,7 @@ class RemoteStorage:
             with contextlib.suppress(Exception):
                 await self.fetch(url)
 
-            await asyncio.sleep(5)
+            await asyncio.sleep(3)
 
 
     @staticmethod

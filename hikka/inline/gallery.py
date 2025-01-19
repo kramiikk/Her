@@ -382,7 +382,7 @@ class Gallery(InlineUnit):
         unit_id: typing.Optional[str] = None,
     ):
         while True:
-            await asyncio.sleep(7)
+            await asyncio.sleep(3)
 
             unit = self._units[unit_id]
 

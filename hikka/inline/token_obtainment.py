@@ -23,7 +23,7 @@ class TokenObtainment(InlineUnit):
     async def _create_bot(self):
         logger.info("User doesn't have bot, attempting creating new one")
         async with self._client.conversation("@BotFather", exclusive=False) as conv:
-            await asyncio.sleep(random.uniform(13, 30))
+            await asyncio.sleep(random.uniform(3, 13))
             await fw_protect()
             await conv.send_message("/newbot")
             r = await conv.get_response()
@@ -49,7 +49,7 @@ class TokenObtainment(InlineUnit):
                 f"🪐 Her userbot"[:64],
                 username,
             ]:
-                await asyncio.sleep(random.uniform(13, 33))
+                await asyncio.sleep(random.uniform(3, 13))
                 await fw_protect()
                 await conv.send_message(msg)
                 r = await conv.get_response()
@@ -76,12 +76,12 @@ class TokenObtainment(InlineUnit):
 
         async with self._client.conversation("@BotFather", exclusive=False) as conv:
             try:
-                await asyncio.sleep(random.uniform(13, 33))
+                await asyncio.sleep(random.uniform(7, 13))
                 await fw_protect()
                 m = await conv.send_message("/token")
             except YouBlockedUserError:
                 await self._client(UnblockRequest(id="@BotFather"))
-                await asyncio.sleep(random.uniform(13, 33))
+                await asyncio.sleep(random.uniform(3, 13))
                 await fw_protect()
                 m = await conv.send_message("/token")
 
@@ -108,21 +108,21 @@ class TokenObtainment(InlineUnit):
                     ) and not re.search(r"@h[0-9a-zA-Z]{2}er[0-9a-zA-Z]{2}bot", button.text):
                         continue
 
-                    await asyncio.sleep(random.uniform(13, 33))
+                    await asyncio.sleep(random.uniform(7, 13))
                     await fw_protect()
 
                     await conv.send_message(button.text)
                     r = await conv.get_response()
 
                     if revoke_token:
-                        await asyncio.sleep(random.uniform(13, 33))
+                        await asyncio.sleep(random.uniform(3, 7))
                         await fw_protect()
 
                         await conv.send_message("/revoke")
                         await conv.get_response()
 
 
-                        await asyncio.sleep(random.uniform(13, 33))
+                        await asyncio.sleep(random.uniform(7, 13))
                         await fw_protect()
 
                         await conv.send_message(button.text)
@@ -141,7 +141,7 @@ class TokenObtainment(InlineUnit):
                         button.text,
                         "Enabled",
                     ]:
-                        await asyncio.sleep(random.uniform(13, 33))
+                        await asyncio.sleep(random.uniform(3, 13))
                         await fw_protect()
                         await conv.send_message(msg)
                         await conv.get_response()

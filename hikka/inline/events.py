@@ -438,17 +438,48 @@ class Events(InlineUnit):
             ]
 
         if not _help:
-            initial_message = "Time until next update: 9"
-            update_time = int(utils.time.time())
-            
-            while True:
-                current_time = int(utils.time.time())
-                countdown = max(0, 9 - (current_time - update_time))
+            try:
+                result = InlineQueryResultArticle(
+                    id=utils.rand(20),
+                    title=self.translator.getkey("inline.show_inline_cmds"),
+                    description=self.translator.getkey("inline.no_inline_cmds"),
+                    input_message_content=InputTextMessageContent(
+                        "9\nAuthor @ilvij",
+                        "HTML",
+                        disable_web_page_preview=True,
+                    ),
+                    thumb_url="https://img.icons8.com/fluency/50/000000/info-squared.png",
+                    thumb_width=128,
+                    thumb_height=128,
+                )
                 
-                message = f"Time until next update: {countdown}"
-                if countdown == 0:
-                    message += "\nAuthor @ilvij"
+                await inline_query.answer([result], cache_time=0)
                 
+                for i in range(8, -1, -1):
+                    await sleep(1)
+                    try:
+                        result = InlineQueryResultArticle(
+                            id=utils.rand(20),
+                            title=self.translator.getkey("inline.show_inline_cmds"),
+                            description=self.translator.getkey("inline.no_inline_cmds"),
+                            input_message_content=InputTextMessageContent(
+                                f"{i}\nAuthor @ilvij" if i == 0 else str(i),
+                                "HTML",
+                                disable_web_page_preview=True,
+                            ),
+                            thumb_url="https://img.icons8.com/fluency/50/000000/info-squared.png",
+                            thumb_width=128,
+                            thumb_height=128,
+                        )
+                        await inline_query.answer([result], cache_time=0)
+                    except Exception:
+                        logger.debug("Unable to update countdown message", exc_info=True)
+                        break
+                
+                return
+            except Exception:
+                logger.debug("Unable to send countdown message", exc_info=True)
+                # Fallback to standard no-help message
                 await inline_query.answer(
                     [
                         InlineQueryResultArticle(
@@ -456,7 +487,7 @@ class Events(InlineUnit):
                             title=self.translator.getkey("inline.show_inline_cmds"),
                             description=self.translator.getkey("inline.no_inline_cmds"),
                             input_message_content=InputTextMessageContent(
-                                message,
+                                "No inline commands available\nAuthor @ilvij",
                                 "HTML",
                                 disable_web_page_preview=True,
                             ),
@@ -465,15 +496,9 @@ class Events(InlineUnit):
                             thumb_height=128,
                         )
                     ],
-                    cache_time=0,
+                    cache_time=0
                 )
-                
-                if countdown == 0:
-                    break
-                    
-                await sleep(1)
-            
-            return
+                return
 
         await inline_query.answer(
             [
