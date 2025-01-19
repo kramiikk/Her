@@ -438,8 +438,6 @@ class Events(InlineUnit):
             ]
 
         if not _help:
-            unit_id = utils.rand(16)
-
             try:
                 sent_message = await self.bot.send_message(
                     inline_query.from_user.id,
@@ -448,19 +446,10 @@ class Events(InlineUnit):
                 )
                 inline_message_id = sent_message.message_id
 
-                async with asyncio.timeout(10):
-                    for i in range(8, -1, -1):
-                        await asyncio.sleep(1)
-                        try:
-                            await self.bot.edit_message_text(
-                                str(i) if i > 0 else "0\nAuthor @ilvij",
-                                chat_id=inline_query.from_user.id,
-                                message_id=inline_message_id,
-                                parse_mode="HTML"
-                            )
-                        except Exception as e:
-                            logger.exception(f"Error editing message: {e}")
-                            break
+                await asyncio.wait_for(self._countdown(inline_query.from_user.id, inline_message_id), timeout=10)
+
+            except asyncio.TimeoutError:
+                logger.debug("Countdown timed out")
             except Exception as e:
                 logger.exception(f"Error sending initial countdown message: {e}")
 
@@ -493,3 +482,17 @@ class Events(InlineUnit):
             + [i[0] for i in _help],
             cache_time=0,
         )
+
+    async def _countdown(self, chat_id: int, message_id: int):
+        for i in range(8, -1, -1):
+            await asyncio.sleep(1)
+            try:
+                await self.bot.edit_message_text(
+                    str(i) if i > 0 else "0\nAuthor @ilvij",
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    parse_mode="HTML"
+                )
+            except Exception as e:
+                logger.exception(f"Error editing message: {e}")
+                break
