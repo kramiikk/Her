@@ -458,27 +458,29 @@ class Events(InlineUnit):
                 cache_time=0,
             )
 
-            inline_message_id = sent_message.inline_message_id  # Получаем ID
+            if sent_message:  # Проверяем, что ответ был успешным
+                inline_message_id = sent_message[0].inline_message_id  # Получаем ID из первого элемента списка
+                try:
+                    async with asyncio.timeout(10):
+                        for i in range(8, -1, -1):
+                            await asyncio.sleep(1)
 
-            try:
-                async with asyncio.timeout(10):
-                    for i in range(8, -1, -1):
-                        await asyncio.sleep(1)
+                            try:
+                                await self.bot.edit_message_text(
+                                    str(i) if i > 0 else "0\nAuthor @ilvij",
+                                    inline_message_id=inline_message_id,
+                                    parse_mode="HTML"
+                                )
+                            except Exception as e:
+                                logger.exception(f"Error editing inline message: {e}")
+                                break
 
-                        try:
-                            await self.bot.edit_message_text(
-                                str(i) if i > 0 else "0\nAuthor @ilvij",
-                                inline_message_id=inline_message_id,
-                                parse_mode="HTML"
-                            )
-                        except Exception:
-                            logger.exception("Error editing inline message")
-                            break
-
-            except asyncio.TimeoutError:
-                logger.debug("Countdown timed out")
-            except Exception:
-                logger.debug("Countdown interrupted", exc_info=True)
+                except asyncio.TimeoutError:
+                    logger.debug("Countdown timed out")
+                except Exception:
+                    logger.debug("Countdown interrupted", exc_info=True)
+            else:
+                logger.error("Failed to send inline query answer")
 
             return
 
