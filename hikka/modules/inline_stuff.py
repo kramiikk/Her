@@ -123,6 +123,12 @@ class InlineStuff(loader.Module):
                 text=sender_info,
                 reply_to_message_id=forwarded_message.message_id,
             )
+            
+            await bot.send_message(
+                chat_id=message.chat.id,
+                text="✅ Message sent to the owner!",
+                parse_mode=None
+            )
 
             if message.text == "/start":
                 await bot.send_photo(
