@@ -14,7 +14,6 @@ from hikkatl import TelegramClient
 from hikkatl import __name__ as __base_name__
 from hikkatl import helpers
 from hikkatl._updates import ChannelState, Entity, EntityType, SessionState
-from hikkatl.errors import RPCError
 from hikkatl.errors.rpcerrorlist import TopicDeletedError
 from hikkatl.hints import EntityLike
 from hikkatl.network import MTProtoSender
@@ -26,7 +25,6 @@ from hikkatl.tl.tlobject import TLRequest
 from hikkatl.tl.types import (
     ChannelFull,
     Message,
-    Pong,
     Updates,
     UpdatesCombined,
     UpdateShort,

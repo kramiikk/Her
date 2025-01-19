@@ -15,8 +15,6 @@ import typing
 from aiogram import Bot, Dispatcher
 from aiogram.types import ParseMode
 from aiogram.utils.exceptions import TerminatedByOtherGetUpdates, Unauthorized
-from hikkatl.errors.rpcerrorlist import InputUserDeactivatedError, YouBlockedUserError
-from hikkatl.tl.functions.contacts import UnblockRequest
 from hikkatl.tl.types import Message
 from hikkatl.utils import get_display_name
 
@@ -71,7 +69,6 @@ class InlineManager(
         self._units: typing.Dict[str, dict] = {}
         self._custom_map: typing.Dict[str, callable] = {}
         self.fsm: typing.Dict[str, str] = {}
-        self._web_auth_tokens: typing.List[str] = []
         self._error_events: typing.Dict[str, asyncio.Event] = {}
 
         self._markup_ttl = 60 * 60 * 24
@@ -99,7 +96,6 @@ class InlineManager(
 
     async def register_manager(
         self,
-        after_break: bool = False,
         ignore_token_checks: bool = False,
     ):
         """
@@ -134,31 +130,6 @@ class InlineManager(
         except Unauthorized:
             logger.critical("Token expired, revoking...")
             return await self._dp_revoke_token(False)
-
-        try:
-            await self._client.send_message(self.bot_username, "/start hikka init")
-        except (InputUserDeactivatedError, ValueError):
-            self._db.set("hikka.inline", "bot_token", None)
-            self._token = False
-
-            if not after_break:
-                return await self.register_manager(True)
-
-            self.init_complete = False
-            return False
-        except YouBlockedUserError:
-            await self._client(UnblockRequest(id=self.bot_username))
-            try:
-                await self._client.send_message(
-                    self.bot_username, "/start hikka init"
-                )
-            except Exception:
-                logger.critical("Can't unblock users bot", exc_info=True)
-                return False
-        except Exception:
-            self.init_complete = False
-            logger.critical("Initialization of inline manager failed!", exc_info=True)
-            return False
 
         self._dp.register_inline_handler(
             self._inline_handler,
@@ -204,20 +175,6 @@ class InlineManager(
         self._task.cancel()
         self._dp.stop_polling()
         self._cleaner_task.cancel()
-
-    def pop_web_auth_token(self, token: str) -> bool:
-        """
-        Check if web confirmation button was pressed
-        :param token: Token to check
-        :type token: str
-        :return: `True` if token was found, `False` otherwise
-        :rtype: bool
-        """
-        if token not in self._web_auth_tokens:
-            return False
-
-        self._web_auth_tokens.remove(token)
-        return True
 
     async def _invoke_unit(self, unit_id: str, message: Message) -> Message:
         event = asyncio.Event()
