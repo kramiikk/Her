@@ -440,47 +440,29 @@ class Events(InlineUnit):
         if not _help:
             unit_id = utils.rand(16)
 
-            sent_message = await inline_query.answer(
-                [
-                    InlineQueryResultArticle(
-                        id=unit_id,
-                        title=self.translator.getkey("inline.show_inline_cmds"),
-                        description=self.translator.getkey("inline.no_inline_cmds"),
-                        input_message_content=InputTextMessageContent(
-                            "9",
-                            parse_mode="HTML",
-                        ),
-                        thumb_url="https://img.icons8.com/fluency/50/000000/info-squared.png",
-                        thumb_width=128,
-                        thumb_height=128,
-                    )
-                ],
-                cache_time=0,
-            )
+            try:
+                sent_message = await self.bot.send_message(
+                    inline_query.from_user.id,
+                    "9",
+                    parse_mode="HTML"
+                )
+                inline_message_id = sent_message.message_id
 
-            if isinstance(sent_message, list) and sent_message:  # Проверяем, что это список и не пустой
-                inline_message_id = sent_message[0].inline_message_id  # Получаем ID из первого элемента списка
-                try:
-                    async with asyncio.timeout(10):
-                        for i in range(8, -1, -1):
-                            await asyncio.sleep(1)
-
-                            try:
-                                await self.bot.edit_message_text(
-                                    str(i) if i > 0 else "0\nAuthor @ilvij",
-                                    inline_message_id=inline_message_id,
-                                    parse_mode="HTML"
-                                )
-                            except Exception as e:
-                                logger.exception(f"Error editing inline message: {e}")
-                                break
-
-                except asyncio.TimeoutError:
-                    logger.debug("Countdown timed out")
-                except Exception:
-                    logger.debug("Countdown interrupted", exc_info=True)
-            else:
-                logger.error(f"Failed to send inline query answer or got unexpected response: {sent_message}")
+                async with asyncio.timeout(10):
+                    for i in range(8, -1, -1):
+                        await asyncio.sleep(1)
+                        try:
+                            await self.bot.edit_message_text(
+                                str(i) if i > 0 else "0\nAuthor @ilvij",
+                                chat_id=inline_query.from_user.id,
+                                message_id=inline_message_id,
+                                parse_mode="HTML"
+                            )
+                        except Exception as e:
+                            logger.exception(f"Error editing message: {e}")
+                            break
+            except Exception as e:
+                logger.exception(f"Error sending initial countdown message: {e}")
 
             return
 
