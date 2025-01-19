@@ -163,7 +163,7 @@ class Module:
         message = (
             (await self._client.send_message(peer, cmd))
             if peer
-            else (await (message.edit if edit else message.respond)(cmd))
+            else (await message.respond(cmd))
         )
         await self.allmodules.commands[command](message)
         return message
@@ -279,7 +279,7 @@ class Module:
                 else:
                     message = await utils.answer(message, frame)
             elif isinstance(message, InlineMessage) and inline:
-                await message.edit(frame)
+                await message.respond(frame)
 
             await asyncio.sleep(interval)
 

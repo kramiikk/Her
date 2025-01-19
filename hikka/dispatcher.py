@@ -275,7 +275,7 @@ class CommandDispatcher:
         ):
             # Allow escaping commands using .'s
             if not watcher:
-                await message.edit(
+                await message.respond(
                     message.message[len(prefix):],
                     parse_mode=lambda s: (
                         s,
@@ -446,7 +446,7 @@ class CommandDispatcher:
                 )
 
         with contextlib.suppress(Exception):
-            await (message.edit if message.out else message.reply)(txt)
+            await message.reply(txt)
 
     async def watcher_exc(self, *_):
         logger.exception("Error running watcher", extra={"stack": inspect.stack()})
