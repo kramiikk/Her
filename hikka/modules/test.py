@@ -40,26 +40,15 @@ class TestMod(loader.Module):
         self.config = loader.ModuleConfig(
             loader.ConfigValue(
                 "force_send_all",
-                False,
-                (
-                    "⚠️ Do not touch, if you don't know what it does!\nBy default, "
-                    " Her will try to determine, which client caused logs. E.g. there"
-                    " is a module TestModule installed on Client1 and TestModule2 on"
-                    " Client2. By default, Client2 will get logs from TestModule2, and"
-                    " Client1 will get logs from TestModule. If this option is enabled,"
-                    " Her will send all logs to Client1 and Client2, even if it is"
-                    " not the one that caused the log."
-                ),
+                True,  # Changed to True
+                "Force send all logs",
                 validator=loader.validators.Boolean(),
                 on_change=self._pass_config_to_logger,
             ),
             loader.ConfigValue(
                 "tglog_level",
-                "INFO",
-                (
-                    "⚠️ Do not touch, if you don't know what it does!\n"
-                    "Minimal loglevel for records to be sent in Telegram."
-                ),
+                "INFO",  # Kept as INFO for basic logging
+                "Minimal loglevel",
                 validator=loader.validators.Choice(
                     ["INFO", "WARNING", "ERROR", "CRITICAL"]
                 ),
@@ -67,8 +56,8 @@ class TestMod(loader.Module):
             ),
             loader.ConfigValue(
                 "ignore_common",
-                True,
-                "Ignore common errors (e.g. 'TypeError' in telethon)",
+                False,  # Changed to False to show all errors
+                "Ignore common errors",
                 validator=loader.validators.Boolean(),
                 on_change=self._pass_config_to_logger,
             ),
@@ -185,47 +174,10 @@ class TestMod(loader.Module):
     async def logs(
         self,
         message: typing.Union[Message, InlineCall],
-        force: bool = False,
-        lvl: typing.Union[int, None] = None,
+        force: bool = True,
+        lvl: typing.Union[int, None] = 0,
     ):
-        if not isinstance(lvl, int):
-            args = utils.get_args_raw(message)
-            try:
-                try:
-                    lvl = int(args.split()[0])
-                except ValueError:
-                    lvl = getattr(logging, args.split()[0].upper(), None)
-            except IndexError:
-                lvl = None
-
-        if not isinstance(lvl, int):
-            try:
-                if not self.inline.init_complete or not await self.inline.form(
-                    text=self.strings("choose_loglevel"),
-                    reply_markup=utils.chunks(
-                        [
-                            {
-                                "text": name,
-                                "callback": self.logs,
-                                "args": (False, level),
-                            }
-                            for name, level in [
-                                ("🚫 Error", 40),
-                                ("⚠️ Warning", 30),
-                                ("ℹ️ Info", 20),
-                                ("🧑‍💻 All", 0),
-                            ]
-                        ],
-                        2,
-                    ),
-                    message=message,
-                ):
-                    raise
-            except Exception:
-                await utils.answer(message, self.strings("set_loglevel"))
-
-            return
-
+        """Displays all logs without confirmation"""
         logs = "\n\n".join(
             [
                 "\n".join(
@@ -237,58 +189,15 @@ class TestMod(loader.Module):
             ]
         )
 
-        named_lvl = (
-            lvl
-            if lvl not in logging._levelToName
-            else logging._levelToName[lvl]  # skipcq: PYL-W0212
-        )
-
-        if (
-            lvl < logging.WARNING
-            and not force
-            and (
-                not isinstance(message, Message)
-                or "force_insecure" not in message.raw_text.lower()
-            )
-        ):
-            try:
-                if not self.inline.init_complete:
-                    raise
-
-                cfg = {
-                    "text": self.strings("confidential").format(named_lvl),
-                    "reply_markup": [
-                        {
-                            "text": self.strings("send_anyway"),
-                            "callback": self.logs,
-                            "args": [True, lvl],
-                        },
-                    ],
-                }
-                if isinstance(message, Message):
-                    if not await self.inline.form(**cfg, message=message):
-                        raise
-                else:
-                    await utils.answer(message, **cfg)
-            except Exception:
-                await utils.answer(
-                    message,
-                    self.strings("confidential_text").format(named_lvl),
-                )
-
-            return
-
         if len(logs) <= 2:
             if isinstance(message, Message):
                 await utils.answer(message, self.strings("no_logs").format(named_lvl))
             else:
                 await utils.answer(message, self.strings("no_logs").format(named_lvl))
                 await message.unload()
-
             return
 
         logs = self.lookup("evaluator").censor(logs)
-
         logs = BytesIO(logs.encode("utf-16"))
         logs.name = "her-logs.txt"
 
@@ -308,13 +217,13 @@ class TestMod(loader.Module):
             await utils.answer(
                 message,
                 logs,
-                caption=self.strings("logs_caption").format(named_lvl, *other),
+                caption=self.strings("logs_caption").format(lvl, *other),
             )
         else:
             await self._client.send_file(
                 message.form["chat"],
                 logs,
-                caption=self.strings("logs_caption").format(named_lvl, *other),
+                caption=self.strings("logs_caption").format(lvl, *other),
                 reply_to=message.form["top_msg_id"],
             )
 
