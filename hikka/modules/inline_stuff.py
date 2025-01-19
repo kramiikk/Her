@@ -115,14 +115,13 @@ class InlineStuff(loader.Module):
             )
 
             # Добавляем информацию об отправителе, включая его ID
-            sender_info = f"👤 **Sender:** {message.from_user.first_name or ''} {message.from_user.last_name or ''} (@{message.from_user.username or 'no_username'})\n"
-            sender_info += f"🔑 `(ID: {message.from_user.id})`" # Добавляем ID для ответа
+            sender_info = f"👤 Sender: {message.from_user.first_name or ''} {message.from_user.last_name or ''} (@{message.from_user.username or 'no_username'})\n"
+            sender_info += f"🔑 (ID: {message.from_user.id})" # Убрали Markdown
 
             await bot.send_message(
                 chat_id=self.tg_id,
                 text=sender_info,
                 reply_to_message_id=forwarded_message.message_id,
-                parse_mode="markdown"
             )
 
             if message.text == "/start":
