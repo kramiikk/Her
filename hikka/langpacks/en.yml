@@ -322,7 +322,6 @@ test:
   set_loglevel: "<emoji document_id=5355133243773435190>🚫</emoji> <b>Please specify verbosity as an integer or string</b>"
   no_logs: "<emoji document_id=5355133243773435190>🤷‍♀️</emoji> <b>You don't have any logs at verbosity</b> <code>{}</code><b>.</b>"
   logs_caption: "<emoji document_id=5350594756126721186>🪐</emoji> <b>Her logs with verbosity</b> <code>{}</code>\n\n<emoji document_id=5228879218363872764>⚪️</emoji> <b>Version: {}.{}.{}</b>{}"
-  suspend_invalid_time: "<emoji document_id=5210952531676504517>🚫</emoji> <b>Invalid time to suspend</b>"
   suspended: "<emoji document_id=5452023368054216810>🥶</emoji> <b>Bot  suspended for {}</b>"
   confidential: "⚠️ <b>Log level</b> <code>{}</code> <b>may reveal your confidential info, be careful</b>"
   confidential_text: "⚠️ <b>Log level</b> <code>{0}</code> <b>may reveal your confidential info, be careful</b>\n<b>Type</b> <code>.logs {0} force_insecure</code> <b>to ignore this warning</b>"
@@ -388,7 +387,6 @@ api_protection:
   local_url: "🏠 Local URL"
   debugger_disabled: "<emoji document_id=5210952531676504517>🚫</emoji> <b>Web debugger is disabled, url is not available</b>"
   _cmd_doc_debugger: "Show the Werkzeug PIN"
-  _cmd_doc_suspend_api_protect: "<time in seconds> - Suspend API Ratelimiter for n seconds"
   _cls_doc: "Helps userbot avoid spamming Telegram API"
 
 help:
