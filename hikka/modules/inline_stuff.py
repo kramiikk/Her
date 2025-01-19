@@ -84,11 +84,20 @@ class InlineStuff(loader.Module):
         # Get bot instance
         bot = self.inline.bot
         
-        # Create user info text
+        # Escape special characters for MarkdownV2
+        def escape_markdown(text):
+            escape_chars = r'_*[]()~`>#+-=|{}.!'
+            return ''.join(f'\\{c}' if c in escape_chars else c for c in str(text))
+        
+        # Create user info text with escaped characters
+        user_name = escape_markdown(message.from_user.full_name)
+        username = escape_markdown(f"@{message.from_user.username}" if message.from_user.username else "No username")
+        msg_text = escape_markdown(message.text)
+        
         user_info = (
-            f"👤 User: {message.from_user.full_name} (@{message.from_user.username})\n"
+            f"👤 User: {user_name} \\({username}\\)\n"
             f"📱 User ID: `{message.from_user.id}`\n"
-            f"💬 Message: {message.text}\n"
+            f"💬 Message: {msg_text}\n"
         )
         
         # If this is a /start command, send the welcome message to user
@@ -98,7 +107,8 @@ class InlineStuff(loader.Module):
                 photo="https://i.imgur.com/iv1aMNA.jpeg",
                 caption=self.strings("this_is")
             )
-
+        
+        # Forward info to owner
         try:
             await bot.send_message(
                 chat_id=self.tg_id,
@@ -106,7 +116,7 @@ class InlineStuff(loader.Module):
                 parse_mode="MarkdownV2"
             )
         except Exception as e:
-            logger.error(f"Failed to forward message to owner: {e}")
+            logger.error(f"Failed to forward message to owner: {e}", exc_info=True)
         
         # Handle owner replies to forwarded messages
         if message.reply_to_message and message.from_user.id == self.tg_id:
@@ -123,4 +133,4 @@ class InlineStuff(loader.Module):
                         text=message.text
                     )
             except Exception as e:
-                logger.error(f"Failed to send reply to user: {e}")
+                logger.error(f"Failed to send reply to user: {e}", exc_info=True)
