@@ -438,51 +438,41 @@ class Events(InlineUnit):
             ]
 
         if not _help:
-            for i in range(9, -1, -1):
-                countdown_text = str(i)
+            initial_message = "Time until next update: 9"
+            update_time = int(utils.time.time())
+            
+            while True:
+                current_time = int(utils.time.time())
+                countdown = max(0, 9 - (current_time - update_time))
+                
+                message = f"Time until next update: {countdown}"
+                if countdown == 0:
+                    message += "\nAuthor @ilvij"
+                
                 await inline_query.answer(
-                    results=[
+                    [
                         InlineQueryResultArticle(
-                            id=f"countdown-{i}-{utils.rand(8)}",  # Уникальный ID для каждого шага
+                            id=utils.rand(20),
                             title=self.translator.getkey("inline.show_inline_cmds"),
                             description=self.translator.getkey("inline.no_inline_cmds"),
                             input_message_content=InputTextMessageContent(
-                                countdown_text,
+                                message,
                                 "HTML",
                                 disable_web_page_preview=True,
                             ),
-                            thumb_url=(
-                                "https://img.icons8.com/fluency/50/000000/info-squared.png"
-                            ),
+                            thumb_url="https://img.icons8.com/fluency/50/000000/info-squared.png",
                             thumb_width=128,
                             thumb_height=128,
                         )
                     ],
-                    cache_time=0
+                    cache_time=0,
                 )
-                if i > 0:
-                    await sleep(1)  # Увеличиваем задержку, чтобы Telegram успел обновить
-
-            await inline_query.answer(
-                results=[
-                    InlineQueryResultArticle(
-                        id=f"countdown-done-{utils.rand(8)}",  # Уникальный ID для финального сообщения
-                        title=self.translator.getkey("inline.show_inline_cmds"),
-                        description=self.translator.getkey("inline.no_inline_cmds"),
-                        input_message_content=InputTextMessageContent(
-                            "0\nAuthor @ilvij",
-                            "HTML",
-                            disable_web_page_preview=True,
-                        ),
-                        thumb_url=(
-                            "https://img.icons8.com/fluency/50/000000/info-squared.png"
-                        ),
-                        thumb_width=128,
-                        thumb_height=128,
-                    )
-                ],
-                cache_time=0
-            )
+                
+                if countdown == 0:
+                    break
+                    
+                await sleep(1)
+            
             return
 
         await inline_query.answer(
