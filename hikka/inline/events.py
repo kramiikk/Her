@@ -439,16 +439,8 @@ class Events(InlineUnit):
 
         if not _help:
             unit_id = utils.rand(16)
-            future = asyncio.Event()
-            
-            self._units[unit_id] = {
-                "future": future,
-                "time": utils.time.time(),
-                "type": "countdown",
-                "count": 9,
-            }
-            
-            await inline_query.answer(
+
+            sent_message = await inline_query.answer(
                 [
                     InlineQueryResultArticle(
                         id=unit_id,
@@ -466,37 +458,28 @@ class Events(InlineUnit):
                 cache_time=0,
             )
 
-            try:
-                await asyncio.wait_for(future.wait(), timeout=1)
-            except asyncio.TimeoutError:
-                del self._units[unit_id]
-                return
+            inline_message_id = sent_message.inline_message_id  # Получаем ID
 
             try:
                 async with asyncio.timeout(10):
                     for i in range(8, -1, -1):
                         await asyncio.sleep(1)
-                        
-                        if unit_id not in self._units:
-                            break
-                            
+
                         try:
                             await self.bot.edit_message_text(
                                 str(i) if i > 0 else "0\nAuthor @ilvij",
-                                inline_message_id=self._units[unit_id]["inline_message_id"],
+                                inline_message_id=inline_message_id,
                                 parse_mode="HTML"
                             )
                         except Exception:
+                            logger.exception("Error editing inline message")
                             break
-                            
+
+            except asyncio.TimeoutError:
+                logger.debug("Countdown timed out")
             except Exception:
                 logger.debug("Countdown interrupted", exc_info=True)
-            finally:
-                try:
-                    del self._units[unit_id]
-                except KeyError:
-                    pass
-                
+
             return
 
         await inline_query.answer(
