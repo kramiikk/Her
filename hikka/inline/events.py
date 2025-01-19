@@ -458,7 +458,7 @@ class Events(InlineUnit):
                 cache_time=0,
             )
 
-            if sent_message:  # Проверяем, что ответ был успешным
+            if isinstance(sent_message, list) and sent_message:  # Проверяем, что это список и не пустой
                 inline_message_id = sent_message[0].inline_message_id  # Получаем ID из первого элемента списка
                 try:
                     async with asyncio.timeout(10):
@@ -480,7 +480,7 @@ class Events(InlineUnit):
                 except Exception:
                     logger.debug("Countdown interrupted", exc_info=True)
             else:
-                logger.error("Failed to send inline query answer")
+                logger.error(f"Failed to send inline query answer or got unexpected response: {sent_message}")
 
             return
 
