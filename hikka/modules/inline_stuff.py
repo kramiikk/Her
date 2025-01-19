@@ -15,7 +15,6 @@ from ..inline.types import BotInlineMessage
 
 logger = logging.getLogger(__name__)
 
-
 @loader.tds
 class InlineStuff(loader.Module):
     """Provides support for inline stuff"""
@@ -82,55 +81,50 @@ class InlineStuff(loader.Module):
         Watches for bot interactions and forwards messages to owner
         """
         bot = self.inline.bot
-        
-        def escape_markdown(text):
-            escape_chars = '_*[]()~`>#+-=|{}.!'
-            return ''.join(f'\\{c}' if c in escape_chars else c for c in str(text))
-        
+
         try:
-            # Если это ответ на сообщение и отправитель - владелец
-            if (message.reply_to_message and 
-                message.from_user.id == self.tg_id and 
-                message.reply_to_message.text):  # Проверяем наличие текста
-                
-                try:
-                    # Извлекаем ID пользователя из оригинального сообщения
-                    user_id_match = re.search(r"User ID: `(\d+)`", message.reply_to_message.text)
-                    
-                    if user_id_match:
-                        target_user_id = int(user_id_match.group(1))
-                        # Отправляем ответ пользователю
+            # Если это ответ на сообщение от владельца
+            if message.reply_to_message and message.from_user.id == self.tg_id:
+                # Пытаемся найти user_id в тексте оригинального сообщения
+                match = re.search(r"\(ID: (\d+)\)", message.reply_to_message.text)
+                if match:
+                    target_user_id = int(match.group(1))
+                    try:
                         await bot.send_message(
                             chat_id=target_user_id,
                             text=message.text
                         )
-                        # Подтверждаем отправку владельцу
                         await bot.send_message(
                             chat_id=self.tg_id,
                             text=f"✅ Message sent to user {target_user_id}",
                             parse_mode=None
                         )
-                except Exception as e:
-                    # Сообщаем владельцу об ошибке
-                    await bot.send_message(
-                        chat_id=self.tg_id,
-                        text=f"❌ Failed to send message: {str(e)}",
-                        parse_mode=None
-                    )
-                return  # Прерываем выполнение после обработки ответа
-            
-            # Обычная обработка входящего сообщения
-            user_name = escape_markdown(message.from_user.full_name)
-            username = message.from_user.username
-            username_text = escape_markdown(f"@{username}" if username else "No username")
-            msg_text = escape_markdown(message.text or "")
-            
-            user_info = (
-                f"👤 User: {user_name} \\({username_text}\\)\n"
-                f"📱 User ID: `{message.from_user.id}`\n"
-                f"💬 Message: {msg_text}\n"
+                    except Exception as e:
+                        await bot.send_message(
+                            chat_id=self.tg_id,
+                            text=f"❌ Failed to send message: {str(e)}",
+                            parse_mode=None
+                        )
+                    return
+
+            # Пересылаем сообщение владельцу с информацией об отправителе
+            forwarded_message = await bot.forward_message(
+                chat_id=self.tg_id,
+                from_chat_id=message.chat.id,
+                message_id=message.message_id
             )
-            
+
+            # Добавляем информацию об отправителе, включая его ID
+            sender_info = f"👤 **Sender:** {message.from_user.first_name or ''} {message.from_user.last_name or ''} (@{message.from_user.username or 'no_username'})\n"
+            sender_info += f"🔑 `(ID: {message.from_user.id})`" # Добавляем ID для ответа
+
+            await bot.send_message(
+                chat_id=self.tg_id,
+                text=sender_info,
+                reply_to_message_id=forwarded_message.message_id,
+                parse_mode="markdown"
+            )
+
             if message.text == "/start":
                 await bot.send_photo(
                     chat_id=message.from_user.id,
@@ -138,12 +132,6 @@ class InlineStuff(loader.Module):
                     caption=self.strings("this_is"),
                     parse_mode="HTML"
                 )
-            
-            await bot.send_message(
-                chat_id=self.tg_id,
-                text=user_info,
-                parse_mode="MarkdownV2"
-            )
-            
+
         except Exception as e:
             logger.error(f"Failed to process message: {e}", exc_info=True)
