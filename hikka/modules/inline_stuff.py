@@ -81,17 +81,45 @@ class InlineStuff(loader.Module):
         """
         Watches for bot interactions and forwards messages to owner
         """
-        # Get bot instance
         bot = self.inline.bot
         
-        # Enhanced escape function for MarkdownV2
         def escape_markdown(text):
-            # Characters that need escaping in MarkdownV2
             escape_chars = '_*[]()~`>#+-=|{}.!'
             return ''.join(f'\\{c}' if c in escape_chars else c for c in str(text))
         
         try:
-            # Create user info text with properly escaped characters
+            # Если это ответ на сообщение и отправитель - владелец
+            if (message.reply_to_message and 
+                message.from_user.id == self.tg_id and 
+                message.reply_to_message.text):  # Проверяем наличие текста
+                
+                try:
+                    # Извлекаем ID пользователя из оригинального сообщения
+                    user_id_match = re.search(r"User ID: `(\d+)`", message.reply_to_message.text)
+                    
+                    if user_id_match:
+                        target_user_id = int(user_id_match.group(1))
+                        # Отправляем ответ пользователю
+                        await bot.send_message(
+                            chat_id=target_user_id,
+                            text=message.text
+                        )
+                        # Подтверждаем отправку владельцу
+                        await bot.send_message(
+                            chat_id=self.tg_id,
+                            text=f"✅ Message sent to user {target_user_id}",
+                            parse_mode=None
+                        )
+                except Exception as e:
+                    # Сообщаем владельцу об ошибке
+                    await bot.send_message(
+                        chat_id=self.tg_id,
+                        text=f"❌ Failed to send message: {str(e)}",
+                        parse_mode=None
+                    )
+                return  # Прерываем выполнение после обработки ответа
+            
+            # Обычная обработка входящего сообщения
             user_name = escape_markdown(message.from_user.full_name)
             username = message.from_user.username
             username_text = escape_markdown(f"@{username}" if username else "No username")
@@ -103,14 +131,12 @@ class InlineStuff(loader.Module):
                 f"💬 Message: {msg_text}\n"
             )
             
-            # If this is a /start command, send the welcome message to user
             if message.text == "/start":
-                # For the welcome message, use plain text without special formatting
                 await bot.send_photo(
                     chat_id=message.from_user.id,
                     photo="https://i.imgur.com/iv1aMNA.jpeg",
                     caption=self.strings("this_is"),
-                    parse_mode=None  # Use plain text to avoid parsing issues
+                    parse_mode="HTML"
                 )
             
             await bot.send_message(
@@ -119,18 +145,5 @@ class InlineStuff(loader.Module):
                 parse_mode="MarkdownV2"
             )
             
-            # Handle owner replies to forwarded messages
-            if message.reply_to_message and message.from_user.id == self.tg_id:
-                replied_text = message.reply_to_message.text
-                user_id_match = re.search(r"User ID: `(\d+)`", replied_text)
-                
-                if user_id_match:
-                    target_user_id = int(user_id_match.group(1))
-                    await bot.send_message(
-                        chat_id=target_user_id,
-                        text=message.text,
-                        parse_mode=None  # Use plain text for replies to avoid formatting issues
-                    )
-                    
         except Exception as e:
             logger.error(f"Failed to process message: {e}", exc_info=True)
