@@ -37,41 +37,9 @@ class TestMod(loader.Module):
 
     def __init__(self):
         self._memory = {}
-        self.config = loader.ModuleConfig(
-            loader.ConfigValue(
-                "force_send_all",
-                True,  # Changed to True
-                "Force send all logs",
-                validator=loader.validators.Boolean(),
-                on_change=self._pass_config_to_logger,
-            ),
-            loader.ConfigValue(
-                "tglog_level",
-                "INFO",  # Kept as INFO for basic logging
-                "Minimal loglevel",
-                validator=loader.validators.Choice(
-                    ["INFO", "WARNING", "ERROR", "CRITICAL"]
-                ),
-                on_change=self._pass_config_to_logger,
-            ),
-            loader.ConfigValue(
-                "ignore_common",
-                False,  # Changed to False to show all errors
-                "Ignore common errors",
-                validator=loader.validators.Boolean(),
-                on_change=self._pass_config_to_logger,
-            ),
-        )
 
     def _pass_config_to_logger(self):
         logging.getLogger().handlers[0].force_send_all = self.config["force_send_all"]
-        logging.getLogger().handlers[0].tg_level = {
-            "INFO": 20,
-            "WARNING": 30,
-            "ERROR": 40,
-            "CRITICAL": 50,
-        }[self.config["tglog_level"]]
-        logging.getLogger().handlers[0].ignore_common = self.config["ignore_common"]
 
     @loader.command()
     async def clearlogs(self, message: Message):
@@ -174,27 +142,21 @@ class TestMod(loader.Module):
     async def logs(
         self,
         message: typing.Union[Message, InlineCall],
-        force: bool = True,
-        lvl: typing.Union[int, None] = 0,
     ):
         """Displays all logs without confirmation"""
         logs = "\n\n".join(
             [
                 "\n".join(
-                    handler.dumps(lvl, client_id=self._client.tg_id)
+                    handler.dumps(0, client_id=self._client.tg_id)
                     if "client_id" in inspect.signature(handler.dumps).parameters
-                    else handler.dumps(lvl)
+                    else handler.dumps(0)
                 )
                 for handler in logging.getLogger().handlers
             ]
         )
 
         if len(logs) <= 2:
-            if isinstance(message, Message):
-                await utils.answer(message, self.strings("no_logs").format(named_lvl))
-            else:
-                await utils.answer(message, self.strings("no_logs").format(named_lvl))
-                await message.unload()
+            await utils.answer(message, "No logs available")
             return
 
         logs = self.lookup("evaluator").censor(logs)
@@ -217,13 +179,13 @@ class TestMod(loader.Module):
             await utils.answer(
                 message,
                 logs,
-                caption=self.strings("logs_caption").format(lvl, *other),
+                caption=self.strings("logs_caption").format("ALL", *other),
             )
         else:
             await self._client.send_file(
                 message.form["chat"],
                 logs,
-                caption=self.strings("logs_caption").format(lvl, *other),
+                caption=self.strings("logs_caption").format("ALL", *other),
                 reply_to=message.form["top_msg_id"],
             )
 
