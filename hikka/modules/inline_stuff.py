@@ -105,10 +105,10 @@ class InlineStuff(loader.Module):
             await bot.send_photo(
                 chat_id=message.from_user.id,
                 photo="https://i.imgur.com/iv1aMNA.jpeg",
-                caption=self.strings("this_is")
+                caption=self.strings("this_is"),
+                parse_mode="HTML"  # Added parse_mode for HTML tags
             )
         
-        # Forward info to owner
         try:
             await bot.send_message(
                 chat_id=self.tg_id,
