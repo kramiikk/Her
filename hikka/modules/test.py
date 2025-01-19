@@ -269,7 +269,7 @@ class TestMod(loader.Module):
                     if not await self.inline.form(**cfg, message=message):
                         raise
                 else:
-                    await message.edit(**cfg)
+                    await utils.answer(message, **cfg)
             except Exception:
                 await utils.answer(
                     message,
@@ -282,7 +282,7 @@ class TestMod(loader.Module):
             if isinstance(message, Message):
                 await utils.answer(message, self.strings("no_logs").format(named_lvl))
             else:
-                await message.edit(self.strings("no_logs").format(named_lvl))
+                await utils.answer(message, self.strings("no_logs").format(named_lvl))
                 await message.unload()
 
             return

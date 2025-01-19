@@ -152,7 +152,7 @@ class SudoMessageEditor(MessageEditor):
             and lastlines[0] == self.PASS_REQ
             and self.state == 1
         ):
-            await self.authmsg.edit(self.strings("auth_failed"))
+            await utils.answer(self.authmsg, self.strings("auth_failed"))
             self.state = 0
             handled = True
 

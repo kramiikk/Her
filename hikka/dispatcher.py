@@ -189,10 +189,6 @@ class CommandDispatcher:
         grep = utils.escape_html(grep).strip() if grep else False
         ungrep = utils.escape_html(ungrep).strip() if ungrep else False
 
-        old_edit = message.edit
-        old_reply = message.reply
-        old_respond = message.respond
-
         def process_text(text: str) -> str:
             nonlocal grep, ungrep
             res = []
@@ -228,18 +224,18 @@ class CommandDispatcher:
         async def my_edit(text, *args, **kwargs):
             text = process_text(text)
             kwargs["parse_mode"] = "HTML"
-            return await old_edit(text, *args, **kwargs)
+            return await utils.answer(message, text, *args, **kwargs)
 
         async def my_reply(text, *args, **kwargs):
             text = process_text(text)
             kwargs["parse_mode"] = "HTML"
-            return await old_reply(text, *args, **kwargs)
+            return await message.reply(text, *args, **kwargs)
 
         async def my_respond(text, *args, **kwargs):
             text = process_text(text)
             kwargs["parse_mode"] = "HTML"
             kwargs.setdefault("reply_to", utils.get_topic(message))
-            return await old_respond(text, *args, **kwargs)
+            return await message.respond(text, *args, **kwargs)
 
         message.edit = my_edit
         message.reply = my_reply
@@ -275,7 +271,8 @@ class CommandDispatcher:
         ):
             # Allow escaping commands using .'s
             if not watcher:
-                await message.respond(
+                await utils.answer(
+                    message,
                     message.message[len(prefix):],
                     parse_mode=lambda s: (
                         s,

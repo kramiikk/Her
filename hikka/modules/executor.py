@@ -4,6 +4,7 @@
 # You can redistribute it and/or modify it under the terms of the GNU AGPLv3
 # 🔑 https://www.gnu.org/licenses/agpl-3.0.html
 
+
 import sys
 import traceback
 import time
@@ -17,16 +18,15 @@ from .. import loader, utils
 
 logger = logging.getLogger(__name__)
 
+
 @loader.tds
 class Executor(loader.Module):
     """Выполнение python кода"""
 
     strings = {
         "name": "Executor",
-
         "no_code": "<emoji document_id=5854929766146118183>❌</emoji> <b>Должно быть </b><code>{}exec [python код]</code>",
-
-        "executing": "<b><emoji document_id=5332600281970517875>🔄</emoji> Выполняю код...</b>"
+        "executing": "<b><emoji document_id=5332600281970517875>🔄</emoji> Выполняю код...</b>",
     }
 
     def __init__(self):
@@ -35,10 +35,9 @@ class Executor(loader.Module):
                 "hide_phone",
                 True,
                 lambda: "Скрывает твой номер телефона при выводе",
-                validator=loader.validators.Boolean()
+                validator=loader.validators.Boolean(),
             ),
         )
-
 
     async def client_ready(self, client, db):
         self.db = db
@@ -84,8 +83,9 @@ class Executor(loader.Module):
 
         code = utils.get_args_raw(message)
         if not code:
-            return await utils.answer(message, self.strings["no_code"].format(self.get_prefix()))
-
+            return await utils.answer(
+                message, self.strings["no_code"].format(self.get_prefix())
+            )
         await utils.answer(message, self.strings["executing"])
 
         reply = await message.get_reply_message()
@@ -99,14 +99,13 @@ class Executor(loader.Module):
         result = str(result)
         res = str(res)
 
-        if self.config['hide_phone']:
+        if self.config["hide_phone"]:
             t_h = "never gonna give you up"
 
             if result:
-                result = result.replace("+"+me.phone, t_h).replace(me.phone, t_h)
+                result = result.replace("+" + me.phone, t_h).replace(me.phone, t_h)
             if res:
-                res = res.replace("+"+me.phone, t_h).replace(me.phone, t_h)
-
+                res = res.replace("+" + me.phone, t_h).replace(me.phone, t_h)
         if result:
             result = f"""{'<emoji document_id=6334758581832779720>✅</emoji> Результат' if not cerr else '<emoji document_id=5440381017384822513>🚫</emoji> Ошибка'}:
 <pre><code class="language-python">{result}</code></pre>
@@ -115,9 +114,11 @@ class Executor(loader.Module):
             result += f"""<emoji document_id=6334778871258286021>💾</emoji> Код вернул:
 <pre><code class="language-python">{res}</code></pre>
 """
-
-        return await utils.answer(message, f"""<b>
+        return await utils.answer(
+            message,
+            f"""<b>
 <emoji document_id=5431376038628171216>💻</emoji> Код:
 <pre><code class="language-python">{code}</code></pre>
 {result}
-<emoji document_id=5451732530048802485>⏳</emoji> Выполнен за {round(stop_time - start_time, 5)} секунд</b>""")
+<emoji document_id=5451732530048802485>⏳</emoji> Выполнен за {round(stop_time - start_time, 5)} секунд</b>""",
+        )

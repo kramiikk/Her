@@ -14,7 +14,7 @@ from hikkatl.errors import (
     FloodWaitError,
 )
 
-from .. import loader
+from .. import loader, utils
 
 logger = logging.getLogger(__name__)
 
@@ -191,7 +191,7 @@ class BroadcastMod(loader.Module):
         if await self._is_authorized(message.sender_id):
             await self.manager.handle_command(message)
         else:
-            await message.respond("❌ У вас нет доступа к этой команде")
+            await utils.answer(message, "❌ У вас нет доступа к этой команде")
 
 
 @dataclass
@@ -424,7 +424,7 @@ class BroadcastManager:
         try:
             args = message.text.split()[1:]
             if not args:
-                await message.respond("❌ Укажите действие и код рассылки")
+                await utils.answer(message, "❌ Укажите действие и код рассылки")
                 return
             action = args[0].lower()
             code_name = args[1] if len(args) > 1 else None
@@ -436,11 +436,11 @@ class BroadcastManager:
                 await self._handle_watcher_command(message, args)
                 return
             if not code_name:
-                await message.respond("❌ Укажите код рассылки")
+                await utils.answer(message, "❌ Укажите код рассылки")
                 return
             code = self.codes.get(code_name)
             if action != "add" and not code:
-                await message.respond(f"❌ Код рассылки {code_name} не найден")
+                await utils.answer(message, f"❌ Код рассылки {code_name} не найден")
                 return
             command_handlers = {
                 "add": lambda: self._handle_add_command(message, code, code_name),
@@ -459,14 +459,14 @@ class BroadcastManager:
             if handler:
                 await handler()
             else:
-                await message.respond("❌ Неизвестное действие")
+                await utils.answer(message, "❌ Неизвестное действие")
         except Exception as e:
             logger.error(f"Error handling command: {e}")
 
     async def _handle_list_command(self, message: Message):
         """Обработчик команды list"""
         if not self.codes:
-            await message.respond("❌ Нет активных рассылок")
+            await utils.answer(message, "❌ Нет активных рассылок")
             return
         response = "📝 Список рассылок:\n\n"
         current_time = time.time()
@@ -485,13 +485,14 @@ class BroadcastManager:
                 f"  ├ Режим: {code.send_mode}\n"
                 f"  └ Все сообщения разом: {'да' if code.batch_mode else 'нет'}\n\n"
             )
-        await message.respond(response)
+        await utils.answer(message, response)
 
     async def _handle_watcher_command(self, message: Message, args: list):
         """Обработчик команды watcher"""
         if len(args) < 2:
             status = "включен" if self.watcher_enabled else "выключен"
-            await message.respond(
+            await utils.answer(
+                message, 
                 "ℹ️ Автодобавление чатов\n"
                 f"Текущий статус: {status}\n\n"
                 "Использование: .br watcher on/off"
@@ -499,10 +500,11 @@ class BroadcastManager:
             return
         mode = args[1].lower()
         if mode not in ["on", "off"]:
-            await message.respond("❌ Укажите on или off")
+            await utils.answer(message, "❌ Укажите on или off")
             return
         self.watcher_enabled = mode == "on"
-        await message.respond(
+        await utils.answer(
+            message, 
             f"✅ Автодобавление чатов {'включено' if self.watcher_enabled else 'выключено'}"
         )
 
@@ -513,7 +515,8 @@ class BroadcastManager:
         async with self._lock:
             reply = await message.get_reply_message()
             if not reply:
-                await message.respond(
+                await utils.answer(
+                    message, 
                     "❌ Ответьте на сообщение, которое нужно добавить в рассылку"
                 )
                 return
@@ -521,7 +524,8 @@ class BroadcastManager:
             if is_new:
                 code = Broadcast()
             if len(code.messages) >= self.MAX_MESSAGES_PER_CODE:
-                await message.respond(
+                await utils.answer(
+                    message, 
                     f"❌ Достигнут лимит сообщений ({self.MAX_MESSAGES_PER_CODE})"
                 )
                 return
@@ -544,11 +548,12 @@ class BroadcastManager:
                 if is_new:
                     self.codes[code_name] = code
                 await self.save_config()
-                await message.respond(
+                await utils.answer(
+                    message, 
                     f"✅ {'Рассылка создана и с' if is_new else 'С'}ообщение добавлено"
                 )
             else:
-                await message.respond("❌ Это сообщение уже есть в рассылке")
+                await utils.answer(message, "❌ Это сообщение уже есть в рассылке")
 
     async def _handle_delete_command(self, message: Message, code_name: str):
         """Обработчик команды delete"""
@@ -557,7 +562,7 @@ class BroadcastManager:
             self.broadcast_tasks[code_name].cancel()
         del self.codes[code_name]
         await self.save_config()
-        await message.respond(f"✅ Рассылка {code_name} удалена")
+        await utils.answer(message, f"✅ Рассылка {code_name} удалена")
 
     async def _handle_remove_command(self, message: Message, code: Broadcast):
         """Обработчик команды remove"""
@@ -569,9 +574,9 @@ class BroadcastManager:
             return
         if code.remove_message(reply.id, reply.chat_id):
             await self.save_config()
-            await message.respond("✅ Сообщение удалено из рассылки")
+            await utils.answer(message, "✅ Сообщение удалено из рассылки")
         else:
-            await message.respond("❌ Это сообщение не найдено в рассылке")
+            await utils.answer(message, "❌ Это сообщение не найдено в рассылке")
 
     async def _handle_addchat_command(
         self, message: Message, code: Broadcast, args: list
@@ -580,21 +585,22 @@ class BroadcastManager:
         if len(args) > 2:
             chat_id = await self._get_chat_id(args[2])
             if not chat_id:
-                await message.respond(
+                await utils.answer(
+                    message, 
                     "❌ Не удалось получить ID чата. Проверьте ссылку/юзернейм"
                 )
                 return
         else:
             chat_id = message.chat_id
         if len(code.chats) >= 500:
-            await message.respond(f"❌ Достигнут лимит чатов 500")
+            await utils.answer(message, f"❌ Достигнут лимит чатов 500")
             return
         if chat_id in code.chats:
             await message.respondondond("❌ Этот чат уже добавлен в рассылку")
             return
         code.chats.add(chat_id)
         await self.save_config()
-        await message.respond("✅ Чат добавлен в рассылку")
+        await utils.answer(message, "✅ Чат добавлен в рассылку")
 
     async def _handle_rmchat_command(
         self, message: Message, code: Broadcast, args: list
@@ -603,7 +609,8 @@ class BroadcastManager:
         if len(args) > 2:
             chat_id = await self._get_chat_id(args[2])
             if not chat_id:
-                await message.respond(
+                await utils.answer(
+                    message, 
                     "❌ Не удалось получить ID чата. Проверьте ссылку/юзернейм"
                 )
                 return
@@ -636,27 +643,27 @@ class BroadcastManager:
             await message.respondond("❌ Некорректный интервал (0 < min < max <= 1440)")
             return
         await self.save_config()
-        await message.respond(f"✅ Установлен интервал {min_val}-{max_val} минут")
+        await utils.answer(message, f"✅ Установлен интервал {min_val}-{max_val} минут")
 
     async def _handle_mode_command(self, message: Message, code: Broadcast, args: list):
         """Обработчик команды mode"""
         if len(args) < 3:
-            await message.respond("❌ Укажите режим отправки (auto/forward)")
+            await utils.answer(message, "❌ Укажите режим отправки (auto/forward)")
             return
         mode = args[2].lower()
         if mode not in ["auto", "forward"]:
-            await message.respond("❌ Неверный режим.")
+            await utils.answer(message, "❌ Неверный режим.")
             return
         code.send_mode = mode
         await self.save_config()
-        await message.respond(f"✅ Установлен режим отправки: {mode}")
+        await utils.answer(message, f"✅ Установлен режим отправки: {mode}")
 
     async def _handle_allmsgs_command(
         self, message: Message, code: Broadcast, args: list
     ):
         """Обработчик команды allmsgs"""
         if len(args) < 3:
-            await message.respond("❌ Укажите on или off")
+            await utils.answer(message, "❌ Укажите on или off")
             return
         mode = args[2].lower()
         if mode not in ["on", "off"]:
@@ -664,7 +671,8 @@ class BroadcastManager:
             return
         code.batch_mode = mode == "on"
         await self.save_config()
-        await message.respond(
+        await utils.answer(
+            message, 
             f"✅ Отправка всех сообщений {'включена' if code.batch_mode else 'выключена'}"
         )
 
@@ -673,10 +681,10 @@ class BroadcastManager:
     ):
         """Обработчик команды start"""
         if not code.messages:
-            await message.respond("❌ Добавьте хотя бы одно сообщение в рассылку")
+            await utils.answer(message, "❌ Добавьте хотя бы одно сообщение в рассылку")
             return
         if not code.chats:
-            await message.respond("❌ Добавьте хотя бы один чат в рассылку")
+            await utils.answer(message, "❌ Добавьте хотя бы один чат в рассылку")
             return
         if (
             code_name in self.broadcast_tasks
@@ -693,7 +701,7 @@ class BroadcastManager:
             self._broadcast_loop(code_name)
         )
         await self.save_config()
-        await message.respond(f"✅ Рассылка {code_name} запущена")
+        await utils.answer(message, f"✅ Рассылка {code_name} запущена")
 
     async def _handle_stop_command(
         self, message: Message, code: Broadcast, code_name: str
@@ -710,7 +718,7 @@ class BroadcastManager:
             except asyncio.CancelledError:
                 pass
         await self.save_config()
-        await message.respond(f"✅ Рассылка {code_name} остановлена")
+        await utils.answer(message, f"✅ Рассылка {code_name} остановлена")
 
     async def _get_chat_permissions(self, chat_id: int) -> bool:
         """Проверяет, может ли бот отправлять сообщения в чат"""

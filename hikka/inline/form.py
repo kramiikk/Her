@@ -267,7 +267,8 @@ class Form(InlineUnit):
 
         if isinstance(message, Message) and not silent:
             try:
-                status_message = await message.respond(
+                status_message = await utils.answer(
+                    message,
                     (
                         utils.get_platform_emoji()
                         if self._client.hikka_me.premium and CUSTOM_EMOJIS
@@ -328,7 +329,8 @@ class Form(InlineUnit):
         async def answer(msg: str):
             nonlocal message
             if isinstance(message, Message):
-                await message.respond(
+                await utils.answer(
+                    message,
                     msg,
                     **({} if message.out else {"reply_to": utils.get_topic(message)}),
                 )
@@ -366,7 +368,7 @@ class Form(InlineUnit):
         msg = InlineMessage(self, unit_id, inline_message_id)
 
         if not isinstance(base_reply_markup, Placeholder):
-            await msg.respond(text, reply_markup=base_reply_markup)
+            await utils.answer(msg, text, reply_markup=base_reply_markup)
 
         return msg
 

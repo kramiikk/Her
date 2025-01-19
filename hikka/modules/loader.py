@@ -387,8 +387,8 @@ class LoaderMod(loader.Module):
             and not force_save
         ):
             if message.file:
-                await message.edit("")
-                message = await message.respond("🪐", reply_to=utils.get_topic(message))
+                await utils.answer(message, "")
+                message = await utils.answer(message, "🪐", reply_to=utils.get_topic(message))
 
             if await self.inline.form(
                 self.strings("module_fs"),
@@ -478,7 +478,7 @@ class LoaderMod(loader.Module):
                 if isinstance(message, Message):
                     if getattr(message, "file", None):
                         m = utils.get_chat_id(message)
-                        await message.edit("")
+                        await utils.answer(message, "")
                     else:
                         m = message
 

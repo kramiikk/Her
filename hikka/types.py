@@ -29,7 +29,7 @@ from hikkatl.tl.types import (
     UserFull,
 )
 
-from . import version
+from . import version, utils
 from ._reference_finder import replace_all_refs
 from .inline.types import (
     BotInlineCall,
@@ -163,7 +163,7 @@ class Module:
         message = (
             (await self._client.send_message(peer, cmd))
             if peer
-            else (await message.respond(cmd))
+            else (await utils.answer(message, cmd))
         )
         await self.allmodules.commands[command](message)
         return message
@@ -279,7 +279,7 @@ class Module:
                 else:
                     message = await utils.answer(message, frame)
             elif isinstance(message, InlineMessage) and inline:
-                await message.respond(frame)
+                await utils.answer(message, frame)
 
             await asyncio.sleep(interval)
 

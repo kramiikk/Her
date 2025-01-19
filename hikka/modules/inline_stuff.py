@@ -39,7 +39,7 @@ class InlineStuff(loader.Module):
             if id_ not in self.inline._custom_map:
                 return
 
-            m = await message.respond("🪐", reply_to=utils.get_topic(message))
+            m = await utils.answer(message, "🪐", reply_to=utils.get_topic(message))
 
             await self.inline.gallery(
                 message=m,
