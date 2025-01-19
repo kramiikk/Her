@@ -84,53 +84,53 @@ class InlineStuff(loader.Module):
         # Get bot instance
         bot = self.inline.bot
         
-        # Escape special characters for MarkdownV2
+        # Enhanced escape function for MarkdownV2
         def escape_markdown(text):
-            escape_chars = r'_*[]()~`>#+-=|{}.!'
+            # Characters that need escaping in MarkdownV2
+            escape_chars = '_*[]()~`>#+-=|{}.!'
             return ''.join(f'\\{c}' if c in escape_chars else c for c in str(text))
         
-        # Create user info text with escaped characters
-        user_name = escape_markdown(message.from_user.full_name)
-        username = escape_markdown(f"@{message.from_user.username}" if message.from_user.username else "No username")
-        msg_text = escape_markdown(message.text)
-        
-        user_info = (
-            f"👤 User: {user_name} \\({username}\\)\n"
-            f"📱 User ID: `{message.from_user.id}`\n"
-            f"💬 Message: {msg_text}\n"
-        )
-        
-        # If this is a /start command, send the welcome message to user
-        if message.text == "/start":
-            await bot.send_photo(
-                chat_id=message.from_user.id,
-                photo="https://i.imgur.com/iv1aMNA.jpeg",
-                caption=self.strings("this_is"),
-                parse_mode="MarkdownV2"  # Changed from HTML to MarkdownV2 for consistency
-            )
-        
         try:
+            # Create user info text with properly escaped characters
+            user_name = escape_markdown(message.from_user.full_name)
+            username = message.from_user.username
+            username_text = escape_markdown(f"@{username}" if username else "No username")
+            msg_text = escape_markdown(message.text or "")
+            
+            user_info = (
+                f"👤 User: {user_name} \\({username_text}\\)\n"
+                f"📱 User ID: `{message.from_user.id}`\n"
+                f"💬 Message: {msg_text}\n"
+            )
+            
+            # If this is a /start command, send the welcome message to user
+            if message.text == "/start":
+                # For the welcome message, use plain text without special formatting
+                await bot.send_photo(
+                    chat_id=message.from_user.id,
+                    photo="https://i.imgur.com/iv1aMNA.jpeg",
+                    caption=self.strings("this_is"),
+                    parse_mode=None  # Use plain text to avoid parsing issues
+                )
+            
             await bot.send_message(
                 chat_id=self.tg_id,
                 text=user_info,
                 parse_mode="MarkdownV2"
             )
-        except Exception as e:
-            logger.error(f"Failed to forward message to owner: {e}", exc_info=True)
-        
-        # Handle owner replies to forwarded messages
-        if message.reply_to_message and message.from_user.id == self.tg_id:
-            try:
-                # Extract original user's ID from the replied message
+            
+            # Handle owner replies to forwarded messages
+            if message.reply_to_message and message.from_user.id == self.tg_id:
                 replied_text = message.reply_to_message.text
                 user_id_match = re.search(r"User ID: `(\d+)`", replied_text)
                 
                 if user_id_match:
                     target_user_id = int(user_id_match.group(1))
-                    # Forward owner's reply to the user using bot
                     await bot.send_message(
                         chat_id=target_user_id,
-                        text=message.text
+                        text=message.text,
+                        parse_mode=None  # Use plain text for replies to avoid formatting issues
                     )
-            except Exception as e:
-                logger.error(f"Failed to send reply to user: {e}", exc_info=True)
+                    
+        except Exception as e:
+            logger.error(f"Failed to process message: {e}", exc_info=True)
