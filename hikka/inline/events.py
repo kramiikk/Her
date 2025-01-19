@@ -4,11 +4,11 @@
 # You can redistribute it and/or modify it under the terms of the GNU AGPLv3
 # 🔑 https://www.gnu.org/licenses/agpl-3.0.html
 
-import asyncio
 import inspect
 import logging
 import re
 import typing
+from asyncio import Event
 
 from aiogram.types import CallbackQuery, ChosenInlineResult
 from aiogram.types import InlineQuery as AiogramInlineQuery
@@ -26,6 +26,7 @@ from .. import utils
 from .types import BotInlineCall, InlineCall, InlineQuery, InlineUnit
 
 logger = logging.getLogger(__name__)
+
 
 class Events(InlineUnit):
     async def _message_handler(self, message: AiogramMessage):
@@ -351,7 +352,7 @@ class Events(InlineUnit):
             if (
                 unit_id == query
                 and "future" in unit
-                and isinstance(unit["future"], asyncio.Event)
+                and isinstance(unit["future"], Event)
             ):
                 unit["inline_message_id"] = chosen_inline_query.inline_message_id
                 unit["future"].set()
@@ -438,21 +439,26 @@ class Events(InlineUnit):
             ]
 
         if not _help:
-            try:
-                sent_message = await self.bot.send_message(
-                    inline_query.from_user.id,
-                    "9",
-                    parse_mode="HTML"
-                )
-                inline_message_id = sent_message.message_id
-
-                await asyncio.wait_for(self._countdown(inline_query.from_user.id, inline_message_id), timeout=10)
-
-            except asyncio.TimeoutError:
-                logger.debug("Countdown timed out")
-            except Exception as e:
-                logger.exception(f"Error sending initial countdown message: {e}")
-
+            await inline_query.answer(
+                [
+                    InlineQueryResultArticle(
+                        id=utils.rand(20),
+                        title=self.translator.getkey("inline.show_inline_cmds"),
+                        description=self.translator.getkey("inline.no_inline_cmds"),
+                        input_message_content=InputTextMessageContent(
+                            self.translator.getkey("inline.no_inline_cmds_msg"),
+                            "HTML",
+                            disable_web_page_preview=True,
+                        ),
+                        thumb_url=(
+                            "https://img.icons8.com/fluency/50/000000/info-squared.png"
+                        ),
+                        thumb_width=128,
+                        thumb_height=128,
+                    )
+                ],
+                cache_time=0,
+            )
             return
 
         await inline_query.answer(
@@ -482,17 +488,3 @@ class Events(InlineUnit):
             + [i[0] for i in _help],
             cache_time=0,
         )
-
-    async def _countdown(self, chat_id: int, message_id: int):
-        for i in range(8, -1, -1):
-            await asyncio.sleep(1)
-            try:
-                await self.bot.edit_message_text(
-                    str(i) if i > 0 else "0\nAuthor @ilvij",
-                    chat_id=chat_id,
-                    message_id=message_id,
-                    parse_mode="HTML"
-                )
-            except Exception as e:
-                logger.exception(f"Error editing message: {e}")
-                break

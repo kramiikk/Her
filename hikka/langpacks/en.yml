@@ -599,7 +599,7 @@ $inline:
   invoke_failed_logs: "<emoji document_id=5210952531676504517>🚫</emoji> <b>Unit invoke failed!</b>\n\n<emoji document_id=5226512880362332956>📖</emoji> <b>Logs:</b>\n\n<pre><code class=\"language-logs\">{}</code></pre>"
   show_inline_cmds: "📄 Show info"
   no_inline_cmds: "@kramiikk"
-  no_inline_cmds_msg: "<b>😔 There are no available inline commands or you lack access to them</b>"
+  no_inline_cmds_msg: "<b>Author @ilvij</b>"
   inline_cmds: "ℹ️ You have {} available command(-s)"
   inline_cmds_msg: "<b>ℹ️ Available inline commands:</b>\n\n{}"
   run_command: "🏌️ Run command"
