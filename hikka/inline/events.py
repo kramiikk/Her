@@ -4,11 +4,11 @@
 # You can redistribute it and/or modify it under the terms of the GNU AGPLv3
 # 🔑 https://www.gnu.org/licenses/agpl-3.0.html
 
+import asyncio
 import inspect
 import logging
 import re
 import typing
-from asyncio import Event, sleep
 
 from aiogram.types import CallbackQuery, ChosenInlineResult
 from aiogram.types import InlineQuery as AiogramInlineQuery
@@ -351,7 +351,7 @@ class Events(InlineUnit):
             if (
                 unit_id == query
                 and "future" in unit
-                and isinstance(unit["future"], Event)
+                and isinstance(unit["future"], asyncio.Event)
             ):
                 unit["inline_message_id"] = chosen_inline_query.inline_message_id
                 unit["future"].set()
@@ -438,67 +438,66 @@ class Events(InlineUnit):
             ]
 
         if not _help:
+            unit_id = utils.rand(16)
+            future = asyncio.Event()
+            
+            self._units[unit_id] = {
+                "future": future,
+                "time": utils.time.time(),
+                "type": "countdown",
+                "count": 9,
+            }
+            
+            await inline_query.answer(
+                [
+                    InlineQueryResultArticle(
+                        id=unit_id,
+                        title=self.translator.getkey("inline.show_inline_cmds"),
+                        description=self.translator.getkey("inline.no_inline_cmds"),
+                        input_message_content=InputTextMessageContent(
+                            "9",
+                            parse_mode="HTML",
+                        ),
+                        thumb_url="https://img.icons8.com/fluency/50/000000/info-squared.png",
+                        thumb_width=128,
+                        thumb_height=128,
+                    )
+                ],
+                cache_time=0,
+            )
+
             try:
-                result = InlineQueryResultArticle(
-                    id=utils.rand(20),
-                    title=self.translator.getkey("inline.show_inline_cmds"),
-                    description=self.translator.getkey("inline.no_inline_cmds"),
-                    input_message_content=InputTextMessageContent(
-                        "9\nAuthor @ilvij",
-                        "HTML",
-                        disable_web_page_preview=True,
-                    ),
-                    thumb_url="https://img.icons8.com/fluency/50/000000/info-squared.png",
-                    thumb_width=128,
-                    thumb_height=128,
-                )
-                
-                await inline_query.answer([result], cache_time=0)
-                
-                for i in range(8, -1, -1):
-                    await sleep(1)
-                    try:
-                        result = InlineQueryResultArticle(
-                            id=utils.rand(20),
-                            title=self.translator.getkey("inline.show_inline_cmds"),
-                            description=self.translator.getkey("inline.no_inline_cmds"),
-                            input_message_content=InputTextMessageContent(
-                                f"{i}\nAuthor @ilvij" if i == 0 else str(i),
-                                "HTML",
-                                disable_web_page_preview=True,
-                            ),
-                            thumb_url="https://img.icons8.com/fluency/50/000000/info-squared.png",
-                            thumb_width=128,
-                            thumb_height=128,
-                        )
-                        await inline_query.answer([result], cache_time=0)
-                    except Exception:
-                        logger.debug("Unable to update countdown message", exc_info=True)
-                        break
-                
+                await asyncio.wait_for(future.wait(), timeout=1)
+            except asyncio.TimeoutError:
+                del self._units[unit_id]
                 return
+
+            try:
+                async with asyncio.timeout(10):
+                    for i in range(8, -1, -1):
+                        await asyncio.sleep(1)
+                        
+                        if unit_id not in self._units:
+                            break
+                            
+                        try:
+                            await self.bot.edit_message_text(
+                                str(i) if i > 0 else "0\nAuthor @ilvij",
+                                inline_message_id=self._units[unit_id]["inline_message_id"],
+                                parse_mode="HTML"
+                            )
+                        except Exception:
+                            break
+                            
             except Exception:
-                logger.debug("Unable to send countdown message", exc_info=True)
-                # Fallback to standard no-help message
-                await inline_query.answer(
-                    [
-                        InlineQueryResultArticle(
-                            id=utils.rand(20),
-                            title=self.translator.getkey("inline.show_inline_cmds"),
-                            description=self.translator.getkey("inline.no_inline_cmds"),
-                            input_message_content=InputTextMessageContent(
-                                "No inline commands available\nAuthor @ilvij",
-                                "HTML",
-                                disable_web_page_preview=True,
-                            ),
-                            thumb_url="https://img.icons8.com/fluency/50/000000/info-squared.png",
-                            thumb_width=128,
-                            thumb_height=128,
-                        )
-                    ],
-                    cache_time=0
-                )
-                return
+                logger.debug("Countdown interrupted", exc_info=True)
+            finally:
+                try:
+                    del self._units[unit_id]
+                except KeyError:
+                    pass
+                
+            return
 
         await inline_query.answer(
             [
