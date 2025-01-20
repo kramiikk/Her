@@ -199,11 +199,6 @@ class Help(loader.Module):
             message,
             reply
             + (f"\n\n{self.strings('not_exact')}" if not exact else "")
-            + (
-                f"\n\n{self.strings('core_notice')}"
-                if module.__origin__.startswith("<core")
-                else ""
-            ),
         )
 
     @loader.command(ru_doc="[args] | Помощь с вашими модулями!", ua_doc="[args] | допоможіть з вашими модулями!", de_doc="[args] | Hilfe mit deinen Modulen!")

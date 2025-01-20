@@ -399,7 +399,6 @@ help:
   partial_load: "<emoji document_id=5355133243773435190>☝️</emoji> <b>Userbot is not fully loaded, so not all modules are shown</b>"
   not_exact: "<emoji document_id=5355133243773435190>☝️</emoji> <b>No exact match occured, so the closest result is shown instead</b>"
   request_join: "You requested link for Her support chat"
-  core_notice: "<emoji document_id=5355133243773435190>☝️</emoji> <b>This is a core module. You can't unload it nor replace</b>"
 
 her_info:
   name: "HerInfo"

@@ -24,7 +24,6 @@
 
 import argparse
 import asyncio
-import socket
 import contextlib
 import importlib
 import json
