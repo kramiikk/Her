@@ -64,12 +64,6 @@ class LoaderMod(loader.Module):
 
         self.config = loader.ModuleConfig(
             loader.ConfigValue(
-                "MODULES_REPO",
-                "https://raw.githubusercontent.com/coddrago/modules/main",
-                lambda: self.strings("repo_config_doc"),
-                validator=loader.validators.Link(),
-            ),
-            loader.ConfigValue(
                 "share_link",
                 doc=lambda: self.strings("share_link_doc"),
                 validator=loader.validators.Boolean(),
@@ -84,22 +78,6 @@ class LoaderMod(loader.Module):
             ),
         )
 
-    async def _async_init(self):
-        modules = list(
-            filter(
-                lambda x: not x.startswith(
-                    "https://raw.githubusercontent.com/coddrago/modules/main"
-                ),
-                utils.array_sum(
-                    map(
-                        lambda x: list(x.values()),
-                        (await self.get_repo_list()).values(),
-                    )
-                ),
-            )
-        )
-        asyncio.ensure_future(self._storage.preload(modules))
-
     async def client_ready(self):
         while not (settings := self.lookup("settings")):
             await asyncio.sleep(0.5)
@@ -111,7 +89,6 @@ class LoaderMod(loader.Module):
         main.hikka.ready.set()
 
         asyncio.ensure_future(self._update_modules())
-        asyncio.ensure_future(self._async_init())
 
     @loader.loop(interval=3, wait_before=True, autostart=True)
     async def _config_autosaver(self):
@@ -163,7 +140,8 @@ class LoaderMod(loader.Module):
         )
 
     @loader.command()
-    async def dlm(self, message: Message, force_pm: bool = False):
+    async def dlm(self, message: Message):
+        """Downloads and installs a module from the official module repo"""
         if args := utils.get_args(message):
             args = args[0]
 
@@ -172,7 +150,7 @@ class LoaderMod(loader.Module):
             )
 
             if (
-                await self.download_and_install(args, message, force_pm)
+                await self.download_and_install(args, message)
                 == MODULE_LOADING_FORBIDDEN
             ):
                 return
@@ -180,32 +158,7 @@ class LoaderMod(loader.Module):
             if self.fully_loaded:
                 self.update_modules_in_db()
         else:
-            await self.inline.list(
-                message,
-                [
-                    self.strings("avail_header")
-                    + f"\n☁️ {self.config['MODULES_REPO'].strip('/')}\n\n"
-                    + "\n".join(
-                        [
-                            " | ".join(chunk)
-                            for chunk in utils.chunks(
-                                [
-                                    f"<code>{i}</code>"
-                                    for i in sorted(
-                                        [
-                                            utils.escape_html(
-                                                i.split("/")[-1].split(".")[0]
-                                            )
-                                            for i in (await self.get_repo_list())[self.config['MODULES_REPO']].values()
-                                        ]
-                                    )
-                                ],
-                                5,
-                            )
-                        ]
-                    )
-                ],
-            )
+            await utils.answer(message, "Нужно указать модуль")
 
     async def _get_modules_to_load(self):
         todo = self.get("loaded_modules", {})
@@ -237,21 +190,6 @@ class LoaderMod(loader.Module):
 
         return self._links_cache[repo]["data"]
 
-    async def get_repo_list(self) -> dict:
-        return {
-            repo: {
-                f"Mod/{repo_id}/{i}": f'{repo.strip("/")}/{link}.py'
-                for i, link in enumerate(set(await self._get_repo(repo)))
-            }
-            for repo_id, repo in enumerate([self.config["MODULES_REPO"]])
-            if repo.startswith("http")
-        }
-
-    async def get_links_list(self) -> typing.List[str]:
-        links = await self.get_repo_list()
-        main_repo = list(links.pop(self.config["MODULES_REPO"]).values())
-        return main_repo
-
     async def _find_link(self, module_name: str) -> typing.Union[str, bool]:
         return next(
             filter(
@@ -265,7 +203,6 @@ class LoaderMod(loader.Module):
         self,
         module_name: str,
         message: typing.Optional[Message] = None,
-        force_pm: bool = False,
     ) -> int:
         try:
             blob_link = False
@@ -503,9 +440,6 @@ class LoaderMod(loader.Module):
             except Exception:
                 uid = "__extmod_" + str(uuid.uuid4())
         else:
-            if name.startswith(self.config["MODULES_REPO"]):
-                name = name.split("/")[-1].split(".py")[0]
-
             uid = name.replace("%", "%%").replace(".", "%d")
 
         module_name = f"hikka.modules.{uid}"
