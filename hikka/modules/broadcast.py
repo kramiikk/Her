@@ -295,16 +295,11 @@ class BroadcastManager:
     BATCH_SIZE_SMALL = 5
     BATCH_SIZE_MEDIUM = 8
     BATCH_SIZE_LARGE = 10
-
     MAX_MESSAGES_PER_CODE = 50
-
     MAX_CONSECUTIVE_ERRORS = 7
-
     BATCH_THRESHOLD_SMALL = 20
     BATCH_THRESHOLD_MEDIUM = 50
-
     NOTIFY_DELAY = 1
-
     NOTIFY_GROUP_SIZE = 30
     PERMISSION_CHECK_INTERVAL = 1800
     GLOBAL_MINUTE_LIMITER = RateLimiter(20, 60)
@@ -782,7 +777,7 @@ class BroadcastManager:
             await self.GLOBAL_MINUTE_LIMITER.acquire()
             await self.GLOBAL_HOUR_LIMITER.acquire()
 
-            await asyncio.sleep(1)
+            await asyncio.sleep(random.uniform(1, 3))
 
             is_auto_mode = send_mode == "auto"
             is_forwardable = isinstance(msg, list) or (
