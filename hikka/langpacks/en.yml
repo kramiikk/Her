@@ -497,7 +497,6 @@ loader:
   no_repo: "<emoji document_id=5210952531676504517>🚫</emoji> <b>You need to specify repo to add</b>"
   repo_not_exists: "<emoji document_id=5210952531676504517>🚫</emoji> <b>Repo</b> <code>{}</code> <b>is not added</b>"
   repo_deleted: "<emoji document_id=5784993237412351403>✅</emoji> <b>Repo</b> <code>{}</code> <b>deleted</b>"
-  _cmd_doc_addrepo: "Add a repository to the list of repositories"
   _cmd_doc_clearmodules: "Delete all installed modules"
   _cmd_doc_delrepo: "Remove a repository from the list of repositories"
   _cmd_doc_dlmod: "Install a module from the official module repo"

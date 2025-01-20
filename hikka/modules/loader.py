@@ -22,7 +22,6 @@ import sys
 import time
 import typing
 import uuid
-from collections import ChainMap
 from importlib.machinery import ModuleSpec
 from urllib.parse import urlparse
 
@@ -69,12 +68,6 @@ class LoaderMod(loader.Module):
                 "https://raw.githubusercontent.com/coddrago/modules/main",
                 lambda: self.strings("repo_config_doc"),
                 validator=loader.validators.Link(),
-            ),
-            loader.ConfigValue(
-                "ADDITIONAL_REPOS",
-                [],
-                lambda: self.strings("add_repo_config_doc"),
-                validator=loader.validators.Series(validator=loader.validators.Link()),
             ),
             loader.ConfigValue(
                 "share_link",
@@ -191,7 +184,7 @@ class LoaderMod(loader.Module):
                 message,
                 [
                     self.strings("avail_header")
-                    + f"\n☁️ {repo.strip('/')}\n\n"
+                    + f"\n☁️ {self.config['MODULES_REPO'].strip('/')}\n\n"
                     + "\n".join(
                         [
                             " | ".join(chunk)
@@ -203,7 +196,7 @@ class LoaderMod(loader.Module):
                                             utils.escape_html(
                                                 i.split("/")[-1].split(".")[0]
                                             )
-                                            for i in mods.values()
+                                            for i in (await self.get_repo_list())[self.config['MODULES_REPO']].values()
                                         ]
                                     )
                                 ],
@@ -211,7 +204,6 @@ class LoaderMod(loader.Module):
                             )
                         ]
                     )
-                    for repo, mods in (await self.get_repo_list()).items()
                 ],
             )
 
@@ -245,26 +237,20 @@ class LoaderMod(loader.Module):
 
         return self._links_cache[repo]["data"]
 
-    async def get_repo_list(
-        self,
-        only_primary: bool = False,
-    ) -> dict:
+    async def get_repo_list(self) -> dict:
         return {
             repo: {
                 f"Mod/{repo_id}/{i}": f'{repo.strip("/")}/{link}.py'
                 for i, link in enumerate(set(await self._get_repo(repo)))
             }
-            for repo_id, repo in enumerate(
-                [self.config["MODULES_REPO"]]
-                + ([] if only_primary else self.config["ADDITIONAL_REPOS"])
-            )
+            for repo_id, repo in enumerate([self.config["MODULES_REPO"]])
             if repo.startswith("http")
         }
 
     async def get_links_list(self) -> typing.List[str]:
         links = await self.get_repo_list()
         main_repo = list(links.pop(self.config["MODULES_REPO"]).values())
-        return main_repo + list(dict(ChainMap(*list(links.values()))).values())
+        return main_repo
 
     async def _find_link(self, module_name: str) -> typing.Union[str, bool]:
         return next(
@@ -1041,62 +1027,6 @@ class LoaderMod(loader.Module):
                 }
             ]
         )
-
-    @loader.command()
-    async def addrepo(self, message: Message):
-        if not (args := utils.get_args_raw(message)) or (
-            not utils.check_url(args) and not utils.check_url(f"https://{args}")
-        ):
-            await utils.answer(message, self.strings("no_repo"))
-            return
-
-        if args.endswith("/"):
-            args = args[:-1]
-
-        if not args.startswith("https://") and not args.startswith("http://"):
-            args = f"https://{args}"
-
-        try:
-            r = await utils.run_sync(
-                requests.get,
-                f"{args}/full.txt",
-                auth=(
-                    tuple(self.config["basic_auth"].split(":", 1))
-                    if self.config["basic_auth"]
-                    else None
-                ),
-            )
-            r.raise_for_status()
-            if not r.text.strip():
-                raise ValueError
-        except Exception:
-            await utils.answer(message, self.strings("no_repo"))
-            return
-
-        if args in self.config["ADDITIONAL_REPOS"]:
-            await utils.answer(message, self.strings("repo_exists").format(args))
-            return
-
-        self.config["ADDITIONAL_REPOS"] += [args]
-
-        await utils.answer(message, self.strings("repo_added").format(args))
-
-    @loader.command()
-    async def delrepo(self, message: Message):
-        if not (args := utils.get_args_raw(message)) or not utils.check_url(args):
-            await utils.answer(message, self.strings("no_repo"))
-            return
-
-        if args.endswith("/"):
-            args = args[:-1]
-
-        if args not in self.config["ADDITIONAL_REPOS"]:
-            await utils.answer(message, self.strings("repo_not_exists"))
-            return
-
-        self.config["ADDITIONAL_REPOS"].remove(args)
-
-        await utils.answer(message, self.strings("repo_deleted").format(args))
 
     async def _inline__clearmodules(self, call: InlineCall):
         self.set("loaded_modules", {})
