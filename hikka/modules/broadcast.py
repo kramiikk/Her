@@ -727,50 +727,23 @@ class BroadcastManager:
         Returns: (permission_level, reason)
         permission_level:
             0 - No permissions
-            1 - Text only
-            2 - Full media permissions
+            1 - Text only (or no photo permission)
+            2 - Full media permissions (photos allowed)
         """
         try:
-            me = await self.client.get_me()
-            permissions = await self.client.get_permissions(chat_id, me.id)
+            try:
+                entity = await self.client.get_entity(chat_id)
+            except ValueError:
+                return self.MediaPermissions.NONE, "banned_or_no_access"
+            if not hasattr(entity, "default_banned_rights"):
+                return self.MediaPermissions.NONE, "check_failed"
+            banned = entity.default_banned_rights
 
-            can_send_messages = False
-
-            if hasattr(permissions, "post_messages"):
-                can_send_messages = bool(permissions.post_messages)
-            elif hasattr(permissions, "send_messages"):
-                can_send_messages = bool(permissions.send_messages)
-            elif hasattr(permissions, "chat") and hasattr(
-                permissions.chat, "send_messages"
-            ):
-                can_send_messages = bool(permissions.chat.send_messages)
-            elif hasattr(permissions, "permissions") and hasattr(
-                permissions.permissions, "send_messages"
-            ):
-                can_send_messages = bool(permissions.permissions.send_messages)
-            if not can_send_messages:
+            if banned.send_messages:
                 return self.MediaPermissions.NONE, "no_permission"
-            can_send_media = False
-
-            # Check permissions in different possible locations
-
-            def check_media_permission(perms):
-                """Helper to check media permissions from different objects"""
-                if hasattr(perms, "send_media"):
-                    return bool(perms.send_media)
-                if hasattr(perms, "send_photos"):
-                    return bool(perms.send_photos)
-                return False
-
-            if hasattr(permissions, "chat"):
-                can_send_media = check_media_permission(permissions.chat)
-            if not can_send_media and hasattr(permissions, "permissions"):
-                can_send_media = check_media_permission(permissions.permissions)
-            if not can_send_media:
-                can_send_media = check_media_permission(permissions)
-            if can_send_media:
-                return self.MediaPermissions.FULL_MEDIA, "full_access"
-            return self.MediaPermissions.TEXT_ONLY, "text_only"
+            if banned.send_media or banned.send_photos:
+                return self.MediaPermissions.TEXT_ONLY, "text_only"
+            return self.MediaPermissions.FULL_MEDIA, "full_access"
         except Exception as e:
             logger.error(f"Permission check error for chat {chat_id}: {str(e)}")
             return self.MediaPermissions.NONE, "check_failed"
@@ -791,9 +764,7 @@ class BroadcastManager:
                 return set()
             failed_chats: Set[int] = set()
             temporary_failed_chats: Set[int] = set()
-            media_restricted_chats: Set[int] = (
-                set()
-            )  # Новый сет для чатов с ограничением медиа
+            media_restricted_chats: Set[int] = set()
             success_count: int = 0
             flood_wait_count: int = 0
 
@@ -804,11 +775,9 @@ class BroadcastManager:
                     error_key = f"{chat_id}_general"
                     perm_key = f"{chat_id}_permission"
 
-                    # Check if we should retry permission check
-
                     last_check = self.last_error_time.get(perm_key, 0)
                     if time.time() - last_check > self.PERMISSION_CHECK_INTERVAL:
-                        perm_level, reason = await self._get_chat_permissions(chat_id)
+                        perm_level = await self._get_chat_permissions(chat_id)
 
                         if perm_level == self.MediaPermissions.NONE:
                             self.error_counts[perm_key] = (
@@ -824,8 +793,6 @@ class BroadcastManager:
                             else:
                                 temporary_failed_chats.add(chat_id)
                             return
-                        # Проверяем сообщения на наличие медиа
-
                         has_media = any(
                             (isinstance(msg, list) and any(m.media for m in msg))
                             or (not isinstance(msg, list) and msg.media)
@@ -836,16 +803,12 @@ class BroadcastManager:
                             media_restricted_chats.add(chat_id)
                             logger.warning(f"Chat {chat_id} restricts media content")
                             return
-                    # Send messages
-
                     for message in messages_to_send:
                         success = await self._send_message(
                             code_name, chat_id, message, code.send_mode
                         )
                         if not success:
                             raise Exception(f"Failed to send message to {chat_id}")
-                    # Reset error counters on success
-
                     success_count += 1
                     self.error_counts[error_key] = 0
                     self.error_counts[perm_key] = 0
@@ -855,8 +818,6 @@ class BroadcastManager:
                 except Exception as e:
                     temporary_failed_chats.add(chat_id)
                     logger.error(f"Error in chat {chat_id}: {str(e)}")
-
-            # Process chats
 
             chats = list(code.chats)
             random.shuffle(chats)
@@ -883,16 +844,12 @@ class BroadcastManager:
                 tasks = [send_to_chat(chat_id) for chat_id in current_batch]
                 await asyncio.gather(*tasks)
                 await self._calculate_and_sleep(code.interval[0], code.interval[1])
-            # Log results
-
             if temporary_failed_chats:
                 logger.info(
                     f"Temporary failures in {len(temporary_failed_chats)} chats"
                 )
             if media_restricted_chats:
                 logger.info(f"Media restricted in {len(media_restricted_chats)} chats")
-            # Notify about media restricted chats
-
             if media_restricted_chats:
                 try:
                     me = await self.client.get_me()
@@ -904,8 +861,6 @@ class BroadcastManager:
                     await self.client.send_message(me.id, message)
                 except Exception as e:
                     logger.error(f"Failed to send media restriction notification: {e}")
-            # Return only permanently failed chats
-
             return failed_chats
 
     async def _send_message(
