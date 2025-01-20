@@ -154,7 +154,6 @@ class BroadcastMod(loader.Module):
         self.manager = BroadcastManager(self._client, self.db)
         try:
             await asyncio.wait_for(self.manager._load_config(), timeout=30)
-            self.me_id = (await self._client.get_me()).id
             self._initialized = True
         except asyncio.TimeoutError:
             logger.error("Initialization timed out")
@@ -172,7 +171,7 @@ class BroadcastMod(loader.Module):
                 return
             if not (message and message.text and message.text.startswith("!")):
                 return
-            if message.sender_id != self.me_id:
+            if message.sender_id != self.tg_id:
                 return
             parts = message.text.split()
             code_name = parts[0][1:]
@@ -188,8 +187,6 @@ class BroadcastMod(loader.Module):
             if chat_id not in code.chats:
                 code.chats.add(chat_id)
                 await self.manager.save_config()
-            else:
-                logger.warning(f"Chat {chat_id} already in code {code_name}")
         except Exception as e:
             logger.error(f"Error in watcher: {e}", exc_info=True)
 
@@ -721,32 +718,33 @@ class BroadcastManager:
             f"✅ Автодобавление чатов {'включено' if self.watcher_enabled else 'выключено'}",
         )
 
-    async def _get_chat_permissions(self, chat_id: int) -> Tuple[int, str]:
+    async def _get_chat_permissions(self, chat_id: int) -> int:
         """
-        Enhanced permission check that returns media permission level and reason
-        Returns: (permission_level, reason)
-        permission_level:
-            0 - No permissions
-            1 - Text only (or no photo permission)
-            2 - Full media permissions (photos allowed)
+        Enhanced permission check that safely handles cases where user cannot access chat
+
+        Returns:
+            permission_level: int
+                0 - No permissions
+                1 - Text only
+                2 - Full media permissions
         """
         try:
             try:
                 entity = await self.client.get_entity(chat_id)
             except ValueError:
-                return self.MediaPermissions.NONE, "banned_or_no_access"
+                return self.MediaPermissions.NONE
             if not hasattr(entity, "default_banned_rights"):
-                return self.MediaPermissions.NONE, "check_failed"
+                return self.MediaPermissions.NONE
             banned = entity.default_banned_rights
 
             if banned.send_messages:
-                return self.MediaPermissions.NONE, "no_permission"
+                return self.MediaPermissions.NONE
             if banned.send_media or banned.send_photos:
-                return self.MediaPermissions.TEXT_ONLY, "text_only"
-            return self.MediaPermissions.FULL_MEDIA, "full_access"
+                return self.MediaPermissions.TEXT_ONLY
+            return self.MediaPermissions.FULL_MEDIA
         except Exception as e:
             logger.error(f"Permission check error for chat {chat_id}: {str(e)}")
-            return self.MediaPermissions.NONE, "check_failed"
+            return self.MediaPermissions.NONE
 
     async def _calculate_and_sleep(self, min_interval: int, max_interval: int):
         """Вычисляет время сна и засыпает."""
@@ -793,17 +791,14 @@ class BroadcastManager:
                             else:
                                 temporary_failed_chats.add(chat_id)
                             return
-                        has_media = any(
-                            (isinstance(msg, list) and any(m.media for m in msg))
-                            or (not isinstance(msg, list) and msg.media)
-                            for msg in messages_to_send
-                        )
+                    for message in messages_to_send:
+                        has_media = (
+                            isinstance(message, list) and any(m.media for m in message)
+                        ) or (not isinstance(message, list) and message.media)
 
                         if has_media and perm_level == self.MediaPermissions.TEXT_ONLY:
                             media_restricted_chats.add(chat_id)
-                            logger.warning(f"Chat {chat_id} restricts media content")
-                            return
-                    for message in messages_to_send:
+                            continue
                         success = await self._send_message(
                             code_name, chat_id, message, code.send_mode
                         )
@@ -849,16 +844,13 @@ class BroadcastManager:
                     f"Temporary failures in {len(temporary_failed_chats)} chats"
                 )
             if media_restricted_chats:
-                logger.info(f"Media restricted in {len(media_restricted_chats)} chats")
-            if media_restricted_chats:
                 try:
-                    me = await self.client.get_me()
                     message = (
                         f"⚠️ Рассылка '{code_name}':\n"
                         f"Обнаружено {len(media_restricted_chats)} чатов, где запрещена отправка медиа.\n"
                         f"ID чатов с ограничением медиа:\n{', '.join(map(str, media_restricted_chats))}"
                     )
-                    await self.client.send_message(me.id, message)
+                    await self.client.send_message(self.tg_id, message)
                 except Exception as e:
                     logger.error(f"Failed to send media restriction notification: {e}")
             return failed_chats
@@ -954,7 +946,6 @@ class BroadcastManager:
                     for i in range(0, len(failed_chats), self.NOTIFY_GROUP_SIZE)
                 ]
 
-                me = await self.client.get_me()
                 base_message = (
                     f"⚠️ Рассылка '{code_name}':\n"
                     f"Не удалось отправить сообщения в {len(failed_chats)} чат(ов).\n"
@@ -964,7 +955,7 @@ class BroadcastManager:
 
                 for group in chat_groups:
                     await self.client.send_message(
-                        me.id,
+                        self.tg_id,
                         base_message + group,
                         schedule=datetime.now() + timedelta(seconds=60),
                     )
