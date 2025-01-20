@@ -78,20 +78,23 @@ class SimpleCache:
 
     async def clean_expired(self):
         """Очищает устаревшие записи"""
-        if self._cleaning:
-            return
-        try:
-            self._cleaning = True
-            async with self._lock:
-                current_time = time.time()
-                expired_keys = [
-                    k for k, (t, _) in self.cache.items() if current_time - t > self.ttl
-                ]
+        async with self._lock:
+            if self._cleaning:
+                return
+            try:
+                self._cleaning = True
+                async with self._lock:
+                    current_time = time.time()
+                    expired_keys = [
+                        k
+                        for k, (t, _) in self.cache.items()
+                        if current_time - t > self.ttl
+                    ]
 
-                for key in expired_keys:
-                    del self.cache[key]
-        finally:
-            self._cleaning = False
+                    for key in expired_keys:
+                        del self.cache[key]
+            finally:
+                self._cleaning = False
 
     async def get(self, key):
         """Получает значение из кэша с обязательной проверкой TTL"""
@@ -119,6 +122,15 @@ class SimpleCache:
                 oldest_key = next(iter(self.cache))
                 del self.cache[oldest_key]
             self.cache[key] = (time.time(), value)
+
+    async def start_auto_cleanup(self):
+        """Запускает фоновую задачу для периодической очистки кэша"""
+        while True:
+            try:
+                await self.clean_expired()
+                await asyncio.sleep(self.ttl)
+            except Exception as e:
+                logger.error(f"Cache cleanup error: {e}")
 
 
 @loader.tds
@@ -151,9 +163,10 @@ class BroadcastMod(loader.Module):
 
     async def client_ready(self):
         """Initialization sequence"""
-        self.manager = BroadcastManager(self._client, self.db)
+        self.manager = BroadcastManager(self._client, self.db, self.tg_id)
         try:
             await asyncio.wait_for(self.manager._load_config(), timeout=30)
+            await self.manager.start_cache_cleanup()
             self._initialized = True
         except asyncio.TimeoutError:
             logger.error("Initialization timed out")
@@ -161,6 +174,11 @@ class BroadcastMod(loader.Module):
         except Exception as e:
             logger.error(f"Initialization failed: {e}")
             self._initialized = False
+
+    async def on_unload(self):
+        await self.manager.stop_cache_cleanup()
+        for task in self.manager.broadcast_tasks.values():
+            task.cancel()
 
     async def watcher(self, message: Message):
         """Автоматически добавляет чаты в рассылку."""
@@ -236,7 +254,7 @@ class Broadcast:
     def get_next_message_index(self) -> int:
         """Возвращает индекс следующего сообщения для отправки"""
         if not self.messages:
-            return 0
+            raise ValueError("No messages in broadcast")
         self._last_message_index = (self._last_message_index + 1) % len(self.messages)
         return self._last_message_index
 
@@ -277,33 +295,29 @@ class BroadcastManager:
     BATCH_SIZE_SMALL = 5
     BATCH_SIZE_MEDIUM = 8
     BATCH_SIZE_LARGE = 10
-    BATCH_SIZE_XLARGE = 15
 
-    MAX_MESSAGES_PER_CODE = 100
-    MAX_MESSAGES_PER_MINUTE = 20
-    MAX_MESSAGES_PER_HOUR = 250
-    MAX_CODES = 50
+    MAX_MESSAGES_PER_CODE = 50
 
-    MAX_FLOOD_WAIT_COUNT = 3
     MAX_CONSECUTIVE_ERRORS = 7
 
     BATCH_THRESHOLD_SMALL = 20
     BATCH_THRESHOLD_MEDIUM = 50
-    BATCH_THRESHOLD_LARGE = 100
 
-    EXPONENTIAL_DELAY_BASE = 10
     NOTIFY_DELAY = 1
 
     NOTIFY_GROUP_SIZE = 30
     PERMISSION_CHECK_INTERVAL = 1800
+    GLOBAL_MINUTE_LIMITER = RateLimiter(20, 60)
+    GLOBAL_HOUR_LIMITER = RateLimiter(250, 3600)
     MAX_PERMISSION_RETRIES = 3
+    _semaphore = asyncio.Semaphore(3)
 
     class MediaPermissions:
         NONE = 0
         TEXT_ONLY = 1
         FULL_MEDIA = 2
 
-    def __init__(self, client, db):
+    def __init__(self, client, db, tg_id):
         self.client = client
         self.db = db
         self.codes: Dict[str, Broadcast] = {}
@@ -312,13 +326,10 @@ class BroadcastManager:
         self._active = True
         self._lock = asyncio.Lock()
         self.watcher_enabled = False
-        self._semaphore = asyncio.Semaphore(10)
-
-        self.minute_limiter = RateLimiter(self.MAX_MESSAGES_PER_MINUTE, 60)
-        self.hour_limiter = RateLimiter(self.MAX_MESSAGES_PER_HOUR, 3600)
-
         self.error_counts = {}
         self.last_error_time = {}
+        self.cache_cleanup_task = None
+        self.tg_id = tg_id
 
     async def _load_config(self):
         """Loads configuration from database with improved state handling"""
@@ -352,116 +363,6 @@ class BroadcastManager:
                     continue
         except Exception as e:
             logger.error(f"Error loading configuration: {e}")
-
-    async def save_config(self):
-        """Saves configuration to database with improved reliability and state handling"""
-        try:
-            codes_snapshot = self.codes.copy()
-            tasks_snapshot = self.broadcast_tasks.copy()
-
-            invalid_codes = set()
-            for code_name, code in codes_snapshot.items():
-                if not code or not isinstance(code, Broadcast):
-                    invalid_codes.add(code_name)
-                    continue
-                if not code.messages and not code.chats and not code._active:
-                    invalid_codes.add(code_name)
-                    continue
-            for code_name in invalid_codes:
-                codes_snapshot.pop(code_name, None)
-                task = tasks_snapshot.pop(code_name, None)
-                if task:
-                    try:
-                        if not task.done():
-                            task.cancel()
-                        await asyncio.wait_for(task, timeout=3)
-                    except (asyncio.CancelledError, asyncio.TimeoutError):
-                        logger.info(f"Task cleanup for {code_name} completed")
-                    except Exception as e:
-                        logger.error(f"Error cleaning up task for {code_name}: {e}")
-            for code_name, code in codes_snapshot.items():
-                task = tasks_snapshot.get(code_name)
-                code._active = bool(task and not task.done() and not task.cancelled())
-            finished_tasks = [
-                code_name
-                for code_name, task in tasks_snapshot.items()
-                if task and (task.done() or task.cancelled())
-            ]
-
-            for code_name in finished_tasks:
-                task = tasks_snapshot.pop(code_name)
-                try:
-                    await asyncio.wait_for(task, timeout=3)
-                except (asyncio.CancelledError, asyncio.TimeoutError):
-                    logger.info(f"Finished task cleanup for {code_name} completed")
-                except Exception as e:
-                    logger.error(f"Error cleaning finished task for {code_name}: {e}")
-            config = {
-                "version": 1,
-                "last_save": int(time.time()),
-                "codes": {
-                    name: code.to_dict()
-                    for name, code in codes_snapshot.items()
-                    if isinstance(code, Broadcast)
-                },
-                "active_broadcasts": [
-                    name
-                    for name, code in codes_snapshot.items()
-                    if code._active and name in tasks_snapshot
-                ],
-            }
-
-            self.codes = codes_snapshot
-            self.broadcast_tasks = tasks_snapshot
-
-            self.db.set("broadcast", "config", config)
-        except Exception as e:
-            logger.error(f"Critical error saving configuration: {e}", exc_info=True)
-            raise
-
-    async def handle_command(self, message: Message):
-        """Обработчик команд для управления рассылкой"""
-        try:
-            args = message.text.split()[1:]
-            if not args:
-                await utils.answer(message, "❌ Укажите действие и код рассылки")
-                return
-            action = args[0].lower()
-            code_name = args[1] if len(args) > 1 else None
-
-            if action == "list":
-                await self._handle_list_command(message)
-                return
-            elif action == "watcher":
-                await self._handle_watcher_command(message, args)
-                return
-            if not code_name:
-                await utils.answer(message, "❌ Укажите код рассылки")
-                return
-            code = self.codes.get(code_name)
-            if action != "add" and not code:
-                await utils.answer(message, f"❌ Код рассылки {code_name} не найден")
-                return
-            command_handlers = {
-                "add": lambda: self._handle_add_command(message, code, code_name),
-                "delete": lambda: self._handle_delete_command(message, code_name),
-                "remove": lambda: self._handle_remove_command(message, code),
-                "addchat": lambda: self._handle_addchat_command(message, code, args),
-                "rmchat": lambda: self._handle_rmchat_command(message, code, args),
-                "int": lambda: self._handle_interval_command(message, code, args),
-                "mode": lambda: self._handle_mode_command(message, code, args),
-                "allmsgs": lambda: self._handle_allmsgs_command(message, code, args),
-                "start": lambda: self._handle_start_command(message, code, code_name),
-                "stop": lambda: self._handle_stop_command(message, code, code_name),
-            }
-
-            handler = command_handlers.get(action)
-            if handler:
-                await handler()
-            else:
-                await utils.answer(message, "❌ Неизвестное действие")
-        except Exception as e:
-            logger.error(f"Error handling command: {e}")
 
     async def _handle_add_command(
         self, message: Message, code: Optional[Broadcast], code_name: str
@@ -768,7 +669,7 @@ class BroadcastManager:
 
             async def send_to_chat(chat_id: int):
                 nonlocal success_count, flood_wait_count
-
+                await asyncio.sleep(random.uniform(0.5, 1.5))
                 try:
                     error_key = f"{chat_id}_general"
                     perm_key = f"{chat_id}_permission"
@@ -819,8 +720,8 @@ class BroadcastManager:
             total_chats = len(chats)
 
             async def _calculate_batch_size(total_chats: int) -> int:
-                minute_usage_percent = await self.minute_limiter.get_stats()
-                hour_usage_percent = await self.hour_limiter.get_stats()
+                minute_usage_percent = await self.GLOBAL_MINUTE_LIMITER.get_stats()
+                hour_usage_percent = await self.GLOBAL_HOUR_LIMITER.get_stats()
 
                 if minute_usage_percent > 80 or hour_usage_percent > 80:
                     return max(self.BATCH_SIZE_SMALL // 2, 1)
@@ -878,8 +779,8 @@ class BroadcastManager:
                         from_peer=messages.chat_id,
                     )
 
-            await self.minute_limiter.acquire()
-            await self.hour_limiter.acquire()
+            await self.GLOBAL_MINUTE_LIMITER.acquire()
+            await self.GLOBAL_HOUR_LIMITER.acquire()
 
             await asyncio.sleep(1)
 
@@ -899,10 +800,9 @@ class BroadcastManager:
             return True
         except FloodWaitError as e:
             error_key = f"{chat_id}_flood"
-            self.error_counts[error_key] = self.error_counts.get(error_key, 0) + 1
-            self.last_error_time[error_key] = time.time()
-
-            wait_time = e.seconds * (2 ** self.error_counts[error_key])
+            self.error_counts[error_key] = 0
+            wait_time = e.seconds + random.randint(5, 15)
+            logger.warning(f"FloodWait {e.seconds}s → Adjusted {wait_time}s")
             await asyncio.sleep(wait_time)
             raise
         except (ChatWriteForbiddenError, UserBannedInChannelError):
@@ -1024,69 +924,69 @@ class BroadcastManager:
 
     async def _broadcast_loop(self, code_name: str):
         """Main broadcast loop with enhanced debug logging"""
-        code = self.codes.get(code_name)
-        if code and code._active:
+        async with self._semaphore:
+            code = self.codes.get(code_name)
+            if not code or not code.messages:
+                return
             await self._calculate_and_sleep(code.interval[0], code.interval[1])
-        while self._active:
-            deleted_messages = []
-            messages_to_send = []
 
-            try:
-                code = self.codes.get(code_name)
-                if not code or not code._active:
-                    break
-                current_messages = code.messages.copy()
-                if not current_messages:
-                    await asyncio.sleep(300)
-                    continue
+            while self._active:
+                deleted_messages = []
+                messages_to_send = []
+
                 try:
-                    batches = self._chunk_messages(
-                        current_messages, batch_size=self.BATCH_SIZE_LARGE
-                    )
-
-                    for batch in batches:
-                        if not self._active or not code._active:
-                            return
-                        batch_messages, deleted = await self._process_message_batch(
-                            code, batch
-                        )
-                        messages_to_send.extend(batch_messages)
-                        deleted_messages.extend(deleted)
-                    if not messages_to_send:
+                    current_messages = code.messages.copy()
+                    if not current_messages:
                         await asyncio.sleep(300)
                         continue
-                except Exception as batch_error:
+                    try:
+                        batches = self._chunk_messages(
+                            current_messages, batch_size=self.BATCH_SIZE_LARGE
+                        )
+
+                        for batch in batches:
+                            if not self._active or not code._active:
+                                return
+                            batch_messages, deleted = await self._process_message_batch(
+                                code, batch
+                            )
+                            messages_to_send.extend(batch_messages)
+                            deleted_messages.extend(deleted)
+                        if not messages_to_send:
+                            await asyncio.sleep(300)
+                            continue
+                    except Exception as batch_error:
+                        logger.error(
+                            f"[{code_name}] Batch processing error: {batch_error}",
+                            exc_info=True,
+                        )
+                        await asyncio.sleep(300)
+                        continue
+                    if deleted_messages:
+                        code.messages = [
+                            m for m in code.messages if m not in deleted_messages
+                        ]
+                    if not code.batch_mode:
+                        next_index = code.get_next_message_index()
+                        messages_to_send = [
+                            messages_to_send[next_index % len(messages_to_send)]
+                        ]
+                    failed_chats = await self._send_messages_to_chats(
+                        code, code_name, messages_to_send
+                    )
+
+                    if failed_chats:
+                        await self._handle_failed_chats(code_name, failed_chats)
+                    await asyncio.sleep(60)
+                    await self.save_config()
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
                     logger.error(
-                        f"[{code_name}] Batch processing error: {batch_error}",
+                        f"[{code_name}] Critical error in broadcast loop: {e}",
                         exc_info=True,
                     )
                     await asyncio.sleep(300)
-                    continue
-                if deleted_messages:
-                    code.messages = [
-                        m for m in code.messages if m not in deleted_messages
-                    ]
-                if not code.batch_mode:
-                    next_index = code.get_next_message_index()
-                    messages_to_send = [
-                        messages_to_send[next_index % len(messages_to_send)]
-                    ]
-                failed_chats = await self._send_messages_to_chats(
-                    code, code_name, messages_to_send
-                )
-
-                if failed_chats:
-                    await self._handle_failed_chats(code_name, failed_chats)
-                await asyncio.sleep(60)
-                await self.save_config()
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                logger.error(
-                    f"[{code_name}] Critical error in broadcast loop: {e}",
-                    exc_info=True,
-                )
-                await asyncio.sleep(300)
 
     async def _fetch_messages(self, msg_data: dict):
         """Получает сообщения с улучшенной обработкой ошибок"""
@@ -1133,3 +1033,128 @@ class BroadcastManager:
         except Exception as e:
             logger.error(f"Ошибка получения chat_id: {e}")
             return None
+
+    async def handle_command(self, message: Message):
+        """Обработчик команд для управления рассылкой"""
+        try:
+            args = message.text.split()[1:]
+            if not args:
+                await utils.answer(message, "❌ Укажите действие и код рассылки")
+                return
+            action = args[0].lower()
+            code_name = args[1] if len(args) > 1 else None
+
+            if action == "list":
+                await self._handle_list_command(message)
+                return
+            elif action == "watcher":
+                await self._handle_watcher_command(message, args)
+                return
+            if not code_name:
+                await utils.answer(message, "❌ Укажите код рассылки")
+                return
+            code = self.codes.get(code_name)
+            if action != "add" and not code:
+                await utils.answer(message, f"❌ Код рассылки {code_name} не найден")
+                return
+            command_handlers = {
+                "add": lambda: self._handle_add_command(message, code, code_name),
+                "delete": lambda: self._handle_delete_command(message, code_name),
+                "remove": lambda: self._handle_remove_command(message, code),
+                "addchat": lambda: self._handle_addchat_command(message, code, args),
+                "rmchat": lambda: self._handle_rmchat_command(message, code, args),
+                "int": lambda: self._handle_interval_command(message, code, args),
+                "mode": lambda: self._handle_mode_command(message, code, args),
+                "allmsgs": lambda: self._handle_allmsgs_command(message, code, args),
+                "start": lambda: self._handle_start_command(message, code, code_name),
+                "stop": lambda: self._handle_stop_command(message, code, code_name),
+            }
+
+            handler = command_handlers.get(action)
+            if handler:
+                await handler()
+            else:
+                await utils.answer(message, "❌ Неизвестное действие")
+        except Exception as e:
+            logger.error(f"Error handling command: {e}")
+
+    async def save_config(self):
+        """Saves configuration to database with improved reliability and state handling"""
+        try:
+            codes_snapshot = self.codes.copy()
+            tasks_snapshot = self.broadcast_tasks.copy()
+
+            invalid_codes = set()
+            for code_name, code in codes_snapshot.items():
+                if not code or not isinstance(code, Broadcast):
+                    invalid_codes.add(code_name)
+                    continue
+                if not code.messages and not code.chats and not code._active:
+                    invalid_codes.add(code_name)
+                    continue
+            for code_name in invalid_codes:
+                codes_snapshot.pop(code_name, None)
+                task = tasks_snapshot.pop(code_name, None)
+                if task:
+                    try:
+                        if not task.done():
+                            task.cancel()
+                        await asyncio.wait_for(task, timeout=3)
+                    except (asyncio.CancelledError, asyncio.TimeoutError):
+                        logger.info(f"Task cleanup for {code_name} completed")
+                    except Exception as e:
+                        logger.error(f"Error cleaning up task for {code_name}: {e}")
+            for code_name, code in codes_snapshot.items():
+                task = tasks_snapshot.get(code_name)
+                code._active = bool(task and not task.done() and not task.cancelled())
+            finished_tasks = [
+                code_name
+                for code_name, task in tasks_snapshot.items()
+                if task and (task.done() or task.cancelled())
+            ]
+
+            for code_name in finished_tasks:
+                task = tasks_snapshot.pop(code_name)
+                try:
+                    await asyncio.wait_for(task, timeout=3)
+                except (asyncio.CancelledError, asyncio.TimeoutError):
+                    logger.info(f"Finished task cleanup for {code_name} completed")
+                except Exception as e:
+                    logger.error(f"Error cleaning finished task for {code_name}: {e}")
+            config = {
+                "version": 1,
+                "last_save": int(time.time()),
+                "codes": {
+                    name: code.to_dict()
+                    for name, code in codes_snapshot.items()
+                    if isinstance(code, Broadcast)
+                },
+                "active_broadcasts": [
+                    name
+                    for name, code in codes_snapshot.items()
+                    if code._active and name in tasks_snapshot
+                ],
+            }
+
+            self.codes = codes_snapshot
+            self.broadcast_tasks = tasks_snapshot
+
+            self.db.set("broadcast", "config", config)
+        except Exception as e:
+            logger.error(f"Critical error saving configuration: {e}", exc_info=True)
+            raise
+
+    async def start_cache_cleanup(self):
+        """Запускает фоновую очистку кэша"""
+        self.cache_cleanup_task = asyncio.create_task(
+            self._message_cache.start_auto_cleanup()
+        )
+
+    async def stop_cache_cleanup(self):
+        """Останавливает фоновую очистку кэша"""
+        if self.cache_cleanup_task:
+            self.cache_cleanup_task.cancel()
+            try:
+                await self.cache_cleanup_task
+            except asyncio.CancelledError:
+                pass
