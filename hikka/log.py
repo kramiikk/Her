@@ -7,39 +7,11 @@
 # 🔑 https://www.gnu.org/licenses/agpl-3.0.html
 
 import inspect
-import linecache
 import logging
-import sys
 import traceback
 import typing
 from logging.handlers import RotatingFileHandler
 
-old = linecache.getlines
-
-def getlines(filename: str, module_globals=None) -> str:
-    """
-    Get the lines for a Python source file from the cache.
-    Update the cache if it doesn't contain an entry for this file already.
-
-    Modified version of original `linecache.getlines`, which returns the
-    source code of Her modules properly. This is needed for
-    interactive line debugger in werkzeug web debugger.
-    """
-
-    try:
-        if filename.startswith("<") and filename.endswith(">"):
-            module = filename[1:-1].split(maxsplit=1)[-1]
-            if (module.startswith("hikka.modules")) and module in sys.modules:
-                return list(
-                    map(
-                        lambda x: f"{x}\n",
-                        sys.modules[module].__loader__.get_source().splitlines(),
-                    )
-                )
-    except Exception:
-        logging.error("Can't get lines for %s", filename, exc_info=True)
-
-    return old(filename, module_globals)
 
 class HerException:
     def __init__(

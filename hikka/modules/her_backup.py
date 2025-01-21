@@ -10,10 +10,7 @@ import datetime
 import io
 import json
 import logging
-import os
 import time
-import zipfile
-from pathlib import Path
 
 from hikkatl.tl.types import Message
 
@@ -165,87 +162,4 @@ class HerBackupMod(loader.Module):
         self._db.save()
 
         await utils.answer(message, self.strings("db_restored"))
-        await self.invoke("restart", "-f", peer=message.peer_id)
-
-    @loader.command()
-    async def backupmods(self, message: Message):
-        """| save backup of mods"""
-        mods_quantity = len(self.lookup("Loader").get("loaded_modules", {}))
-
-        result = io.BytesIO()
-        result.name = "mods.zip"
-
-        db_mods = json.dumps(self.lookup("Loader").get("loaded_modules", {})).encode()
-
-        with zipfile.ZipFile(result, "w", zipfile.ZIP_DEFLATED) as zipf:
-            for root, _, files in os.walk(loader.LOADED_MODULES_DIR):
-                for file in files:
-                    if file.endswith(f"{self.tg_id}.py"):
-                        with open(os.path.join(root, file), "rb") as f:
-                            zipf.writestr(file, f.read())
-                            mods_quantity += 1
-
-            zipf.writestr("db_mods.json", db_mods)
-
-        archive = io.BytesIO(result.getvalue())
-        archive.name = f"mods-{datetime.datetime.now():%d-%m-%Y-%H-%M}.zip"
-
-        await utils.answer_file(
-            message,
-            archive,
-            caption=self.strings("modules_backup").format(
-                mods_quantity,
-                utils.escape_html(self.get_prefix()),
-            ),
-        )
-
-    @loader.command()
-    async def restoremods(self, message: Message):
-        """[reply] | restore your mods"""
-        if not (reply := await message.get_reply_message()) or not reply.media:
-            await utils.answer(message, self.strings("reply_to_file"))
-            return
-
-        file = await reply.download_media(bytes)
-        try:
-            decoded_text = json.loads(file.decode())
-        except Exception:
-            try:
-                file = io.BytesIO(file)
-                file.name = "mods.zip"
-
-                with zipfile.ZipFile(file) as zf:
-                    with zf.open("db_mods.json", "r") as modules:
-                        db_mods = json.loads(modules.read().decode())
-                        if isinstance(db_mods, dict) and all(
-                            (
-                                isinstance(key, str)
-                                and isinstance(value, str)
-                                and utils.check_url(value)
-                            )
-                            for key, value in db_mods.items()
-                        ):
-                            self.lookup("Loader").set("loaded_modules", db_mods)
-
-                    for name in zf.namelist():
-                        if name == "db_mods.json":
-                            continue
-
-                        path = loader.LOADED_MODULES_PATH / Path(name).name
-                        with zf.open(name, "r") as module:
-                            path.write_bytes(module.read())
-            except Exception:
-                logger.exception("Unable to restore modules")
-                await utils.answer(message, self.strings("reply_to_file"))
-                return
-        else:
-            if not isinstance(decoded_text, dict) or not all(
-                isinstance(key, str) and isinstance(value, str)
-                for key, value in decoded_text.items()
-            ):
-                raise RuntimeError("Invalid backup")
-
-            self.lookup("Loader").set("loaded_modules", decoded_text)
-
-        await utils.answer(message, self.strings("mods_restored"))
         await self.invoke("restart", "-f", peer=message.peer_id)
