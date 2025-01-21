@@ -318,10 +318,5 @@ class Help(loader.Module):
             (self.config["desc_icon"] + " {}\n <blockquote>{}</blockquote><blockquote>{}</blockquote>").format(
                 reply,
                 "".join(core_ + plain_ + (no_commands_ if force else [])).strip(),
-                (
-                    ""
-                    if self.lookup("Loader").fully_loaded
-                    else f"\n{self.strings('partial_load')}"
-                ),
             ),
         )
