@@ -852,6 +852,8 @@ class BroadcastManager:
             *[self._fetch_messages(msg) for msg in messages],
             return_exceptions=True,
         )
+        logger.info(f"Результаты asyncio.gather: {results}")
+        logger.info("Начинаем обработку результатов...")
 
         for msg_data, result in zip(messages, results):
             logger.info(f"Результат обработки сообщения {msg_data}: {result}")
