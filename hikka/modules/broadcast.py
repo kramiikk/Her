@@ -613,21 +613,21 @@ class BroadcastManager:
                 2 - Full media permissions
         """
         try:
-            try:
-                entity = await self.client.get_entity(chat_id)
-            except ValueError:
-                return self.MediaPermissions.NONE
-            if not hasattr(entity, "default_banned_rights"):
-                return self.MediaPermissions.NONE
-            banned = entity.default_banned_rights
-
-            if banned.send_messages:
-                return self.MediaPermissions.NONE
-            if banned.send_media or banned.send_photos:
-                return self.MediaPermissions.TEXT_ONLY
-            return self.MediaPermissions.FULL_MEDIA
-        except Exception as e:
+            entity = await self.client.get_entity(chat_id)
+            logger.debug(f"Получен объект чата {chat_id}: {type(entity)}")
+        except ValueError:
             return self.MediaPermissions.NONE
+        if not hasattr(entity, "default_banned_rights"):
+            return self.MediaPermissions.NONE
+        banned = entity.default_banned_rights
+        logger.debug(f"Права для {chat_id}: {banned}")
+
+        if banned.send_messages:
+            logger.warning(f"Нет прав на отправку сообщений в {chat_id}")
+            return self.MediaPermissions.NONE
+        if banned.send_media or banned.send_photos:
+            return self.MediaPermissions.TEXT_ONLY
+        return self.MediaPermissions.FULL_MEDIA
 
     async def _calculate_and_sleep(self, min_interval: int, max_interval: int):
         """Вычисляет время сна и засыпает."""
