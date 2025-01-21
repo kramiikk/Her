@@ -614,17 +614,13 @@ class BroadcastManager:
         """
         try:
             entity = await self.client.get_entity(chat_id)
-            logger.debug(f"Получен объект чата {chat_id}: {type(entity)}")
         except ValueError:
-            logger.debug(f"Не получен объект чата {chat_id}")
             return self.MediaPermissions.NONE
         if not hasattr(entity, "default_banned_rights"):
             return self.MediaPermissions.NONE
         banned = entity.default_banned_rights
-        logger.debug(f"Права для {chat_id}: {banned}")
 
         if banned.send_messages:
-            logger.warning(f"Нет прав на отправку сообщений в {chat_id}")
             return self.MediaPermissions.NONE
         if banned.send_media or banned.send_photos:
             return self.MediaPermissions.TEXT_ONLY
@@ -658,7 +654,6 @@ class BroadcastManager:
                     last_check = self.last_error_time.get(perm_key, 0)
                     if time.time() - last_check > self.PERMISSION_CHECK_INTERVAL:
                         perm_level = await self._get_chat_permissions(chat_id)
-                        logger.debug(f"Chat {chat_id} permissions: {perm_level}")
 
                         if perm_level == self.MediaPermissions.NONE:
                             self.error_counts[perm_key] = (
@@ -856,6 +851,8 @@ class BroadcastManager:
             *[self._fetch_messages(msg) for msg in messages],
             return_exceptions=True,
         )
+
+        logger.debug(f"Получен объект")
 
         for msg_data, result in zip(messages, results):
             if isinstance(result, Exception):
