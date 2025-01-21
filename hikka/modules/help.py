@@ -9,7 +9,6 @@ import difflib
 import inspect
 import logging
 
-from hikkatl.extensions.html import CUSTOM_EMOJIS
 from hikkatl.tl.types import Message
 
 from .. import loader, utils
@@ -324,20 +323,5 @@ class Help(loader.Module):
                     if self.lookup("Loader").fully_loaded
                     else f"\n{self.strings('partial_load')}"
                 ),
-            ),
-        )
-
-    @loader.command(ru_doc="| Ссылка на чат помощи", ua_doc="| посилання для чату служби підтримки", de_doc="| Link zum Support-Chat")
-    async def support(self, message):
-        """| link for support chat"""
-       
-        await utils.answer(
-            message,
-            self.strings("support").format(
-                (
-                    utils.get_platform_emoji()
-                    if self._client.hikka_me.premium and CUSTOM_EMOJIS
-                    else "🪐"
-                )
             ),
         )

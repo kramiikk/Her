@@ -949,31 +949,6 @@ class LoaderMod(loader.Module):
 
         await utils.answer(message, msg)
 
-    @loader.command()
-    async def clearmodules(self, message: Message):
-        await self.inline.form(
-            self.strings("confirm_clearmodules"),
-            message,
-            reply_markup=[
-                {
-                    "text": self.strings("clearmodules"),
-                    "callback": self._inline__clearmodules,
-                }
-            ]
-        )
-
-    async def _inline__clearmodules(self, call: InlineCall):
-        self.set("loaded_modules", {})
-
-        for file in os.scandir(loader.LOADED_MODULES_DIR):
-            try:
-                shutil.rmtree(file.path)
-            except Exception:
-                logger.error("Failed to remove %s", file.path, exc_info=True)
-
-        await utils.answer(call, self.strings("all_modules_deleted"))
-        await self.lookup("Updater").restart_common(call)
-
     async def _update_modules(self):
         todo = await self._get_modules_to_load()
 

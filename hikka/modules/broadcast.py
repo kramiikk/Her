@@ -982,7 +982,8 @@ class BroadcastManager:
                     return message
             logger.debug(f"Fetching message compleate None")
             return None
-        except Exception:
+        except Exception as e:
+            logger.error(f"Fetching error: {e}")
             return None
 
     async def _get_chat_id(self, chat_identifier: str) -> Optional[int]:
