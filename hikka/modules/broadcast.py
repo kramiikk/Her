@@ -886,7 +886,6 @@ class BroadcastManager:
 
     async def _broadcast_loop(self, code_name: str):
         """Main broadcast loop with enhanced debug logging"""
-        logger.info(f"[{code_name}] Starting broadcast loop")
         async with self._semaphore:
             code = self.codes.get(code_name)
             if not code or not code.messages:
@@ -901,7 +900,6 @@ class BroadcastManager:
                         await asyncio.sleep(300)
                         continue
                     try:
-                        logger.debug(f"[{code_name}] Processing batch of messages")
                         batches = self._chunk_messages(
                             current_messages, batch_size=self.BATCH_SIZE_LARGE
                         )
@@ -976,10 +974,13 @@ class BroadcastManager:
                             messages.append(grouped_msg)
                     if messages:
                         await self._message_cache.set(key, messages)
+                        logger.debug(f"Fetching message compleate cache 1")
                         return messages[0] if len(messages) == 1 else messages
                 else:
                     await self._message_cache.set(key, message)
+                    logger.debug(f"Fetching message compleate cache 2")
                     return message
+            logger.debug(f"Fetching message compleate None")
             return None
         except Exception:
             return None
