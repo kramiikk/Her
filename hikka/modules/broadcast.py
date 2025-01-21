@@ -852,7 +852,7 @@ class BroadcastManager:
             return_exceptions=True,
         )
 
-        logger.debug(f"Получен объект")
+        logger.info("Получен объект")
 
         for msg_data, result in zip(messages, results):
             if isinstance(result, Exception):

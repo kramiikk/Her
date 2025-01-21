@@ -355,7 +355,6 @@ class Her:
 
     def __init__(self):
         global BASE_DIR, BASE_PATH, CONFIG_PATH
-        self.omit_log = False
         self.arguments = parse_arguments()
         if self.arguments.data_root:
             BASE_DIR = self.arguments.data_root
@@ -610,20 +609,10 @@ class Her:
             diff = repo.git.log([f"HEAD..origin/{version.branch}", "--oneline"])
             upd = "Update required" if diff else "Up-to-date"
 
-            if not self.omit_log:
-                info = (
-                    f"• Build: {build[:7]}\n"
-                    f"• Version: {'.'.join(list(map(str, list(__version__))))}\n"
-                    f"• {upd}\n"
-                )
-                print(info)
-                self.omit_log = True
-
-            logging.info(
-                "\n🪐 Her %s #%s (%s) started",
-                ".".join(list(map(str, list(__version__)))),
-                build[:7],
-                upd,
+            logging.info = (
+                f"• Build: {build[:7]}\n"
+                f"• Version: {'.'.join(list(map(str, list(__version__))))}\n"
+                f"• {upd}"
             )
 
             logging.info(
