@@ -657,6 +657,7 @@ class BroadcastManager:
                     last_check = self.last_error_time.get(perm_key, 0)
                     if time.time() - last_check > self.PERMISSION_CHECK_INTERVAL:
                         perm_level = await self._get_chat_permissions(chat_id)
+                        logger.debug(f"Chat {chat_id} permissions: {perm_level}")
 
                         if perm_level == self.MediaPermissions.NONE:
                             self.error_counts[perm_key] = (
@@ -885,12 +886,11 @@ class BroadcastManager:
 
     async def _broadcast_loop(self, code_name: str):
         """Main broadcast loop with enhanced debug logging"""
+        logger.info(f"[{code_name}] Starting broadcast loop")
         async with self._semaphore:
             code = self.codes.get(code_name)
             if not code or not code.messages:
                 return
-            await self._calculate_and_sleep(code.interval[0], code.interval[1])
-
             while self._active:
                 deleted_messages = []
                 messages_to_send = []
@@ -901,6 +901,7 @@ class BroadcastManager:
                         await asyncio.sleep(300)
                         continue
                     try:
+                        logger.debug(f"[{code_name}] Processing batch of messages")
                         batches = self._chunk_messages(
                             current_messages, batch_size=self.BATCH_SIZE_LARGE
                         )
@@ -944,7 +945,7 @@ class BroadcastManager:
                     break
                 except Exception as e:
                     logger.error(
-                        f"[{code_name}] Critical error in broadcast loop: {e}",
+                        f"[{code_name}] Error in broadcast loop: {str(e)}",
                         exc_info=True,
                     )
                     await asyncio.sleep(300)
@@ -952,6 +953,9 @@ class BroadcastManager:
     async def _fetch_messages(self, msg_data: dict):
         """Получает сообщения с улучшенной обработкой ошибок"""
         key = (msg_data["chat_id"], msg_data["message_id"])
+        logger.debug(
+            f"Fetching message {msg_data['message_id']} from {msg_data['chat_id']}"
+        )
 
         try:
             cached = await self._message_cache.get(key)
@@ -1017,8 +1021,8 @@ class BroadcastManager:
             return
         command_handlers = {
             "add": lambda: self._handle_add_command(message, code, code_name),
-            "delete": lambda: self._handle_delete_command(message, code_name),
-            "remove": lambda: self._handle_remove_command(message, code),
+            "del": lambda: self._handle_delete_command(message, code_name),
+            "rm": lambda: self._handle_remove_command(message, code),
             "addchat": lambda: self._handle_addchat_command(message, code, args),
             "rmchat": lambda: self._handle_rmchat_command(message, code, args),
             "int": lambda: self._handle_interval_command(message, code, args),
