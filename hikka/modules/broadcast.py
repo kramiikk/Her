@@ -168,9 +168,6 @@ class BroadcastMod(loader.Module):
             await asyncio.wait_for(self.manager._load_config(), timeout=30)
             await self.manager.start_cache_cleanup()
             self._initialized = True
-        except asyncio.TimeoutError:
-            logger.error("Initialization timed out")
-            self._initialized = False
         except Exception as e:
             logger.error(f"Initialization failed: {e}")
             self._initialized = False
@@ -184,29 +181,25 @@ class BroadcastMod(loader.Module):
         """Автоматически добавляет чаты в рассылку."""
         if not hasattr(self, "manager") or self.manager is None:
             return
-        try:
-            if not self.manager.watcher_enabled:
-                return
-            if not (message and message.text and message.text.startswith("!")):
-                return
-            if message.sender_id != self.tg_id:
-                return
-            parts = message.text.split()
-            code_name = parts[0][1:]
-            if not code_name:
-                return
-            chat_id = message.chat_id
-            code = self.manager.codes.get(code_name)
-            if not code:
-                return
-            if len(code.chats) >= 500:
-                logger.warning(f"Max chats limit reached for code {code_name}")
-                return
-            if chat_id not in code.chats:
-                code.chats.add(chat_id)
-                await self.manager.save_config()
-        except Exception as e:
-            logger.error(f"Error in watcher: {e}", exc_info=True)
+        if not self.manager.watcher_enabled:
+            return
+        if not (message and message.text and message.text.startswith("!")):
+            return
+        if message.sender_id != self.tg_id:
+            return
+        parts = message.text.split()
+        code_name = parts[0][1:]
+        if not code_name:
+            return
+        chat_id = message.chat_id
+        code = self.manager.codes.get(code_name)
+        if not code:
+            return
+        if len(code.chats) >= 500:
+            return
+        if chat_id not in code.chats:
+            code.chats.add(chat_id)
+            await self.manager.save_config()
 
 
 @dataclass
@@ -333,13 +326,9 @@ class BroadcastManager:
             if not config:
                 return
             for code_name, code_data in config.get("codes", {}).items():
-                try:
-                    broadcast = Broadcast.from_dict(code_data)
-                    self.codes[code_name] = broadcast
-                    broadcast._active = False
-                except Exception as e:
-                    logger.error(f"Error loading broadcast {code_name}: {e}")
-                    continue
+                broadcast = Broadcast.from_dict(code_data)
+                self.codes[code_name] = broadcast
+                broadcast._active = False
             active_broadcasts = config.get("active_broadcasts", [])
             for code_name in active_broadcasts:
                 try:
@@ -354,7 +343,6 @@ class BroadcastManager:
                         self._broadcast_loop(code_name)
                     )
                 except Exception as e:
-                    logger.error(f"Error restoring broadcast {code_name}: {e}")
                     continue
         except Exception as e:
             logger.error(f"Error loading configuration: {e}")
@@ -639,7 +627,6 @@ class BroadcastManager:
                 return self.MediaPermissions.TEXT_ONLY
             return self.MediaPermissions.FULL_MEDIA
         except Exception as e:
-            logger.error(f"Permission check error for chat {chat_id}: {str(e)}")
             return self.MediaPermissions.NONE
 
     async def _calculate_and_sleep(self, min_interval: int, max_interval: int):
@@ -657,13 +644,11 @@ class BroadcastManager:
             if not code:
                 return set()
             failed_chats: Set[int] = set()
-            temporary_failed_chats: Set[int] = set()
             media_restricted_chats: Set[int] = set()
             success_count: int = 0
-            flood_wait_count: int = 0
 
             async def send_to_chat(chat_id: int):
-                nonlocal success_count, flood_wait_count
+                nonlocal success_count
                 await asyncio.sleep(random.uniform(0.5, 1.5))
                 try:
                     error_key = f"{chat_id}_general"
@@ -684,8 +669,6 @@ class BroadcastManager:
                                 >= self.MAX_PERMISSION_RETRIES
                             ):
                                 failed_chats.add(chat_id)
-                            else:
-                                temporary_failed_chats.add(chat_id)
                             return
                     for message in messages_to_send:
                         has_media = (
@@ -703,12 +686,8 @@ class BroadcastManager:
                     success_count += 1
                     self.error_counts[error_key] = 0
                     self.error_counts[perm_key] = 0
-                except FloodWaitError as e:
-                    flood_wait_count += 1
-                    temporary_failed_chats.add(chat_id)
                 except Exception as e:
-                    temporary_failed_chats.add(chat_id)
-                    logger.error(f"Error in chat {chat_id}: {str(e)}")
+                    logger.error(f"Error in _send_messages_to_chats: {e}")
 
             chats = list(code.chats)
             random.shuffle(chats)
@@ -735,20 +714,13 @@ class BroadcastManager:
                 tasks = [send_to_chat(chat_id) for chat_id in current_batch]
                 await asyncio.gather(*tasks)
                 await self._calculate_and_sleep(code.interval[0], code.interval[1])
-            if temporary_failed_chats:
-                logger.info(
-                    f"Temporary failures in {len(temporary_failed_chats)} chats"
-                )
             if media_restricted_chats:
-                try:
-                    message = (
-                        f"⚠️ Рассылка '{code_name}':\n"
-                        f"Обнаружено {len(media_restricted_chats)} чатов, где запрещена отправка медиа.\n"
-                        f"ID чатов с ограничением медиа:\n{', '.join(map(str, media_restricted_chats))}"
-                    )
-                    await self.client.send_message(self.tg_id, message)
-                except Exception as e:
-                    logger.error(f"Failed to send media restriction notification: {e}")
+                message = (
+                    f"⚠️ Рассылка '{code_name}':\n"
+                    f"Обнаружено {len(media_restricted_chats)} чатов, где запрещена отправка медиа.\n"
+                    f"ID чатов с ограничением медиа:\n{', '.join(map(str, media_restricted_chats))}"
+                )
+                await self.client.send_message(self.tg_id, message)
             return failed_chats
 
     async def _send_message(
@@ -855,9 +827,6 @@ class BroadcastManager:
                         schedule=datetime.now() + timedelta(seconds=60),
                     )
                     await asyncio.sleep(self.NOTIFY_DELAY)
-        except FloodWaitError as e:
-            await asyncio.sleep(e.seconds)
-            logger.error(f"FloodWaitError: {e}")
         except Exception as e:
             logger.error(f"Ошибка обработки неудачных чатов для {code_name}: {e}")
 
@@ -888,9 +857,6 @@ class BroadcastManager:
 
         for msg_data, result in zip(messages, results):
             if isinstance(result, Exception):
-                logger.error(
-                    f"Ошибка загрузки сообщения {msg_data['message_id']}: {result}"
-                )
                 deleted_messages.append(msg_data)
             elif result:
                 if isinstance(result, list):
@@ -1011,8 +977,7 @@ class BroadcastManager:
                     await self._message_cache.set(key, message)
                     return message
             return None
-        except Exception as e:
-            logger.error(f"Error fetching message {msg_data['message_id']}: {e}")
+        except Exception:
             return None
 
     async def _get_chat_id(self, chat_identifier: str) -> Optional[int]:
@@ -1025,53 +990,49 @@ class BroadcastManager:
                 clean_username = clean_username.replace(prefix, "")
             entity = await self.client.get_entity(clean_username)
             return entity.id
-        except Exception as e:
-            logger.error(f"Ошибка получения chat_id: {e}")
+        except Exception:
             return None
 
     async def handle_command(self, message: Message):
         """Обработчик команд для управления рассылкой"""
-        try:
-            args = message.text.split()[1:]
-            if not args:
-                await utils.answer(message, "❌ Укажите действие и код рассылки")
-                return
-            action = args[0].lower()
-            code_name = args[1] if len(args) > 1 else None
+        args = message.text.split()[1:]
+        if not args:
+            await utils.answer(message, "❌ Укажите действие и код рассылки")
+            return
+        action = args[0].lower()
+        code_name = args[1] if len(args) > 1 else None
 
-            if action == "list":
-                await self._handle_list_command(message)
-                return
-            elif action == "watcher":
-                await self._handle_watcher_command(message, args)
-                return
-            if not code_name:
-                await utils.answer(message, "❌ Укажите код рассылки")
-                return
-            code = self.codes.get(code_name)
-            if action != "add" and not code:
-                await utils.answer(message, f"❌ Код рассылки {code_name} не найден")
-                return
-            command_handlers = {
-                "add": lambda: self._handle_add_command(message, code, code_name),
-                "delete": lambda: self._handle_delete_command(message, code_name),
-                "remove": lambda: self._handle_remove_command(message, code),
-                "addchat": lambda: self._handle_addchat_command(message, code, args),
-                "rmchat": lambda: self._handle_rmchat_command(message, code, args),
-                "int": lambda: self._handle_interval_command(message, code, args),
-                "mode": lambda: self._handle_mode_command(message, code, args),
-                "allmsgs": lambda: self._handle_allmsgs_command(message, code, args),
-                "start": lambda: self._handle_start_command(message, code, code_name),
-                "stop": lambda: self._handle_stop_command(message, code, code_name),
-            }
+        if action == "list":
+            await self._handle_list_command(message)
+            return
+        elif action == "watcher":
+            await self._handle_watcher_command(message, args)
+            return
+        if not code_name:
+            await utils.answer(message, "❌ Укажите код рассылки")
+            return
+        code = self.codes.get(code_name)
+        if action != "add" and not code:
+            await utils.answer(message, f"❌ Код рассылки {code_name} не найден")
+            return
+        command_handlers = {
+            "add": lambda: self._handle_add_command(message, code, code_name),
+            "delete": lambda: self._handle_delete_command(message, code_name),
+            "remove": lambda: self._handle_remove_command(message, code),
+            "addchat": lambda: self._handle_addchat_command(message, code, args),
+            "rmchat": lambda: self._handle_rmchat_command(message, code, args),
+            "int": lambda: self._handle_interval_command(message, code, args),
+            "mode": lambda: self._handle_mode_command(message, code, args),
+            "allmsgs": lambda: self._handle_allmsgs_command(message, code, args),
+            "start": lambda: self._handle_start_command(message, code, code_name),
+            "stop": lambda: self._handle_stop_command(message, code, code_name),
+        }
 
-            handler = command_handlers.get(action)
-            if handler:
-                await handler()
-            else:
-                await utils.answer(message, "❌ Неизвестное действие")
-        except Exception as e:
-            logger.error(f"Error handling command: {e}")
+        handler = command_handlers.get(action)
+        if handler:
+            await handler()
+        else:
+            await utils.answer(message, "❌ Неизвестное действие")
 
     async def save_config(self):
         """Saves configuration to database with improved reliability and state handling"""
@@ -1095,8 +1056,6 @@ class BroadcastManager:
                         if not task.done():
                             task.cancel()
                         await asyncio.wait_for(task, timeout=3)
-                    except (asyncio.CancelledError, asyncio.TimeoutError):
-                        logger.info(f"Task cleanup for {code_name} completed")
                     except Exception as e:
                         logger.error(f"Error cleaning up task for {code_name}: {e}")
             for code_name, code in codes_snapshot.items():
@@ -1112,8 +1071,6 @@ class BroadcastManager:
                 task = tasks_snapshot.pop(code_name)
                 try:
                     await asyncio.wait_for(task, timeout=3)
-                except (asyncio.CancelledError, asyncio.TimeoutError):
-                    logger.info(f"Finished task cleanup for {code_name} completed")
                 except Exception as e:
                     logger.error(f"Error cleaning finished task for {code_name}: {e}")
             config = {
