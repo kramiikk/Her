@@ -4,6 +4,7 @@
 # You can redistribute it and/or modify it under the terms of the GNU AGPLv3
 # 🔑 https://www.gnu.org/licenses/agpl-3.0.html
 
+import asyncio
 import logging
 import os
 import subprocess
@@ -13,6 +14,7 @@ import time
 import git
 from git import GitCommandError, Repo
 from hikkatl.tl.types import Message
+from ..inline.types import InlineCall
 
 from .. import loader, utils, version
 from .._internal import restart
@@ -34,6 +36,96 @@ class UpdaterMod(loader.Module):
                 validator=loader.validators.Link(),
             )
         )
+        self._notified = None
+        self.config = loader.ModuleConfig(
+            loader.ConfigValue(
+                "disable_notifications",
+                doc=lambda: self.strings("_cfg_doc_disable_notifications"),
+                validator=loader.validators.Boolean(),
+            )
+        )
+    
+    def get_changelog(self) -> str:
+        try:
+            repo = git.Repo()
+
+            for remote in repo.remotes:
+                remote.fetch()
+
+            if not (
+                diff := repo.git.log([f"HEAD..origin/{version.branch}", "--oneline"])
+            ):
+                return False
+        except Exception:
+            return False
+
+        res = "\n".join(
+            f"<b>{commit.split()[0]}</b>:"
+            f" <i>{utils.escape_html(' '.join(commit.split()[1:]))}</i>"
+            for commit in diff.splitlines()[:10]
+        )
+
+        if diff.count("\n") >= 10:
+            res += self.strings("more").format(len(diff.splitlines()) - 10)
+
+        return res
+
+    def get_latest(self) -> str:
+        try:
+            return next(
+                git.Repo().iter_commits(f"origin/{version.branch}", max_count=1)
+            ).hexsha
+        except Exception:
+            return ""
+
+    @loader.loop(interval=60, autostart=True)
+    async def poller(self):
+        if self.config["disable_notifications"] or not self.get_changelog():
+            return
+
+        self._pending = self.get_latest()
+
+        if (
+            self.get("ignore_permanent", False)
+            and self.get("ignore_permanent") == self._pending
+        ):
+            await asyncio.sleep(60)
+            return
+
+        if self._pending not in {utils.get_git_hash(), self._notified}:
+            m = await self.inline.bot.send_animation(
+                self.tg_id,
+                "https://t.me/hikari_assets/71",
+                caption=self.strings("update_required").format(
+                    utils.get_git_hash()[:6],
+                    '<a href="https://github.com/kramiikk/Her/compare/{}...{}">{}</a>'.format(
+                        utils.get_git_hash()[:12],
+                        self.get_latest()[:12],
+                        self.get_latest()[:6],
+                    ),
+                    self.get_changelog(),
+                ),
+                reply_markup=self._markup(),
+            )
+
+            self._notified = self._pending
+            self.set("ignore_permanent", False)
+
+            self.set("upd_msg", m.message_id)
+
+    @loader.callback_handler()
+    async def update(self, call: InlineCall):
+        """Process update buttons clicks"""
+        if call.data not in {"her/update", "her/ignore_upd"}:
+            return
+
+        if call.data == "her/ignore_upd":
+            self.set("ignore_permanent", self.get_latest())
+            await call.answer(self.strings("latest_disabled"))
+            return
+
+        await self.invoke("update", "-f", peer=self.inline.bot_username)
+
 
     @loader.command()
     async def restart(self, message: Message):
@@ -144,6 +236,17 @@ class UpdaterMod(loader.Module):
         )
 
     async def client_ready(self):
+        try:
+            git.Repo()
+        except Exception as e:
+            raise loader.LoadError("Can't load due to repo init error") from e
+
+        self._markup = lambda: self.inline.generate_markup(
+            [
+                {"text": self.strings("update"), "data": "her/update"},
+                {"text": self.strings("ignore"), "data": "her/ignore_upd"},
+            ]
+        )
         if self.get("do_not_create", False):
             return
 

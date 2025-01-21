@@ -53,7 +53,7 @@ class InlineStuff(loader.Module):
             )
 
     @loader.command()
-    async def ch_her_bot(self, message: Message):
+    async def her_bot(self, message: Message):
         args = utils.get_args_raw(message).strip("@")
         if (
             not args
@@ -83,9 +83,7 @@ class InlineStuff(loader.Module):
         bot = self.inline.bot
 
         try:
-            # Если это ответ на сообщение от владельца
             if message.reply_to_message and message.from_user.id == self.tg_id:
-                # Пытаемся найти user_id в тексте оригинального сообщения
                 match = re.search(r"\(ID: (\d+)\)", message.reply_to_message.text)
                 if match:
                     target_user_id = int(match.group(1))
@@ -107,16 +105,14 @@ class InlineStuff(loader.Module):
                         )
                     return
 
-            # Пересылаем сообщение владельцу с информацией об отправителе
             forwarded_message = await bot.forward_message(
                 chat_id=self.tg_id,
                 from_chat_id=message.chat.id,
                 message_id=message.message_id
             )
 
-            # Добавляем информацию об отправителе, включая его ID
             sender_info = f"👤 Sender: {message.from_user.first_name or ''} {message.from_user.last_name or ''} (@{message.from_user.username or 'no_username'})\n"
-            sender_info += f"🔑 (ID: {message.from_user.id})" # Убрали Markdown
+            sender_info += f"🔑 (ID: {message.from_user.id})"
 
             await bot.send_message(
                 chat_id=self.tg_id,

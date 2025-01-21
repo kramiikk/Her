@@ -46,6 +46,37 @@ class Translations(loader.Module):
         return emoji_flags.get(lang, lang)
 
     @loader.command()
+    async def dllangpackcmd(self, message: Message):
+        if not (args := utils.get_args_raw(message)) or not utils.check_url(args):
+            await utils.answer(message, self.strings("check_url"))
+            return
+
+        current_lang = (
+            " ".join(
+                lang
+                for lang in self._db.get(translations.__name__, "lang", None).split()
+                if not utils.check_url(lang)
+            )
+            if self._db.get(translations.__name__, "lang", None)
+            else None
+        )
+
+        self._db.set(
+            translations.__name__,
+            "lang",
+            f"{current_lang} {args}" if current_lang else args,
+        )
+
+        await utils.answer(
+            message,
+            self.strings(
+                "pack_saved"
+                if await self.allmodules.reload_translations()
+                else "check_pack"
+            ),
+        )
+
+    @loader.command()
     async def setlang(self, message: Message):
         if not (args := utils.get_args_raw(message)):
             await self.inline.form(
@@ -101,32 +132,42 @@ class Translations(loader.Module):
         )
 
     @loader.command()
-    async def dllangpackcmd(self, message: Message):
-        if not (args := utils.get_args_raw(message)) or not utils.check_url(args):
-            await utils.answer(message, self.strings("check_url"))
-            return
+    async def tr(self, message: Message):
+        if not (args := utils.get_args_raw(message)):
+            text = None
+            lang = self.strings("language")
+        else:
+            lang = args.split(maxsplit=1)[0]
+            if len(lang) != 2:
+                text = args
+                lang = self.strings("language")
+            else:
+                try:
+                    text = args.split(maxsplit=1)[1]
+                except IndexError:
+                    text = None
 
-        current_lang = (
-            " ".join(
-                lang
-                for lang in self._db.get(translations.__name__, "lang", None).split()
-                if not utils.check_url(lang)
+        if not text:
+            if not (reply := await message.get_reply_message()):
+                await utils.answer(message, self.strings("no_args"))
+                return
+
+            text = reply.raw_text
+            entities = reply.entities
+        else:
+            entities = []
+
+        try:
+            await utils.answer(
+                message,
+                await self._client.translate(
+                    message.peer_id,
+                    message,
+                    lang,
+                    raw_text=text,
+                    entities=entities,
+                ),
             )
-            if self._db.get(translations.__name__, "lang", None)
-            else None
-        )
-
-        self._db.set(
-            translations.__name__,
-            "lang",
-            f"{current_lang} {args}" if current_lang else args,
-        )
-
-        await utils.answer(
-            message,
-            self.strings(
-                "pack_saved"
-                if await self.allmodules.reload_translations()
-                else "check_pack"
-            ),
-        )
+        except Exception:
+            logger.exception("Unable to translate text")
+            await utils.answer(message, self.strings("error"))

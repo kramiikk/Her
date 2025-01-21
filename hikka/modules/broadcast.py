@@ -616,6 +616,7 @@ class BroadcastManager:
             entity = await self.client.get_entity(chat_id)
             logger.debug(f"Получен объект чата {chat_id}: {type(entity)}")
         except ValueError:
+            logger.debug(f"Не получен объект чата {chat_id}")
             return self.MediaPermissions.NONE
         if not hasattr(entity, "default_banned_rights"):
             return self.MediaPermissions.NONE
@@ -951,40 +952,30 @@ class BroadcastManager:
     async def _fetch_messages(self, msg_data: dict):
         """Получает сообщения с улучшенной обработкой ошибок"""
         key = (msg_data["chat_id"], msg_data["message_id"])
-        logger.debug(
-            f"Fetching message {msg_data['message_id']} from {msg_data['chat_id']}"
+        cached = await self._message_cache.get(key)
+        if cached:
+
+            return cached
+        message = await self.client.get_messages(
+            msg_data["chat_id"], ids=msg_data["message_id"]
         )
 
-        try:
-            cached = await self._message_cache.get(key)
-            if cached:
-                return cached
-            message = await self.client.get_messages(
-                msg_data["chat_id"], ids=msg_data["message_id"]
-            )
-
-            if message:
-                if msg_data.get("grouped_ids"):
-                    messages = []
-                    for msg_id in msg_data["grouped_ids"]:
-                        grouped_msg = await self.client.get_messages(
-                            msg_data["chat_id"], ids=msg_id
-                        )
-                        if grouped_msg:
-                            messages.append(grouped_msg)
-                    if messages:
-                        await self._message_cache.set(key, messages)
-                        logger.debug(f"Fetching message compleate cache 1")
-                        return messages[0] if len(messages) == 1 else messages
-                else:
-                    await self._message_cache.set(key, message)
-                    logger.debug(f"Fetching message compleate cache 2")
-                    return message
-            logger.debug(f"Fetching message compleate None")
-            return None
-        except Exception as e:
-            logger.error(f"Fetching error: {e}")
-            return None
+        if message:
+            if msg_data.get("grouped_ids"):
+                messages = []
+                for msg_id in msg_data["grouped_ids"]:
+                    grouped_msg = await self.client.get_messages(
+                        msg_data["chat_id"], ids=msg_id
+                    )
+                    if grouped_msg:
+                        messages.append(grouped_msg)
+                if messages:
+                    await self._message_cache.set(key, messages)
+                    return messages[0] if len(messages) == 1 else messages
+            else:
+                await self._message_cache.set(key, message)
+                return message
+        return None
 
     async def _get_chat_id(self, chat_identifier: str) -> Optional[int]:
         """Получает ID чата из разных форматов (ссылка, юзернейм, ID)"""
