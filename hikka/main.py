@@ -22,6 +22,7 @@
 # You can redistribute it and/or modify it under the terms of the GNU AGPLv3
 # 🔑 https://www.gnu.org/licenses/agpl-3.0.html
 
+
 import argparse
 import asyncio
 import contextlib
@@ -86,8 +87,8 @@ with contextlib.suppress(Exception):
 
     if "microsoft-standard" in uname().release:
         IS_WSL = True
-
 # fmt: off
+
 LATIN_MOCK = [
     "iPhone", "Android", "Chrome", "macOS", "Galaxy", "Windows",
     "Firefox", "iPad", "Ubuntu", "Edge", "Pixel", "iOS",
@@ -110,9 +111,11 @@ LATIN_MOCK = [
 ]
 # fmt: on
 
+
 class ApiToken(typing.NamedTuple):
     ID: int
     HASH: str
+
 
 def generate_app_name() -> str:
     """
@@ -121,6 +124,7 @@ def generate_app_name() -> str:
     :example: "Cresco Cibus Consilium"
     """
     return " ".join(random.choices(LATIN_MOCK, k=3))
+
 
 def get_app_name() -> str:
     """
@@ -131,8 +135,8 @@ def get_app_name() -> str:
     if not (app_name := get_config_key("app_name")):
         app_name = generate_app_name()
         save_config_key("app_name", app_name)
-
     return app_name
+
 
 def generate_random_system_version():
     """
@@ -177,6 +181,7 @@ def generate_random_system_version():
     version = f"{os_name} {os_version}"
     return version
 
+
 try:
     import uvloop
 
@@ -184,11 +189,13 @@ try:
 except Exception:
     pass
 
+
 def run_config():
     """Load configurator.py"""
     from . import configurator
 
     return configurator.api_config(IS_TERMUX or None)
+
 
 def get_config_key(key: str) -> typing.Union[str, bool]:
     """
@@ -201,6 +208,7 @@ def get_config_key(key: str) -> typing.Union[str, bool]:
     except FileNotFoundError:
         return False
 
+
 def save_config_key(key: str, value: str) -> bool:
     """
     Save `key` with `value` to config
@@ -210,18 +218,22 @@ def save_config_key(key: str, value: str) -> bool:
     """
     try:
         # Try to open our newly created json config
+
         config = json.loads(CONFIG_PATH.read_text())
     except FileNotFoundError:
         # If it doesn't exist, just default config to none
         # It won't cause problems, bc after new save
         # we will create new one
-        config = {}
 
+        config = {}
     # Assign config value
+
     config[key] = value
     # And save config
+
     CONFIG_PATH.write_text(json.dumps(config, indent=4))
     return True
+
 
 def gen_port(cfg: str = "port", no8080: bool = False) -> int:
     """
@@ -231,20 +243,20 @@ def gen_port(cfg: str = "port", no8080: bool = False) -> int:
     """
     if "DOCKER" in os.environ and not no8080:
         return 8080
-
     # But for own server we generate new free port, and assign to it
+
     if port := get_config_key(cfg):
         return port
-
     # If we didn't get port from config, generate new one
     # First, try to randomly get port
+
     while port := random.randint(1024, 65536):
         if socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect_ex(
             ("localhost", port)
         ):
             break
-
     return port
+
 
 def parse_arguments() -> dict:
     """
@@ -319,6 +331,7 @@ def parse_arguments() -> dict:
     arguments = parser.parse_args()
     return arguments
 
+
 class SuperList(list):
     """
     Makes able: await self.allclients.send_message("foo", "bar")
@@ -327,7 +340,6 @@ class SuperList(list):
     def __getattribute__(self, attr: str) -> typing.Any:
         if hasattr(list, attr):
             return list.__getattribute__(self, attr)
-
         for obj in self:
             attribute = getattr(obj, attr)
             if callable(attribute):
@@ -340,15 +352,17 @@ class SuperList(list):
                 return lambda *args, **kwargs: [
                     getattr(_, attr)(*args, **kwargs) for _ in self
                 ]
-
             return [getattr(x, attr) for x in self]
+
 
 class InteractiveAuthRequired(Exception):
     """Is being rased by Telethon, if phone is required"""
 
+
 def raise_auth():
     """Raises `InteractiveAuthRequired`"""
     raise InteractiveAuthRequired()
+
 
 class Her:
     """Main userbot instance, which can handle multiple clients"""
@@ -387,7 +401,6 @@ class Her:
                 ConnectionTcpMTProxyRandomizedIntermediate,
             )
             return
-
         self.proxy, self.conn = None, ConnectionTcpFull
 
     def _read_sessions(self):
@@ -410,6 +423,7 @@ class Her:
         """Get API Token from disk or environment"""
         try:
             # Legacy migration
+
             if not get_config_key("api_id"):
                 api_id, api_hash = (
                     line.strip()
@@ -420,7 +434,6 @@ class Her:
                 save_config_key("api_id", int(api_id))
                 save_config_key("api_hash", api_hash)
                 (Path(BASE_DIR) / "api_token.txt").unlink()
-
             api_token = ApiToken(
                 int(get_config_key("api_id")),
                 get_config_key("api_hash"),
@@ -436,7 +449,6 @@ class Her:
                     )
                 except KeyError:
                     api_token = None
-
         self.api_token = api_token
 
     async def _get_token(self):
@@ -459,12 +471,10 @@ class Her:
         else:
             if not (me := await client.get_me()):
                 raise RuntimeError("Attempted to save non-inited session")
-
             telegram_id = me.id
             client._tg_id = telegram_id
             client.tg_id = telegram_id
             client.hikka_me = me
-
         session = SQLiteSession(
             os.path.join(
                 BASE_DIR,
@@ -485,10 +495,10 @@ class Her:
         if not delay_restart:
             client.disconnect()
             restart()
-
         client.session = session
         # Set db attribute to this client in order to save
         # custom bot nickname from web
+
         client.hikka_db = database.Database(client)
         await client.hikka_db.init()
 
@@ -513,7 +523,6 @@ class Her:
         """Responsible for first start"""
         if self.arguments.no_auth:
             return False
-
         client = CustomTelegramClient(
             MemorySession(),
             self.api_token.ID,
@@ -553,7 +562,6 @@ class Her:
                 )
                 if session.server_address == "0.0.0.0":
                     patcher.patch(client, session)
-
                 await client.connect()
                 client.phone = "Why do you need your own phone number?"
 
@@ -570,6 +578,7 @@ class Her:
                 self.sessions.remove(session)
             except (ValueError, ApiIdInvalidError):
                 # Bad API hash/ID
+
                 run_config()
                 return False
             except PhoneNumberInvalidError:
@@ -584,7 +593,6 @@ class Her:
                     session.filename,
                 )
                 self.sessions.remove(session)
-
         return bool(self.sessions)
 
     async def amain_wrapper(self, client: CustomTelegramClient):
@@ -612,13 +620,9 @@ class Her:
             logging.info(
                 f"• Build: {build[:7]}\n"
                 f"• Version: {'.'.join(list(map(str, list(__version__))))}\n"
-                f"• {upd}"
-            )
-
-            logging.info(
-                "· For %s · Prefix: «%s» ·",
-                client.tg_id,
-                client.hikka_db.get(__name__, "command_prefix", False) or ".",
+                f"• {upd}\n"
+                f"• For {client.tg_id}\n"
+                f"• Prefix: «{client.hikka_db.get(__name__, 'command_prefix', False) or '.'}»"
             )
         except Exception:
             logging.exception("Badge error")
@@ -682,7 +686,6 @@ class Her:
 
         if first:
             await self._badge(client)
-
         await client.run_until_disconnected()
 
     async def _main(self):
@@ -694,7 +697,6 @@ class Her:
             not self.clients and not self.sessions or not await self._init_clients()
         ) and not await self._initial_setup():
             return
-
         self.loop.set_exception_handler(
             lambda _, x: logging.error(
                 "Exception on event loop! %s",
@@ -710,7 +712,6 @@ class Her:
         logging.info("Bye")
         for client in self.clients:
             client.disconnect()
-
         sys.exit(0)
 
     def main(self):
@@ -718,6 +719,7 @@ class Her:
         signal.signal(signal.SIGINT, self._shutdown_handler)
         self.loop.run_until_complete(self._main())
         self.loop.close()
+
 
 hikkatl.extensions.html.CUSTOM_EMOJIS = not get_config_key("disable_custom_emojis")
 
