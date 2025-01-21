@@ -29,16 +29,6 @@ class Executor(loader.Module):
         "executing": "<b><emoji document_id=5332600281970517875>🔄</emoji> Выполняю код...</b>",
     }
 
-    def __init__(self):
-        self.config = loader.ModuleConfig(
-            loader.ConfigValue(
-                "hide_phone",
-                True,
-                lambda: "Скрывает твой номер телефона при выводе",
-                validator=loader.validators.Boolean(),
-            ),
-        )
-
     async def client_ready(self, client, db):
         self.db = db
         self._client = client
@@ -78,7 +68,7 @@ class Executor(loader.Module):
         return result.getvalue().strip(), res, False
 
     @loader.command()
-    async def execcmd(self, message):
+    async def ecmd(self, message):
         """Выполнить python код"""
 
         code = utils.get_args_raw(message)
@@ -94,24 +84,15 @@ class Executor(loader.Module):
         result, res, cerr = await self.cexecute(code, message, reply)
         stop_time = time.perf_counter()
 
-        me = await self.client.get_me()
-
         result = str(result)
         res = str(res)
 
-        if self.config["hide_phone"]:
-            t_h = "never gonna give you up"
-
-            if result:
-                result = result.replace("+" + me.phone, t_h).replace(me.phone, t_h)
-            if res:
-                res = res.replace("+" + me.phone, t_h).replace(me.phone, t_h)
         if result:
             result = f"""{'<emoji document_id=6334758581832779720>✅</emoji> Результат' if not cerr else '<emoji document_id=5440381017384822513>🚫</emoji> Ошибка'}:
 <pre><code class="language-python">{result}</code></pre>
 """
         if res or res == 0 or res == False and res is not None:
-            result += f"""<emoji document_id=6334778871258286021>💾</emoji> Код вернул:
+            result += f"""<emoji document_id=6334778871258286021>💾</emoji> Результат:
 <pre><code class="language-python">{res}</code></pre>
 """
         return await utils.answer(
