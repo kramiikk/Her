@@ -852,8 +852,6 @@ class BroadcastManager:
             return_exceptions=True,
         )
 
-        logger.info("Получен объект")
-
         for msg_data, result in zip(messages, results):
             if isinstance(result, Exception):
                 deleted_messages.append(msg_data)
@@ -948,29 +946,38 @@ class BroadcastManager:
 
     async def _fetch_messages(self, msg_data: dict):
         """Получает сообщения с улучшенной обработкой ошибок"""
+        logger.info(f"Получены данные для fetch: {msg_data}")
         key = (msg_data["chat_id"], msg_data["message_id"])
+        logger.info(f"Попытка получить из кэша ключ: {(msg_data['chat_id'], msg_data['message_id'])}")
         cached = await self._message_cache.get(key)
         if cached:
-
+            logger.info(f"Получено из кэша: {cached}")
             return cached
+        logger.info(f"Отправка запроса на получение сообщения из чата {msg_data['chat_id']} с ID {msg_data['message_id']}")
         message = await self.client.get_messages(
             msg_data["chat_id"], ids=msg_data["message_id"]
         )
+        logger.info(f"Получен ответ от Telegram API: {message}")
 
         if message:
             if msg_data.get("grouped_ids"):
+                logger.info(f"Обработка групповых сообщений с ID: {msg_data.get('grouped_ids')}")
                 messages = []
                 for msg_id in msg_data["grouped_ids"]:
+                    logger.info(f"Запрос на получение группового сообщения с ID: {msg_id}")
                     grouped_msg = await self.client.get_messages(
                         msg_data["chat_id"], ids=msg_id
                     )
+                    logger.info(f"Получено групповое сообщение: {grouped_msg}")
                     if grouped_msg:
                         messages.append(grouped_msg)
                 if messages:
                     await self._message_cache.set(key, messages)
                     return messages[0] if len(messages) == 1 else messages
             else:
+                logger.info(f"Сохранение сообщения в кэш с ключом: {(msg_data['chat_id'], msg_data['message_id'])}")
                 await self._message_cache.set(key, message)
+                logger.info(f"Функция _fetch_messages возвращает: {message}")
                 return message
         return None
 
