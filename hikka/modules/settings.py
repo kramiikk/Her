@@ -4,10 +4,14 @@
 # You can redistribute it and/or modify it under the terms of the GNU AGPLv3
 # 🔑 https://www.gnu.org/licenses/agpl-3.0.html
 
+import time
+import logging
 from hikkatl.tl.types import Message
 
 from .. import loader, main, utils
+from .._internal import restart
 
+logger = logging.getLogger(__name__)
 
 @loader.tds
 class CoreMod(loader.Module):
@@ -217,3 +221,27 @@ class CoreMod(loader.Module):
         self._db.clear()
         self._db.save()
         await utils.answer(message, self.strings("db_cleared"))
+
+    @loader.command()
+    async def restart(self, message: Message):
+        args = utils.get_args_raw(message)
+        secure_boot = any(trigger in args for trigger in {"--secure-boot", "-sb"})
+
+        if secure_boot:
+            self._db.set(loader.__name__, "secure_boot", True)
+
+        self.set("restart_ts", time.time())
+
+        await self._db.remote_force_save()
+
+        handler = logging.getLogger().handlers[0]
+        handler.setLevel(logging.CRITICAL)
+
+        current_client = message.client
+
+        for client in self.allclients:
+            if client is not current_client:
+                await client.disconnect()
+
+        await current_client.disconnect()
+        restart()
