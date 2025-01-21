@@ -60,13 +60,15 @@ CONSTRUCTORS = {
     )
 }
 
-
 @loader.tds
 class TestMod(loader.Module):
     """Perform operations based on userbot self-testing"""
 
     strings = {
         "name": "Tester",
+        "logs_cleared": "Логи очищены",
+        "logs_caption": "Собранные логи ({}) {}\n\nHer v{}.{}.{}{}",
+        "warning": "<b>⚠️ Обнаружен локальный флуд!</b>\n\nВременная блокировка на <code>{}</code> секунд.\n\nВы можете сбросить блокировку командой <code>{}test unlock</code>",
     }
 
     def __init__(self):
@@ -191,11 +193,6 @@ class TestMod(loader.Module):
 
     @loader.command()
     async def clearlogs(self, message: Message):
-        for handler in logging.getLogger().handlers:
-            handler.buffer = []
-            handler.handledbuffer = []
-            handler.tg_buff = ""
-
         await utils.answer(message, self.strings("logs_cleared"))
 
     @loader.command()
@@ -231,9 +228,12 @@ class TestMod(loader.Module):
             ),
         )
 
+        chat_id = message.form["chat"] if isinstance(message, InlineCall) else message.chat_id
+        reply_to = message.form["top_msg_id"] if isinstance(message, InlineCall) else message.id
+
         await self._client.send_file(
-            message.form["chat"],
+            chat_id,
             logs,
             caption=self.strings("logs_caption").format("ALL", *other),
-            reply_to=message.form["top_msg_id"],
+            reply_to=reply_to,
         )
