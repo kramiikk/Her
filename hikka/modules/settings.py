@@ -238,6 +238,7 @@ class CoreMod(loader.Module):
         handler.setLevel(logging.CRITICAL)
 
         current_client = message.client
+        await utils.answer(message, "☁️")
 
         for client in self.allclients:
             if client is not current_client:
