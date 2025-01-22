@@ -805,53 +805,69 @@ class BroadcastManager:
     async def _process_message_batch(
         self, code: Optional[Broadcast], messages: List[dict]
     ) -> Tuple[List[Union[Message, List[Message]]], List[dict]]:
-        """Обрабатывает пакет сообщений с оптимизированной загрузкой."""
+        """Обрабатывает пакет сообщений с улучшенной обработкой ошибок."""
         logger.info(
             f"Вызвана функция _process_message_batch с {len(messages)} сообщениями."
         )
         if not code:
+            logger.warning("Код рассылки не предоставлен")
             return [], messages
+        
         messages_to_send = []
         deleted_messages = []
 
         # Создаем список задач
-
         fetch_tasks = []
         for msg in messages:
             logger.info(f"Подготовка задачи fetch для сообщения: {msg}")
-            task = asyncio.create_task(self._fetch_messages(msg))  # Явно создаем таск
-            fetch_tasks.append(task)
+            task = asyncio.create_task(self._fetch_messages(msg))
+            fetch_tasks.append((msg, task))
+
         try:
             logger.info(f"Запуск asyncio.gather для {len(fetch_tasks)} задач")
-            # Добавляем обработку ошибок в gather
+            # Выполняем все задачи
+            results = []
+            for msg, task in fetch_tasks:
+                try:
+                    logger.info(f"Ожидание результата для сообщения: {msg}")
+                    result = await task
+                    logger.info(f"Получен результат: {type(result)}")
+                    results.append((msg, result))
+                except Exception as e:
+                    logger.error(f"Ошибка при выполнении задачи для {msg}: {e}", exc_info=True)
+                    results.append((msg, e))
 
-            results = await asyncio.gather(*fetch_tasks, return_exceptions=True)
-            logger.info(f"Gather выполнен. Получено результатов: {len(results)}")
-
+            logger.info(f"Обработка {len(results)} результатов")
+            
             # Обрабатываем результаты
-
-            for i, (msg_data, result) in enumerate(zip(messages, results)):
+            for msg_data, result in results:
                 try:
                     if isinstance(result, Exception):
                         logger.error(f"Ошибка для сообщения {msg_data}: {result}")
                         deleted_messages.append(msg_data)
                         continue
+                    
                     if not result:
                         logger.info(f"Пустой результат для сообщения {msg_data}")
                         deleted_messages.append(msg_data)
                         continue
+                    
+                    logger.info(f"Добавление сообщения в список для отправки: {type(result)}")
                     messages_to_send.append(result)
-                    logger.info(f"Успешно обработано сообщение {i+1}/{len(results)}")
+                    
                 except Exception as e:
-                    logger.error(f"Ошибка при обработке результата {i+1}: {e}")
+                    logger.error(f"Ошибка при обработке результата для {msg_data}: {e}", exc_info=True)
                     deleted_messages.append(msg_data)
+
+            logger.info(
+                f"Завершена обработка пакета: {len(messages_to_send)} для отправки, {len(deleted_messages)} удалено"
+            )
+            return messages_to_send, deleted_messages
+        
         except Exception as e:
-            logger.error(f"Критическая ошибка в _process_message_batch: {e}")
+            logger.error(f"Критическая ошибка в _process_message_batch: {e}", exc_info=True)
+            # В случае критической ошибки, помечаем все сообщения как удаленные
             return [], messages
-        logger.info(
-            f"Batch обработан: {len(messages_to_send)} для отправки, {len(deleted_messages)} удалено"
-        )
-        return messages_to_send, deleted_messages
 
     async def _send_message(
         self,

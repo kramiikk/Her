@@ -88,10 +88,35 @@ class InlineStuff(loader.Module):
                 if match:
                     target_user_id = int(match.group(1))
                     try:
-                        await bot.send_message(
-                            chat_id=target_user_id,
-                            text=message.text
-                        )
+                        if message.sticker:
+                            await bot.send_sticker(
+                                chat_id=target_user_id,
+                                sticker=message.sticker.file_id
+                            )
+                        elif message.photo:
+                            await bot.send_photo(
+                                chat_id=target_user_id,
+                                photo=message.photo[-1].file_id,
+                                caption=message.caption
+                            )
+                        elif message.video:
+                            await bot.send_video(
+                                chat_id=target_user_id,
+                                video=message.video.file_id,
+                                caption=message.caption
+                            )
+                        elif message.document:
+                             await bot.send_document(
+                                 chat_id=target_user_id,
+                                 document=message.document.file_id,
+                                 caption=message.caption
+                             )
+                        else:
+                            await bot.send_message(
+                                chat_id=target_user_id,
+                                text=message.text
+                            )
+                        
                         await bot.send_message(
                             chat_id=self.tg_id,
                             text=f"✅ Message sent to user {target_user_id}",
@@ -134,6 +159,5 @@ class InlineStuff(loader.Module):
                     caption=self.strings("this_is"),
                     parse_mode="HTML"
                 )
-
         except Exception as e:
             logger.error(f"Failed to process message: {e}", exc_info=True)
