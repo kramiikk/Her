@@ -122,7 +122,7 @@ class HerBackupMod(loader.Module):
         self._db.save()
 
         await call.answer(self.strings("db_restored"), show_alert=True)
-        await self.invoke("restart", "-f", peer=call.message.peer_id)
+        await self.invoke("restart", peer=call.message.peer_id)
 
     @loader.command()
     async def backupdb(self, message: Message):
@@ -162,4 +162,4 @@ class HerBackupMod(loader.Module):
         self._db.save()
 
         await utils.answer(message, self.strings("db_restored"))
-        await self.invoke("restart", "-f", peer=message.peer_id)
+        await self.invoke("restart", peer=message.peer_id)

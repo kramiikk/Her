@@ -977,30 +977,52 @@ class BroadcastManager:
 
     async def _fetch_messages(self, msg_data: dict):
         """Получает сообщения с улучшенной обработкой ошибок"""
-        key = (msg_data["chat_id"], msg_data["message_id"])
-        cached = await self._message_cache.get(key)
-        if cached:
-            return cached
-        message = await self.client.get_messages(
-            msg_data["chat_id"], ids=msg_data["message_id"]
-        )
+        try:
+            logger.info(f"Начало _fetch_messages для {msg_data}")
+            
+            key = (msg_data["chat_id"], msg_data["message_id"])
+            logger.info(f"Проверка кэша для ключа {key}")
+            
+            cached = await self._message_cache.get(key)
+            if cached:
+                logger.info("Найдено в кэше, возвращаем закэшированное сообщение")
+                return cached
+                
+            logger.info("Получение сообщения из Telegram...")
+            message = await self.client.get_messages(
+                msg_data["chat_id"], 
+                ids=msg_data["message_id"]
+            )
+            logger.info(f"Результат получения сообщения: {message is not None}")
 
-        if message:
-            if msg_data.get("grouped_ids"):
-                messages = []
-                for msg_id in msg_data["grouped_ids"]:
-                    grouped_msg = await self.client.get_messages(
-                        msg_data["chat_id"], ids=msg_id
-                    )
-                    if grouped_msg:
-                        messages.append(grouped_msg)
-                if messages:
-                    await self._message_cache.set(key, messages)
-                    return messages[0] if len(messages) == 1 else messages
-            else:
-                await self._message_cache.set(key, message)
-                return message
-        return None
+            if message:
+                if msg_data.get("grouped_ids"):
+                    logger.info(f"Обработка группы сообщений: {msg_data['grouped_ids']}")
+                    messages = []
+                    for msg_id in msg_data["grouped_ids"]:
+                        logger.info(f"Получение сгруппированного сообщения {msg_id}")
+                        grouped_msg = await self.client.get_messages(
+                            msg_data["chat_id"], 
+                            ids=msg_id
+                        )
+                        if grouped_msg:
+                            messages.append(grouped_msg)
+                            
+                    if messages:
+                        logger.info(f"Сохранение {len(messages)} сообщений в кэш")
+                        await self._message_cache.set(key, messages)
+                        return messages[0] if len(messages) == 1 else messages
+                else:
+                    logger.info("Сохранение одиночного сообщения в кэш")
+                    await self._message_cache.set(key, message)
+                    return message
+                    
+            logger.info("Сообщение не найдено")
+            return None
+            
+        except Exception as e:
+            logger.error(f"Ошибка в _fetch_messages: {str(e)}", exc_info=True)
+            raise
 
     async def _get_chat_id(self, chat_identifier: str) -> Optional[int]:
         """Получает ID чата из разных форматов (ссылка, юзернейм, ID)"""
