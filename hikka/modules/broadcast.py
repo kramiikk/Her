@@ -863,11 +863,13 @@ class BroadcastManager:
         try:
             logger.info(f"Запуск asyncio.gather для {len(fetch_tasks)} задач")
             results = await asyncio.gather(*fetch_tasks, return_exceptions=True)
-            logger.info("Успешно получены результаты gather")
+            logger.info("Получены результаты gather")
+            logger.info(f"Количество результатов: {len(results)}")
             
-            for msg_data, result in zip(messages, results):
+            for i, (msg_data, result) in enumerate(zip(messages, results)):
                 try:
-                    logger.info(f"Обработка результата для сообщения {msg_data}: {type(result)}")
+                    logger.info(f"Обработка результата {i + 1} из {len(results)}")
+                    logger.info(f"Тип результата: {type(result)}")
                     
                     if isinstance(result, Exception):
                         logger.error(f"Получено исключение для сообщения {msg_data}: {result}")
@@ -880,24 +882,31 @@ class BroadcastManager:
                         continue
                         
                     if isinstance(result, list):
+                        logger.info("Проверка размера медиа для группы сообщений")
                         valid = all(self._check_media_size(msg) for msg in result)
-                        logger.info(f"Проверка размера медиа для группы сообщений: {valid}")
                     else:
+                        logger.info("Проверка размера медиа для одиночного сообщения")
                         valid = self._check_media_size(result)
-                        logger.info(f"Проверка размера медиа для одиночного сообщения: {valid}")
+                    
+                    logger.info(f"Результат проверки размера: {valid}")
                         
                     if valid:
                         messages_to_send.append(result)
+                        logger.info("Сообщение добавлено для отправки")
                     else:
                         deleted_messages.append(msg_data)
+                        logger.info("Сообщение добавлено к удаленным")
                         
                 except Exception as e:
-                    logger.error(f"Ошибка при обработке результата: {e}")
+                    logger.error(f"Ошибка при обработке результата {i + 1}: {e}", exc_info=True)
                     deleted_messages.append(msg_data)
                     
         except Exception as e:
             logger.error(f"Критическая ошибка в _process_message_batch: {e}", exc_info=True)
             return [], messages
+            
+        logger.info(f"Завершение _process_message_batch: {len(messages_to_send)} для отправки, {len(deleted_messages)} удалено")
+        return messages_to_send, deleted_messages
 
     @staticmethod
     def _check_media_size(message: Optional[Message]) -> bool:
@@ -994,6 +1003,7 @@ class BroadcastManager:
                 ids=msg_data["message_id"]
             )
             logger.info(f"Результат получения сообщения: {message is not None}")
+            logger.info(f"Тип полученного сообщения: {type(message)}")
 
             if message:
                 if msg_data.get("grouped_ids"):
@@ -1011,10 +1021,12 @@ class BroadcastManager:
                     if messages:
                         logger.info(f"Сохранение {len(messages)} сообщений в кэш")
                         await self._message_cache.set(key, messages)
+                        logger.info("Возврат группы сообщений")
                         return messages[0] if len(messages) == 1 else messages
                 else:
                     logger.info("Сохранение одиночного сообщения в кэш")
                     await self._message_cache.set(key, message)
+                    logger.info("Возврат одиночного сообщения")
                     return message
                     
             logger.info("Сообщение не найдено")
