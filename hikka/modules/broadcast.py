@@ -845,32 +845,59 @@ class BroadcastManager:
         logger.info(f"Вызвана функция _process_message_batch с {len(messages)} сообщениями.")
         if not code:
             return [], messages
+        
         messages_to_send = []
         deleted_messages = []
-
-        results = await asyncio.gather(
-            *[self._fetch_messages(msg) for msg in messages],
-            return_exceptions=True,
-        )
-        logger.info(f"Результаты asyncio.gather: {results}")
-        logger.info("Начинаем обработку результатов...")
-
-        for msg_data, result in zip(messages, results):
-            logger.info(f"Результат обработки сообщения {msg_data}: {result}")
-            if isinstance(result, Exception):
-                deleted_messages.append(msg_data)
-            elif result:
-                if isinstance(result, list):
-                    valid = all(self._check_media_size(msg) for msg in result)
-                else:
-                    valid = self._check_media_size(result)
-                if valid:
-                    messages_to_send.append(result)
-                else:
+        
+        fetch_tasks = []
+        for msg in messages:
+            try:
+                logger.info(f"Подготовка задачи fetch для сообщения: {msg}")
+                task = self._fetch_messages(msg)
+                fetch_tasks.append(task)
+            except Exception as e:
+                logger.error(f"Ошибка при создании задачи fetch: {e}")
+                deleted_messages.append(msg)
+                continue
+                
+        try:
+            logger.info(f"Запуск asyncio.gather для {len(fetch_tasks)} задач")
+            results = await asyncio.gather(*fetch_tasks, return_exceptions=True)
+            logger.info("Успешно получены результаты gather")
+            
+            for msg_data, result in zip(messages, results):
+                try:
+                    logger.info(f"Обработка результата для сообщения {msg_data}: {type(result)}")
+                    
+                    if isinstance(result, Exception):
+                        logger.error(f"Получено исключение для сообщения {msg_data}: {result}")
+                        deleted_messages.append(msg_data)
+                        continue
+                        
+                    if not result:
+                        logger.info(f"Нулевой результат для сообщения {msg_data}")
+                        deleted_messages.append(msg_data)
+                        continue
+                        
+                    if isinstance(result, list):
+                        valid = all(self._check_media_size(msg) for msg in result)
+                        logger.info(f"Проверка размера медиа для группы сообщений: {valid}")
+                    else:
+                        valid = self._check_media_size(result)
+                        logger.info(f"Проверка размера медиа для одиночного сообщения: {valid}")
+                        
+                    if valid:
+                        messages_to_send.append(result)
+                    else:
+                        deleted_messages.append(msg_data)
+                        
+                except Exception as e:
+                    logger.error(f"Ошибка при обработке результата: {e}")
                     deleted_messages.append(msg_data)
-            else:
-                deleted_messages.append(msg_data)
-        return messages_to_send, deleted_messages
+                    
+        except Exception as e:
+            logger.error(f"Критическая ошибка в _process_message_batch: {e}", exc_info=True)
+            return [], messages
 
     @staticmethod
     def _check_media_size(message: Optional[Message]) -> bool:

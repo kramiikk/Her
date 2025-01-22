@@ -284,7 +284,7 @@ class TerminalMod(loader.Module):
         self.activecmds = {}
 
     @loader.command()
-    async def terminalcmd(self, message):
+    async def tcmd(self, message):
         await self.run_command(message, utils.get_args_raw(message))
 
     async def run_command(
