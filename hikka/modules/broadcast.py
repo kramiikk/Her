@@ -319,33 +319,164 @@ class BroadcastManager:
         self.cache_cleanup_task = None
         self.tg_id = tg_id
 
-    async def _load_config(self):
-        """Loads configuration from database with improved state handling"""
-        try:
-            config = self.db.get("broadcast", "config", {})
-            if not config:
+    async def _broadcast_loop(self, code_name: str):
+        """Main broadcast loop with enhanced debug logging"""
+        async with self._semaphore:
+            code = self.codes.get(code_name)
+            if not code or not code.messages:
                 return
-            for code_name, code_data in config.get("codes", {}).items():
-                broadcast = Broadcast.from_dict(code_data)
-                self.codes[code_name] = broadcast
-                broadcast._active = False
-            active_broadcasts = config.get("active_broadcasts", [])
-            for code_name in active_broadcasts:
-                try:
-                    if code_name not in self.codes:
-                        continue
-                    code = self.codes[code_name]
+            while self._active:
+                deleted_messages = []
+                messages_to_send = []
 
-                    if not code.messages or not code.chats:
+                try:
+                    current_messages = code.messages.copy()
+                    if not current_messages:
+                        await asyncio.sleep(300)
                         continue
-                    code._active = True
-                    self.broadcast_tasks[code_name] = asyncio.create_task(
-                        self._broadcast_loop(code_name)
+                    try:
+                        if not current_messages:
+                            batches = []
+                        batches = [
+                            current_messages[i : i + self.BATCH_SIZE_LARGE]
+                            for i in range(
+                                0, len(current_messages), self.BATCH_SIZE_LARGE
+                            )
+                        ]
+
+                        for batch in batches:
+                            if not self._active or not code._active:
+                                return
+                            batch_messages, deleted = await self._process_message_batch(
+                                code, batch
+                            )
+                            messages_to_send.extend(batch_messages)
+                            deleted_messages.extend(deleted)
+                        if not messages_to_send:
+                            await asyncio.sleep(300)
+                            continue
+                    except Exception as batch_error:
+                        logger.error(
+                            f"[{code_name}] Batch processing error: {batch_error}",
+                            exc_info=True,
+                        )
+                        await asyncio.sleep(300)
+                        continue
+                    if deleted_messages:
+                        code.messages = [
+                            m for m in code.messages if m not in deleted_messages
+                        ]
+                    if not code.batch_mode:
+                        next_index = code.get_next_message_index()
+                        messages_to_send = [
+                            messages_to_send[next_index % len(messages_to_send)]
+                        ]
+                    failed_chats = await self._send_messages_to_chats(
+                        code, code_name, messages_to_send
                     )
+
+                    if failed_chats:
+                        await self._handle_failed_chats(code_name, failed_chats)
+                    await asyncio.sleep(60)
+                    await self.save_config()
+                except asyncio.CancelledError:
+                    break
                 except Exception as e:
-                    continue
+                    logger.error(
+                        f"[{code_name}] Error in broadcast loop: {str(e)}",
+                        exc_info=True,
+                    )
+                    await asyncio.sleep(300)
+
+    async def _calculate_and_sleep(self, min_interval: int, max_interval: int):
+        """Вычисляет время сна и засыпает."""
+        sleep_time = random.uniform(min_interval * 60, max_interval * 60)
+        await asyncio.sleep(max(60, sleep_time))
+
+    async def _fetch_messages(self, msg_data: dict):
+        """Получает сообщения с улучшенной обработкой ошибок"""
+        try:
+            logger.info(f"Начало _fetch_messages для {msg_data}")
+
+            key = (msg_data["chat_id"], msg_data["message_id"])
+            logger.info(f"Проверка кэша для ключа {key}")
+
+            cached = await self._message_cache.get(key)
+            if cached:
+                logger.info("Найдено в кэше, возвращаем закэшированное сообщение")
+                return cached
+            logger.info("Получение сообщения из Telegram...")
+            message = await self.client.get_messages(
+                msg_data["chat_id"], ids=msg_data["message_id"]
+            )
+            logger.info(f"Результат получения сообщения: {message is not None}")
+            logger.info(f"Тип полученного сообщения: {type(message)}")
+
+            if message:
+                if msg_data.get("grouped_ids"):
+                    logger.info(
+                        f"Обработка группы сообщений: {msg_data['grouped_ids']}"
+                    )
+                    messages = []
+                    for msg_id in msg_data["grouped_ids"]:
+                        logger.info(f"Получение сгруппированного сообщения {msg_id}")
+                        grouped_msg = await self.client.get_messages(
+                            msg_data["chat_id"], ids=msg_id
+                        )
+                        if grouped_msg:
+                            messages.append(grouped_msg)
+                    if messages:
+                        logger.info(f"Сохранение {len(messages)} сообщений в кэш")
+                        await self._message_cache.set(key, messages)
+                        logger.info("Возврат группы сообщений")
+                        return messages[0] if len(messages) == 1 else messages
+                else:
+                    logger.info("Сохранение одиночного сообщения в кэш")
+                    await self._message_cache.set(key, message)
+                    logger.info("Возврат одиночного сообщения")
+                    return message
+            logger.info("Сообщение не найдено")
+            return None
         except Exception as e:
-            logger.error(f"Error loading configuration: {e}")
+            logger.error(f"Ошибка в _fetch_messages: {str(e)}", exc_info=True)
+            raise
+
+    async def _get_chat_id(self, chat_identifier: str) -> Optional[int]:
+        """Получает ID чата из разных форматов (ссылка, юзернейм, ID)"""
+        try:
+            if chat_identifier.lstrip("-").isdigit():
+                return int(chat_identifier)
+            clean_username = chat_identifier.lower()
+            for prefix in ["https://", "http://", "t.me/", "@", "telegram.me/"]:
+                clean_username = clean_username.replace(prefix, "")
+            entity = await self.client.get_entity(clean_username)
+            return entity.id
+        except Exception:
+            return None
+
+    async def _get_chat_permissions(self, chat_id: int) -> int:
+        """
+        Enhanced permission check that safely handles cases where user cannot access chat
+
+        Returns:
+            permission_level: int
+                0 - No permissions
+                1 - Text only
+                2 - Full media permissions
+        """
+        try:
+            entity = await self.client.get_entity(chat_id)
+        except ValueError:
+            return self.MediaPermissions.NONE
+        if not hasattr(entity, "default_banned_rights"):
+            return self.MediaPermissions.NONE
+        banned = entity.default_banned_rights
+
+        if banned.send_messages:
+            return self.MediaPermissions.NONE
+        if banned.send_media or banned.send_photos:
+            return self.MediaPermissions.TEXT_ONLY
+        return self.MediaPermissions.FULL_MEDIA
 
     async def _handle_add_command(
         self, message: Message, code: Optional[Broadcast], code_name: str
@@ -602,34 +733,191 @@ class BroadcastManager:
             f"✅ Автодобавление чатов {'включено' if self.watcher_enabled else 'выключено'}",
         )
 
-    async def _get_chat_permissions(self, chat_id: int) -> int:
-        """
-        Enhanced permission check that safely handles cases where user cannot access chat
-
-        Returns:
-            permission_level: int
-                0 - No permissions
-                1 - Text only
-                2 - Full media permissions
-        """
+    async def _handle_failed_chats(
+        self, code_name: str, failed_chats: Set[int]
+    ) -> None:
+        """Обрабатывает чаты, в которые не удалось отправить сообщения."""
+        if not failed_chats:
+            return
         try:
-            entity = await self.client.get_entity(chat_id)
-        except ValueError:
-            return self.MediaPermissions.NONE
-        if not hasattr(entity, "default_banned_rights"):
-            return self.MediaPermissions.NONE
-        banned = entity.default_banned_rights
+            async with self._lock:
+                code = self.codes.get(code_name)
+                if not code:
+                    return
+                code.chats -= failed_chats
+                await self.save_config()
 
-        if banned.send_messages:
-            return self.MediaPermissions.NONE
-        if banned.send_media or banned.send_photos:
-            return self.MediaPermissions.TEXT_ONLY
-        return self.MediaPermissions.FULL_MEDIA
+                chat_groups = [
+                    ", ".join(
+                        str(chat_id)
+                        for chat_id in tuple(failed_chats)[
+                            i : i + self.NOTIFY_GROUP_SIZE
+                        ]
+                    )
+                    for i in range(0, len(failed_chats), self.NOTIFY_GROUP_SIZE)
+                ]
 
-    async def _calculate_and_sleep(self, min_interval: int, max_interval: int):
-        """Вычисляет время сна и засыпает."""
-        sleep_time = random.uniform(min_interval * 60, max_interval * 60)
-        await asyncio.sleep(max(60, sleep_time))
+                base_message = (
+                    f"⚠️ Рассылка '{code_name}':\n"
+                    f"Не удалось отправить сообщения в {len(failed_chats)} чат(ов).\n"
+                    f"Чаты удалены из рассылки.\n\n"
+                    f"ID чатов:\n"
+                )
+
+                for group in chat_groups:
+                    await self.client.send_message(
+                        self.tg_id,
+                        base_message + group,
+                        schedule=datetime.now() + timedelta(seconds=60),
+                    )
+                    await asyncio.sleep(self.NOTIFY_DELAY)
+        except Exception as e:
+            logger.error(f"Ошибка обработки неудачных чатов для {code_name}: {e}")
+
+    async def _load_config(self):
+        """Loads configuration from database with improved state handling"""
+        try:
+            config = self.db.get("broadcast", "config", {})
+            if not config:
+                return
+            for code_name, code_data in config.get("codes", {}).items():
+                broadcast = Broadcast.from_dict(code_data)
+                self.codes[code_name] = broadcast
+                broadcast._active = False
+            active_broadcasts = config.get("active_broadcasts", [])
+            for code_name in active_broadcasts:
+                try:
+                    if code_name not in self.codes:
+                        continue
+                    code = self.codes[code_name]
+
+                    if not code.messages or not code.chats:
+                        continue
+                    code._active = True
+                    self.broadcast_tasks[code_name] = asyncio.create_task(
+                        self._broadcast_loop(code_name)
+                    )
+                except Exception as e:
+                    continue
+        except Exception as e:
+            logger.error(f"Error loading configuration: {e}")
+
+    async def _process_message_batch(
+        self, code: Optional[Broadcast], messages: List[dict]
+    ) -> Tuple[List[Union[Message, List[Message]]], List[dict]]:
+        """Обрабатывает пакет сообщений с оптимизированной загрузкой."""
+        logger.info(
+            f"Вызвана функция _process_message_batch с {len(messages)} сообщениями."
+        )
+        if not code:
+            return [], messages
+        messages_to_send = []
+        deleted_messages = []
+
+        # Создаем список задач
+
+        fetch_tasks = []
+        for msg in messages:
+            logger.info(f"Подготовка задачи fetch для сообщения: {msg}")
+            task = asyncio.create_task(self._fetch_messages(msg))  # Явно создаем таск
+            fetch_tasks.append(task)
+        try:
+            logger.info(f"Запуск asyncio.gather для {len(fetch_tasks)} задач")
+            # Добавляем обработку ошибок в gather
+
+            results = await asyncio.gather(*fetch_tasks, return_exceptions=True)
+            logger.info(f"Gather выполнен. Получено результатов: {len(results)}")
+
+            # Обрабатываем результаты
+
+            for i, (msg_data, result) in enumerate(zip(messages, results)):
+                try:
+                    if isinstance(result, Exception):
+                        logger.error(f"Ошибка для сообщения {msg_data}: {result}")
+                        deleted_messages.append(msg_data)
+                        continue
+                    if not result:
+                        logger.info(f"Пустой результат для сообщения {msg_data}")
+                        deleted_messages.append(msg_data)
+                        continue
+                    messages_to_send.append(result)
+                    logger.info(f"Успешно обработано сообщение {i+1}/{len(results)}")
+                except Exception as e:
+                    logger.error(f"Ошибка при обработке результата {i+1}: {e}")
+                    deleted_messages.append(msg_data)
+        except Exception as e:
+            logger.error(f"Критическая ошибка в _process_message_batch: {e}")
+            return [], messages
+        logger.info(
+            f"Batch обработан: {len(messages_to_send)} для отправки, {len(deleted_messages)} удалено"
+        )
+        return messages_to_send, deleted_messages
+
+    async def _send_message(
+        self,
+        code_name: str,
+        chat_id: int,
+        msg: Union[Message, List[Message]],
+        send_mode: str = "auto",
+    ) -> bool:
+        try:
+
+            async def forward_messages(messages: Union[Message, List[Message]]) -> None:
+                if isinstance(messages, list):
+                    await self.client.forward_messages(
+                        entity=chat_id,
+                        messages=messages,
+                        from_peer=messages[0].chat_id,
+                    )
+                else:
+                    await self.client.forward_messages(
+                        entity=chat_id,
+                        messages=[messages],
+                        from_peer=messages.chat_id,
+                    )
+
+            await self.GLOBAL_MINUTE_LIMITER.acquire()
+            await self.GLOBAL_HOUR_LIMITER.acquire()
+
+            await asyncio.sleep(random.uniform(1, 3))
+
+            is_auto_mode = send_mode == "auto"
+            is_forwardable = isinstance(msg, list) or (
+                hasattr(msg, "media") and msg.media
+            )
+            if not is_auto_mode or is_forwardable:
+                await forward_messages(msg)
+            else:
+                await self.client.send_message(
+                    entity=chat_id, message=msg.text if msg.text else msg
+                )
+            self.error_counts[chat_id] = 0
+            self.error_counts[f"{chat_id}_general"] = 0
+            self.last_error_time[f"{chat_id}_general"] = 0
+            return True
+        except FloodWaitError as e:
+            error_key = f"{chat_id}_flood"
+            self.error_counts[error_key] = 0
+            wait_time = e.seconds + random.randint(5, 15)
+            logger.warning(f"FloodWait {e.seconds}s → Adjusted {wait_time}s")
+            await asyncio.sleep(wait_time)
+            raise
+        except (ChatWriteForbiddenError, UserBannedInChannelError):
+            raise
+        except Exception as e:
+            logger.error(
+                f"[{code_name}][send_message] Error sending to {chat_id}: {str(e)}"
+            )
+            error_key = f"{chat_id}_general"
+            self.error_counts[error_key] = self.error_counts.get(error_key, 0) + 1
+            self.last_error_time[error_key] = time.time()
+
+            if self.error_counts[error_key] >= self.MAX_CONSECUTIVE_ERRORS:
+                wait_time = 60 * (
+                    2 ** (self.error_counts[error_key] - self.MAX_CONSECUTIVE_ERRORS)
+                )
+                await asyncio.sleep(wait_time)
+            raise
 
     async def _send_messages_to_chats(
         self,
@@ -719,335 +1007,6 @@ class BroadcastManager:
                 )
                 await self.client.send_message(self.tg_id, message)
             return failed_chats
-
-    async def _send_message(
-        self,
-        code_name: str,
-        chat_id: int,
-        msg: Union[Message, List[Message]],
-        send_mode: str = "auto",
-    ) -> bool:
-        try:
-
-            async def forward_messages(messages: Union[Message, List[Message]]) -> None:
-                if isinstance(messages, list):
-                    await self.client.forward_messages(
-                        entity=chat_id,
-                        messages=messages,
-                        from_peer=messages[0].chat_id,
-                    )
-                else:
-                    await self.client.forward_messages(
-                        entity=chat_id,
-                        messages=[messages],
-                        from_peer=messages.chat_id,
-                    )
-
-            await self.GLOBAL_MINUTE_LIMITER.acquire()
-            await self.GLOBAL_HOUR_LIMITER.acquire()
-
-            await asyncio.sleep(random.uniform(1, 3))
-
-            is_auto_mode = send_mode == "auto"
-            is_forwardable = isinstance(msg, list) or (
-                hasattr(msg, "media") and msg.media
-            )
-            if not is_auto_mode or is_forwardable:
-                await forward_messages(msg)
-            else:
-                await self.client.send_message(
-                    entity=chat_id, message=msg.text if msg.text else msg
-                )
-            self.error_counts[chat_id] = 0
-            self.error_counts[f"{chat_id}_general"] = 0
-            self.last_error_time[f"{chat_id}_general"] = 0
-            return True
-        except FloodWaitError as e:
-            error_key = f"{chat_id}_flood"
-            self.error_counts[error_key] = 0
-            wait_time = e.seconds + random.randint(5, 15)
-            logger.warning(f"FloodWait {e.seconds}s → Adjusted {wait_time}s")
-            await asyncio.sleep(wait_time)
-            raise
-        except (ChatWriteForbiddenError, UserBannedInChannelError):
-            raise
-        except Exception as e:
-            logger.error(
-                f"[{code_name}][send_message] Error sending to {chat_id}: {str(e)}"
-            )
-            error_key = f"{chat_id}_general"
-            self.error_counts[error_key] = self.error_counts.get(error_key, 0) + 1
-            self.last_error_time[error_key] = time.time()
-
-            if self.error_counts[error_key] >= self.MAX_CONSECUTIVE_ERRORS:
-                wait_time = 60 * (
-                    2 ** (self.error_counts[error_key] - self.MAX_CONSECUTIVE_ERRORS)
-                )
-                await asyncio.sleep(wait_time)
-            raise
-
-    async def _handle_failed_chats(
-        self, code_name: str, failed_chats: Set[int]
-    ) -> None:
-        """Обрабатывает чаты, в которые не удалось отправить сообщения."""
-        if not failed_chats:
-            return
-        try:
-            async with self._lock:
-                code = self.codes.get(code_name)
-                if not code:
-                    return
-                code.chats -= failed_chats
-                await self.save_config()
-
-                chat_groups = [
-                    ", ".join(
-                        str(chat_id)
-                        for chat_id in tuple(failed_chats)[
-                            i : i + self.NOTIFY_GROUP_SIZE
-                        ]
-                    )
-                    for i in range(0, len(failed_chats), self.NOTIFY_GROUP_SIZE)
-                ]
-
-                base_message = (
-                    f"⚠️ Рассылка '{code_name}':\n"
-                    f"Не удалось отправить сообщения в {len(failed_chats)} чат(ов).\n"
-                    f"Чаты удалены из рассылки.\n\n"
-                    f"ID чатов:\n"
-                )
-
-                for group in chat_groups:
-                    await self.client.send_message(
-                        self.tg_id,
-                        base_message + group,
-                        schedule=datetime.now() + timedelta(seconds=60),
-                    )
-                    await asyncio.sleep(self.NOTIFY_DELAY)
-        except Exception as e:
-            logger.error(f"Ошибка обработки неудачных чатов для {code_name}: {e}")
-
-    @staticmethod
-    def _chunk_messages(
-        messages: List[Union[Message, List[Message]]], batch_size: int = 8
-    ) -> List[List[Union[Message, List[Message]]]]:
-        """Разбивает список сообщений на части оптимального размера."""
-        if not messages:
-            return []
-        return [
-            messages[i : i + batch_size] for i in range(0, len(messages), batch_size)
-        ]
-
-    async def _process_message_batch(
-        self, code: Optional[Broadcast], messages: List[dict]
-    ) -> Tuple[List[Union[Message, List[Message]]], List[dict]]:
-        """Обрабатывает пакет сообщений с оптимизированной загрузкой."""
-        logger.info(f"Вызвана функция _process_message_batch с {len(messages)} сообщениями.")
-        if not code:
-            return [], messages
-        
-        messages_to_send = []
-        deleted_messages = []
-        
-        fetch_tasks = []
-        for msg in messages:
-            try:
-                logger.info(f"Подготовка задачи fetch для сообщения: {msg}")
-                task = self._fetch_messages(msg)
-                fetch_tasks.append(task)
-            except Exception as e:
-                logger.error(f"Ошибка при создании задачи fetch: {e}")
-                deleted_messages.append(msg)
-                continue
-                
-        try:
-            logger.info(f"Запуск asyncio.gather для {len(fetch_tasks)} задач")
-            results = await asyncio.gather(*fetch_tasks, return_exceptions=True)
-            logger.info("Получены результаты gather")
-            logger.info(f"Количество результатов: {len(results)}")
-            
-            for i, (msg_data, result) in enumerate(zip(messages, results)):
-                try:
-                    logger.info(f"Обработка результата {i + 1} из {len(results)}")
-                    logger.info(f"Тип результата: {type(result)}")
-                    
-                    if isinstance(result, Exception):
-                        logger.error(f"Получено исключение для сообщения {msg_data}: {result}")
-                        deleted_messages.append(msg_data)
-                        continue
-                        
-                    if not result:
-                        logger.info(f"Нулевой результат для сообщения {msg_data}")
-                        deleted_messages.append(msg_data)
-                        continue
-                        
-                    if isinstance(result, list):
-                        logger.info("Проверка размера медиа для группы сообщений")
-                        valid = all(self._check_media_size(msg) for msg in result)
-                    else:
-                        logger.info("Проверка размера медиа для одиночного сообщения")
-                        valid = self._check_media_size(result)
-                    
-                    logger.info(f"Результат проверки размера: {valid}")
-                        
-                    if valid:
-                        messages_to_send.append(result)
-                        logger.info("Сообщение добавлено для отправки")
-                    else:
-                        deleted_messages.append(msg_data)
-                        logger.info("Сообщение добавлено к удаленным")
-                        
-                except Exception as e:
-                    logger.error(f"Ошибка при обработке результата {i + 1}: {e}", exc_info=True)
-                    deleted_messages.append(msg_data)
-                    
-        except Exception as e:
-            logger.error(f"Критическая ошибка в _process_message_batch: {e}", exc_info=True)
-            return [], messages
-            
-        logger.info(f"Завершение _process_message_batch: {len(messages_to_send)} для отправки, {len(deleted_messages)} удалено")
-        return messages_to_send, deleted_messages
-
-    @staticmethod
-    def _check_media_size(message: Optional[Message]) -> bool:
-        """Проверяет размер медиафайла."""
-        if not message:
-            return False
-        if hasattr(message, "media") and message.media:
-            if hasattr(message.media, "document") and hasattr(
-                message.media.document, "size"
-            ):
-                return message.media.document.size <= 10 * 1024 * 1024
-        return True
-
-    async def _broadcast_loop(self, code_name: str):
-        """Main broadcast loop with enhanced debug logging"""
-        async with self._semaphore:
-            code = self.codes.get(code_name)
-            if not code or not code.messages:
-                return
-            while self._active:
-                deleted_messages = []
-                messages_to_send = []
-
-                try:
-                    current_messages = code.messages.copy()
-                    if not current_messages:
-                        await asyncio.sleep(300)
-                        continue
-                    try:
-                        batches = self._chunk_messages(
-                            current_messages, batch_size=self.BATCH_SIZE_LARGE
-                        )
-
-                        for batch in batches:
-                            if not self._active or not code._active:
-                                return
-                            batch_messages, deleted = await self._process_message_batch(
-                                code, batch
-                            )
-                            messages_to_send.extend(batch_messages)
-                            deleted_messages.extend(deleted)
-                        if not messages_to_send:
-                            await asyncio.sleep(300)
-                            continue
-                    except Exception as batch_error:
-                        logger.error(
-                            f"[{code_name}] Batch processing error: {batch_error}",
-                            exc_info=True,
-                        )
-                        await asyncio.sleep(300)
-                        continue
-                    if deleted_messages:
-                        code.messages = [
-                            m for m in code.messages if m not in deleted_messages
-                        ]
-                    if not code.batch_mode:
-                        next_index = code.get_next_message_index()
-                        messages_to_send = [
-                            messages_to_send[next_index % len(messages_to_send)]
-                        ]
-                    failed_chats = await self._send_messages_to_chats(
-                        code, code_name, messages_to_send
-                    )
-
-                    if failed_chats:
-                        await self._handle_failed_chats(code_name, failed_chats)
-                    await asyncio.sleep(60)
-                    await self.save_config()
-                except asyncio.CancelledError:
-                    break
-                except Exception as e:
-                    logger.error(
-                        f"[{code_name}] Error in broadcast loop: {str(e)}",
-                        exc_info=True,
-                    )
-                    await asyncio.sleep(300)
-
-    async def _fetch_messages(self, msg_data: dict):
-        """Получает сообщения с улучшенной обработкой ошибок"""
-        try:
-            logger.info(f"Начало _fetch_messages для {msg_data}")
-            
-            key = (msg_data["chat_id"], msg_data["message_id"])
-            logger.info(f"Проверка кэша для ключа {key}")
-            
-            cached = await self._message_cache.get(key)
-            if cached:
-                logger.info("Найдено в кэше, возвращаем закэшированное сообщение")
-                return cached
-                
-            logger.info("Получение сообщения из Telegram...")
-            message = await self.client.get_messages(
-                msg_data["chat_id"], 
-                ids=msg_data["message_id"]
-            )
-            logger.info(f"Результат получения сообщения: {message is not None}")
-            logger.info(f"Тип полученного сообщения: {type(message)}")
-
-            if message:
-                if msg_data.get("grouped_ids"):
-                    logger.info(f"Обработка группы сообщений: {msg_data['grouped_ids']}")
-                    messages = []
-                    for msg_id in msg_data["grouped_ids"]:
-                        logger.info(f"Получение сгруппированного сообщения {msg_id}")
-                        grouped_msg = await self.client.get_messages(
-                            msg_data["chat_id"], 
-                            ids=msg_id
-                        )
-                        if grouped_msg:
-                            messages.append(grouped_msg)
-                            
-                    if messages:
-                        logger.info(f"Сохранение {len(messages)} сообщений в кэш")
-                        await self._message_cache.set(key, messages)
-                        logger.info("Возврат группы сообщений")
-                        return messages[0] if len(messages) == 1 else messages
-                else:
-                    logger.info("Сохранение одиночного сообщения в кэш")
-                    await self._message_cache.set(key, message)
-                    logger.info("Возврат одиночного сообщения")
-                    return message
-                    
-            logger.info("Сообщение не найдено")
-            return None
-            
-        except Exception as e:
-            logger.error(f"Ошибка в _fetch_messages: {str(e)}", exc_info=True)
-            raise
-
-    async def _get_chat_id(self, chat_identifier: str) -> Optional[int]:
-        """Получает ID чата из разных форматов (ссылка, юзернейм, ID)"""
-        try:
-            if chat_identifier.lstrip("-").isdigit():
-                return int(chat_identifier)
-            clean_username = chat_identifier.lower()
-            for prefix in ["https://", "http://", "t.me/", "@", "telegram.me/"]:
-                clean_username = clean_username.replace(prefix, "")
-            entity = await self.client.get_entity(clean_username)
-            return entity.id
-        except Exception:
-            return None
 
     async def handle_command(self, message: Message):
         """Обработчик команд для управления рассылкой"""
