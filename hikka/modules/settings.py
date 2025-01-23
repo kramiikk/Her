@@ -107,16 +107,16 @@ class MessageEditor:
         await self.redraw()
 
     async def redraw(self):
-        text = self.strings("running").format(utils.escape_html(self.command))  # fmt: skip
+        text = "<emoji document_id=5472111548572900003>⌨️</emoji><b> System call</b> <code>{}</code>".format(utils.escape_html(self.command))  # fmt: skip
 
         if self.rc is not None:
-            text += self.strings("finished").format(utils.escape_html(str(self.rc)))
+            text += "\n<b>Exit code</b> <code>{}</code>".format(utils.escape_html(str(self.rc)))
 
-        text += self.strings("stdout")
+        text += "\n<b>📼 Stdout:</b>\n<pre><code class=\"language-stdout\">"
         text += utils.escape_html(self.stdout[max(len(self.stdout) - 2048, 0) :])
         stderr = utils.escape_html(self.stderr[max(len(self.stderr) - 1024, 0) :])
-        text += (self.strings("stderr") + stderr) if stderr else ""
-        text += self.strings("end")
+        text += ("</code></pre>\n\n<b><emoji document_id=5210952531676504517>🚫</emoji> Stderr:</b>\n<pre><code class=\"language-stderr\">" + stderr) if stderr else ""
+        text += "</code></pre>"
 
         with contextlib.suppress(hikkatl.errors.rpcerrorlist.MessageNotModifiedError):
             try:
@@ -163,12 +163,12 @@ class SudoMessageEditor(MessageEditor):
             and lastlines[0] == self.PASS_REQ
             and self.state == 1
         ):
-            await utils.answer(self.authmsg, self.strings("auth_failed"))
+            await utils.answer(self.authmsg, "<emoji document_id=5210952531676504517>🚫</emoji> <b>Authentication failed, please try again</b>")
             self.state = 0
             handled = True
 
         if lastlines[0] == self.PASS_REQ and self.state == 0:
-            text = self.strings("auth_needed").format(self._tg_id)
+            text = '<emoji document_id=5472308992514464048>🔐</emoji><a href="tg://user?id={}"> Interactive authentication required</a>'.format(self._tg_id)
 
             try:
                 await utils.answer(self.message, text)
@@ -180,7 +180,7 @@ class SudoMessageEditor(MessageEditor):
 
             self.authmsg = await self.message[0].client.send_message(
                 "me",
-                self.strings("auth_msg").format(command, user),
+                "<emoji document_id=5472308992514464048>🔐</emoji> <b>Please edit this message to the password for</b> <code>{}</code> <b>to run</b> <code>{}</code>".format(command, user),
             )
 
             self.message[0].client.remove_event_handler(self.on_message_edited)
@@ -194,7 +194,7 @@ class SudoMessageEditor(MessageEditor):
         if len(lines) > 1 and (
             re.fullmatch(self.TOO_MANY_TRIES, lastline) and self.state in {1, 3, 4}
         ):
-            await utils.answer(self.message, self.strings("auth_locked"))
+            await utils.answer(self.message, "<emoji document_id=5210952531676504517>🚫</emoji> <b>Authentication failed, please try again later</b>")
             self.state = 2
             handled = True
 
@@ -222,7 +222,7 @@ class SudoMessageEditor(MessageEditor):
 
         if hash_msg(message) == hash_msg(self.authmsg):
             # The user has provided interactive authentication. Send password to stdin for sudo.
-            self.authmsg = await utils.answer(message, self.strings("auth_ongoing"))
+            self.authmsg = await utils.answer(message, "<emoji document_id=5213452215527677338>⏳</emoji> <b>Authenticating...</b>")
 
             self.state = 1
             self.process.stdin.write(
@@ -264,7 +264,7 @@ class RawMessageEditor(SudoMessageEditor):
             )
 
         if self.rc is not None and self.show_done:
-            text += "\n" + self.strings("done")
+            text += "\n" + "<emoji document_id=5314250708508220914>✅</emoji> <b>Done</b>"
 
         with contextlib.suppress(
             hikkatl.errors.rpcerrorlist.MessageNotModifiedError,
@@ -303,7 +303,7 @@ class CoreMod(loader.Module):
             loader.ConfigValue(
                 "FLOOD_WAIT_PROTECT",
                 2,
-                lambda: self.strings("fw_protect"),
+                "How long to wait in seconds between edits in commands",
                 validator=loader.validators.Integer(minimum=0),
             ),
         )
@@ -456,7 +456,7 @@ class CoreMod(loader.Module):
     @loader.command()
     async def terminatecmd(self, message):
         if not message.is_reply:
-            await utils.answer(message, self.strings("what_to_kill"))
+            await utils.answer(message, "<emoji document_id=5210952531676504517>🚫</emoji> <b>Reply to a terminal command to terminate it</b>")
             return
 
         if hash_msg(await message.get_reply_message()) in self.activecmds:
@@ -469,11 +469,11 @@ class CoreMod(loader.Module):
                     self.activecmds[hash_msg(await message.get_reply_message())].kill()
             except Exception:
                 logger.exception("Killing process failed")
-                await utils.answer(message, self.strings("kill_fail"))
+                await utils.answer(message, "<emoji document_id=5210952531676504517>🚫</emoji> <b>Could not kill process</b>")
             else:
-                await utils.answer(message, self.strings("killed"))
+                await utils.answer(message, "<emoji document_id=5210952531676504517>🚫</emoji> <b>Killed</b>")
         else:
-            await utils.answer(message, self.strings("no_cmd"))
+            await utils.answer(message, "<emoji document_id=5210952531676504517>🚫</emoji> <b>No command is running in that message</b>")
 
     
     @loader.loop(interval=1, autostart=True)
