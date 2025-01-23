@@ -76,14 +76,18 @@ class TokenObtainment(InlineUnit):
 
         async with self._client.conversation("@BotFather", exclusive=False) as conv:
             try:
-                await asyncio.sleep(random.uniform(7, 13))
-                await fw_protect()
-                m = await conv.send_message("/token")
-            except YouBlockedUserError:
-                await self._client(UnblockRequest(id="@BotFather"))
                 await asyncio.sleep(random.uniform(3, 13))
                 await fw_protect()
-                m = await conv.send_message("/token")
+                await conv.send_message("/start")
+            except YouBlockedUserError:
+                await self._client(UnblockRequest(id="@BotFather"))
+                await asyncio.sleep(random.uniform(7, 13))
+                await fw_protect()
+                await conv.send_message("/start")
+
+            await asyncio.sleep(random.uniform(3, 13))
+            await fw_protect()
+            await conv.send_message("/token")
 
             r = await conv.get_response()
 
@@ -136,7 +140,7 @@ class TokenObtainment(InlineUnit):
                     for msg in [
                         "/setinline",
                         button.text,
-                        "user@her:~$",
+                        "hello 😉",
                         "/setinlinefeedback",
                         button.text,
                         "Enabled",
