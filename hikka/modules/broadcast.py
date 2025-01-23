@@ -124,12 +124,11 @@ class SimpleCache:
             self._cleaning = False
 
     async def get(self, key):
-        """Получает значение из кэша"""
         logger.info(f"[CACHE GET] Попытка получения ключа {key}")
         try:
             async with self._lock:
                 if key not in self.cache:
-                    logger.debug(f"[CACHE] Промах кэша для ключа {key}")
+                    logger.info(f"[CACHE] Промах кэша для ключа {key}")  # Изменено с debug на info
                     return None
                 timestamp, value = self.cache[key]
                 current_time = time.time()
@@ -633,6 +632,16 @@ class BroadcastManager:
                         album_messages.append(album_msg)
                 album_messages.sort(key=lambda m: m.id)
                 grouped_ids = list(dict.fromkeys(msg.id for msg in album_messages))
+                
+                # Сохраняем все сообщения группы в кэш
+                for msg in album_messages:
+                    key = (msg.chat_id, msg.id)
+                    await self._message_cache.set(key, msg)
+            else:
+                # Сохраняем одиночное сообщение в кэш
+                key = (reply.chat_id, reply.id)
+                await self._message_cache.set(key, reply)
+                
             if code.add_message(reply.chat_id, reply.id, grouped_ids):
                 if is_new:
                     self.codes[code_name] = code
