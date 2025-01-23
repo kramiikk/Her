@@ -302,8 +302,6 @@ class Broadcast:
             "grouped_ids": grouped_ids or [],
         }
 
-        # Более мягкая проверка на дубликаты
-
         for existing in self.messages:
             if (
                 existing["chat_id"] == chat_id
@@ -594,48 +592,66 @@ class BroadcastManager:
                 )
                 return
 
-            if code is None:
+            is_new = code is None
+            if is_new:
                 code = Broadcast()
                 self.codes[code_name] = code
+                logger.info(f"Создана новая рассылка: {code_name}")
+
             if len(code.messages) >= self.MAX_MESSAGES_PER_CODE:
                 await utils.answer(
                     message,
                     f"❌ Достигнут лимит сообщений ({self.MAX_MESSAGES_PER_CODE})",
                 )
                 return
-            grouped_ids = []
-            grouped_id = getattr(reply, "grouped_id", None)
-            if grouped_id:
-                album_messages = []
-                async for album_msg in message.client.iter_messages(
-                    reply.chat_id,
-                    min_id=max(0, reply.id - 10),
-                    max_id=reply.id + 10,
-                    limit=30,
-                ):
-                    if getattr(album_msg, "grouped_id", None) == grouped_id:
-                        album_messages.append(album_msg)
-                album_messages.sort(key=lambda m: m.id)
-                grouped_ids = list(dict.fromkeys(msg.id for msg in album_messages))
 
-                for msg in album_messages:
-                    key = (msg.chat_id, msg.id)
-                    await self._message_cache.set(key, msg)
-            else:
-                key = (reply.chat_id, reply.id)
-                await self._message_cache.set(key, reply)
-            success = code.add_message(reply.chat_id, reply.id, grouped_ids)
+            try:
+                grouped_ids = []
+                if getattr(reply, "grouped_id", None):
+                    album_messages = []
+                    async for album_msg in self.client.iter_messages(
+                        reply.chat_id,
+                        min_id=reply.id - 10,
+                        max_id=reply.id + 10,
+                        limit=30,
+                    ):
+                        if getattr(album_msg, "grouped_id", None) == reply.grouped_id:
+                            album_messages.append(album_msg)
+                    grouped_ids = [msg.id for msg in album_messages]
 
-            logger.debug(f"Message addition result: {success}")
+                    for msg in album_messages:
+                        cache_key = (msg.chat_id, msg.id)
+                        await self._message_cache.set(cache_key, msg)
+                        logger.debug(f"Сообщение {msg.id} добавлено в кэш")
+                else:
+                    cache_key = (reply.chat_id, reply.id)
+                    await self._message_cache.set(cache_key, reply)
+                    logger.debug(f"Сообщение {reply.id} добавлено в кэш")
 
-            if success:
-                await self.save_config()
+                success = code.add_message(reply.chat_id, reply.id, grouped_ids)
+                
+                if success:
+                    await self.save_config()
+                    logger.debug(f"Конфигурация сохранена после добавления сообщения")
+                    
+                    await utils.answer(
+                        message,
+                        f"✅ {'Рассылка создана и сообщение добавлено' if is_new else 'Сообщение добавлено'}\n"
+                        f"Код: {code_name}\n"
+                        f"Чат: {reply.chat_id}\n"
+                        f"Сообщение: {reply.id}"
+                    )
+                else:
+                    await utils.answer(message, "❌ Сообщение уже существует в рассылке")
+
+            except Exception as e:
+                logger.error(f"Критическая ошибка при добавлении сообщения: {e}", exc_info=True)
                 await utils.answer(
-                    message,
-                    f"✅ {'Рассылка создана и с' if is_new else 'С'}ообщение добавлено",
+                    message, 
+                    f"⚠️ Ошибка при добавлении! Логи записаны.\n{type(e).__name__}: {str(e)}"
                 )
-            else:
-                await utils.answer(message, "❌ Это сообщение уже есть в рассылке")
+                if is_new:
+                    del self.codes[code_name]
 
     async def _handle_addchat_command(
         self, message: Message, code: Broadcast, args: list
