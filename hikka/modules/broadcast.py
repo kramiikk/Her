@@ -95,14 +95,12 @@ class SimpleCache:
             current_time = time.time()
             initial_size = len(self.cache)
             
-            # Всегда используем копию для итерации
             keys = list(self.cache.keys())
             expired_keys = [
                 k for k in keys
                 if current_time - self.cache[k][0] > self.ttl
             ]
-            
-            # Удаление найденных ключей
+
             for key in expired_keys:
                 try:
                     del self.cache[key]
@@ -114,8 +112,7 @@ class SimpleCache:
                 f"Очистка завершена. Удалено: {len(expired_keys)} | "
                 f"Текущий размер: {len(self.cache)} (было {initial_size})"
             )
-            
-            # Всегда обновляем время последней очистки
+
             self._last_cleanup = current_time
             
         except Exception as e:
@@ -128,7 +125,7 @@ class SimpleCache:
         try:
             async with self._lock:
                 if key not in self.cache:
-                    logger.info(f"[CACHE] Промах кэша для ключа {key}")  # Изменено с debug на info
+                    logger.info(f"[CACHE] Промах кэша для ключа {key}")
                     return None
                 timestamp, value = self.cache[key]
                 current_time = time.time()
@@ -157,28 +154,22 @@ class SimpleCache:
         try:
             async with self._lock:
                 logger.debug(f"Блокировка захвачена для ключа {key}")
-                
-                # Явная проверка состояния кэша перед операцией
+
                 logger.debug(f"Состояние кэша ДО операции: {self._cache_state_report()}")
-                
-                # Принудительная очистка устаревших записей перед добавлением
+
                 await self.clean_expired(force=True)
-                
-                # Обновление существующей записи
+
                 if key in self.cache:
                     logger.info(f"Обновление существующего ключа: {key}")
-                    
-                # Удаление старых записей при превышении лимита
+
                 while len(self.cache) >= self.max_size:
                     oldest_key = next(iter(self.cache))
                     logger.warning(f"Достигнут лимит кэша! Удаление ключа: {oldest_key}")
                     del self.cache[oldest_key]
-                
-                # Добавление новой записи
+
                 self.cache[key] = (time.time(), value)
-                self.cache.move_to_end(key)  # Обновление порядка доступа
-                
-                # Подробное логирование после добавления
+                self.cache.move_to_end(key)
+
                 logger.info(
                     f"Успешно добавлен ключ: {key}\n"
                     f"Тип значения: {type(value)}\n"
@@ -186,9 +177,8 @@ class SimpleCache:
                     f"Примерный размер памяти: {self._estimate_memory_usage()}"
                 )
                 
-                # Периодический сброс состояния в лог
-                if len(self.cache) % 5 == 0:
-                    logger.debug(f"Промежуточное состояние кэша: {self._cache_state_report()}")
+
+                logger.debug(f"Промежуточное состояние кэша: {self._cache_state_report()}")
                     
         except Exception as e:
             logger.error(f"КРИТИЧЕСКАЯ ОШИБКА при установке ключа {key}: {e}", exc_info=True)
@@ -619,13 +609,11 @@ class BroadcastManager:
                         album_messages.append(album_msg)
                 album_messages.sort(key=lambda m: m.id)
                 grouped_ids = list(dict.fromkeys(msg.id for msg in album_messages))
-                
-                # Сохраняем все сообщения группы в кэш
+
                 for msg in album_messages:
                     key = (msg.chat_id, msg.id)
                     await self._message_cache.set(key, msg)
             else:
-                # Сохраняем одиночное сообщение в кэш
                 key = (reply.chat_id, reply.id)
                 await self._message_cache.set(key, reply)
                 
