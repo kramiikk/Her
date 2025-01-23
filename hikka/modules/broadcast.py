@@ -601,7 +601,6 @@ class BroadcastManager:
 
             is_new = code is None
             if is_new:
-                code = Broadcast()
                 self.codes[code_name] = code
             if len(code.messages) >= self.MAX_MESSAGES_PER_CODE:
                 await utils.answer(
