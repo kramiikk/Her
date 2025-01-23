@@ -670,7 +670,7 @@ class BroadcastManager:
             await utils.answer(message, f"❌ Достигнут лимит чатов 500")
             return
         if chat_id in code.chats:
-            await message.respondondond("❌ Этот чат уже добавлен в рассылку")
+            await utils.answer(message, "❌ Этот чат уже добавлен в рассылку")
             return
         code.chats.add(chat_id)
         await self.save_config()
@@ -685,7 +685,7 @@ class BroadcastManager:
             return
         mode = args[2].lower()
         if mode not in ["on", "off"]:
-            await message.respondond("❌ Укажите on или off")
+            await utils.answer(message, "❌ Укажите on или off")
             return
         code.batch_mode = mode == "on"
         await self.save_config()
@@ -708,19 +708,17 @@ class BroadcastManager:
     ):
         """Обработчик команды int"""
         if len(args) < 4:
-            await message.respondond(
-                "❌ Укажите минимальный и максимальный интервал в минутах"
-            )
+            await utils.answer(message, "❌ Укажите минимальный и максимальный интервал в минутах")
             return
         try:
             min_val = int(args[2])
             max_val = int(args[3])
         except ValueError:
-            await message.respondondondondondondond("❌ Интервалы должны быть числами")
+            await utils.answer(message, "❌ Интервалы должны быть числами")
             return
         code.interval = (min_val, max_val)
         if not code.is_valid_interval():
-            await message.respondond("❌ Некорректный интервал (0 < min < max <= 1440)")
+            await utils.answer(message, "❌ Некорректный интервал (0 < min < max <= 1440)")
             return
         await self.save_config()
         await utils.answer(message, f"✅ Установлен интервал {min_val}-{max_val} минут")
@@ -766,9 +764,7 @@ class BroadcastManager:
         """Обработчик команды remove"""
         reply = await message.get_reply_message()
         if not reply:
-            await message.respondond(
-                "❌ Ответьте на сообщение, которое нужно удалить из рассылки"
-            )
+            await utils.answer(message, "❌ Ответьте на сообщение, которое нужно удалить из рассылки")
             return
         if code.remove_message(reply.id, reply.chat_id):
             await self.save_config()
@@ -790,11 +786,11 @@ class BroadcastManager:
         else:
             chat_id = message.chat_id
         if chat_id not in code.chats:
-            await message.respondondond("❌ Этот чат не найден в рассылке")
+            await utils.answer(message, "❌ Этот чат не найден в рассылке")
             return
         code.chats.remove(chat_id)
         await self.save_config()
-        await message.respondondond("✅ Чат удален из рассылки")
+        await utils.answer(message, "✅ Чат удален из рассылки")
 
     async def _handle_start_command(
         self, message: Message, code: Broadcast, code_name: str
