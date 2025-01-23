@@ -20,8 +20,7 @@ except ImportError as e:
 
 import typing
 
-from hikkatl.errors.rpcerrorlist import ChannelsTooMuchError
-from hikkatl.tl.types import Message, User
+from hikkatl.tl.types import User
 
 from . import main, utils
 from .pointers import (
@@ -48,17 +47,12 @@ __all__ = [
 logger = logging.getLogger(__name__)
 
 
-class NoAssetsChannel(Exception):
-    """Raised when trying to read/store asset with no asset channel present"""
-
-
 class Database(dict):
     def __init__(self, client: CustomTelegramClient):
         super().__init__()
         self._client: CustomTelegramClient = client
         self._next_revision_call: int = 0
         self._revisions: typing.List[dict] = []
-        self._assets: int = None
         self._me: User = None
         self._redis: redis.Redis = None
         self._saving_task: asyncio.Future = None
@@ -108,24 +102,6 @@ class Database(dict):
 
         self._db_file = main.BASE_PATH / f"config-{self._client.tg_id}.json"
         self.read()
-
-        try:
-            self._assets, _ = await utils.asset_channel(
-                self._client,
-                "her-assets",
-                "🌆 Your Her assets will be stored here",
-                archive=True,
-                avatar="https://raw.githubusercontent.com/coddrago/Heroku/refs/heads/master/assets/heroku-assets.png" 
-            )
-        except ChannelsTooMuchError:
-            self._assets = None
-            logger.error(
-                "Can't find and/or create assets folder\n"
-                "This may cause several consequences, such as:\n"
-                "- Non working assets feature (e.g. notes)\n"
-                "- This error will occur every restart\n\n"
-                "You can solve this by leaving some channels/groups"
-            )
 
     def read(self):
         """Read database and stores it in self"""
@@ -225,37 +201,6 @@ class Database(dict):
             return False
 
         return True
-
-    async def store_asset(self, message: Message) -> int:
-        """
-        Save assets
-        returns asset_id as integer
-        """
-        if not self._assets:
-            raise NoAssetsChannel("Tried to save asset to non-existing asset channel")
-
-        return (
-            (await self._client.send_message(self._assets, message)).id
-            if isinstance(message, Message)
-            else (
-                await self._client.send_message(
-                    self._assets,
-                    file=message,
-                    force_document=True,
-                )
-            ).id
-        )
-
-    async def fetch_asset(self, asset_id: int) -> typing.Optional[Message]:
-        """Fetch previously saved asset by its asset_id"""
-        if not self._assets:
-            raise NoAssetsChannel(
-                "Tried to fetch asset from non-existing asset channel"
-            )
-
-        asset = await self._client.get_messages(self._assets, ids=[asset_id])
-
-        return asset[0] if asset else None
 
     def get(
         self,
