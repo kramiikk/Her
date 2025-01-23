@@ -292,39 +292,36 @@ class Broadcast:
     _last_message_index: int = field(default=0, init=False)
     _active: bool = field(default=False, init=False)
 
-    def add_message(
-        self, chat_id: int, message_id: int, grouped_ids: List[int] = None
-    ) -> bool:
-        """Добавляет сообщение с более гибкой проверкой дубликатов"""
-        message_data = {
+    def add_message(self, chat_id: int, message_id: int, grouped_ids: List[int] = None) -> bool:
+        grouped_ids = sorted(list(set(grouped_ids))) if grouped_ids else []
+        
+        new_message = {
             "chat_id": chat_id,
             "message_id": message_id,
-            "grouped_ids": grouped_ids or [],
+            "grouped_ids": grouped_ids
         }
-
+        
+        # Проверка на абсолютные дубликаты
         for existing in self.messages:
             if (
-                existing["chat_id"] == chat_id
-                and existing["message_id"] == message_id
-                and set(existing.get("grouped_ids", []))
-                == set(message_data.get("grouped_ids", []))
+                existing["chat_id"] == new_message["chat_id"]
+                and existing["message_id"] == new_message["message_id"]
+                and sorted(existing["grouped_ids"]) == new_message["grouped_ids"]
             ):
                 return False
-        self.messages.append(message_data)
+        
+        self.messages.append(new_message)
         return True
 
     @classmethod
     def from_dict(cls, data: dict) -> "Broadcast":
-        """Создает объект из словаря"""
-        instance = cls(
+        return cls(
             chats=set(data.get("chats", [])),
-            messages=data.get("messages", []),
-            interval=tuple(data.get("interval", (10, 13))),
+            messages=[dict(msg) for msg in data.get("messages", [])],  # Гарантируем словари
+            interval=tuple(data["interval"]) if "interval" in data else (10, 13),
             send_mode=data.get("send_mode", "auto"),
-            batch_mode=data.get("batch_mode", False),
+            batch_mode=data.get("batch_mode", False)
         )
-        instance._active = data.get("active", False)
-        return instance
 
     def get_next_message_index(self) -> int:
         """Возвращает индекс следующего сообщения для отправки"""
@@ -586,72 +583,68 @@ class BroadcastManager:
         async with self._lock:
             reply = await message.get_reply_message()
             if not reply:
-                await utils.answer(
-                    message,
-                    "❌ Ответьте на сообщение, которое нужно добавить в рассылку",
-                )
-                return
-
-            is_new = code is None
-            if is_new:
-                code = Broadcast()
-                self.codes[code_name] = code
-                logger.info(f"Создана новая рассылка: {code_name}")
-
-            if len(code.messages) >= self.MAX_MESSAGES_PER_CODE:
-                await utils.answer(
-                    message,
-                    f"❌ Достигнут лимит сообщений ({self.MAX_MESSAGES_PER_CODE})",
-                )
+                await utils.answer(message, "❌ Ответьте на сообщение для добавления")
                 return
 
             try:
+                # 1. Создаем новую рассылку при необходимости
+                is_new = code is None
+                if is_new:
+                    code = Broadcast()
+                    self.codes[code_name] = code
+                    logger.debug(f"Создан новый код рассылки: {code_name}")
+
+                # 2. Обработка групповых сообщений
                 grouped_ids = []
                 if getattr(reply, "grouped_id", None):
-                    album_messages = []
-                    async for album_msg in self.client.iter_messages(
+                    async for msg in self.client.iter_messages(
                         reply.chat_id,
-                        min_id=reply.id - 10,
-                        max_id=reply.id + 10,
-                        limit=30,
+                        offset_id=reply.id - 15,
+                        limit=30
                     ):
-                        if getattr(album_msg, "grouped_id", None) == reply.grouped_id:
-                            album_messages.append(album_msg)
-                    grouped_ids = [msg.id for msg in album_messages]
-
-                    for msg in album_messages:
-                        cache_key = (msg.chat_id, msg.id)
-                        await self._message_cache.set(cache_key, msg)
-                        logger.debug(f"Сообщение {msg.id} добавлено в кэш")
-                else:
-                    cache_key = (reply.chat_id, reply.id)
-                    await self._message_cache.set(cache_key, reply)
-                    logger.debug(f"Сообщение {reply.id} добавлено в кэш")
-
-                success = code.add_message(reply.chat_id, reply.id, grouped_ids)
-                
-                if success:
-                    await self.save_config()
-                    logger.debug(f"Конфигурация сохранена после добавления сообщения")
+                        if getattr(msg, "grouped_id", None) == reply.grouped_id:
+                            grouped_ids.append(msg.id)
+                            # Кэшируем каждое сообщение отдельно
+                            await self._message_cache.set((msg.chat_id, msg.id), msg)
                     
+                    grouped_ids = sorted(list(set(grouped_ids)))
+                    logger.debug(f"Найдено групповых сообщений: {len(grouped_ids)}")
+
+                # 3. Добавление в рассылку
+                success = code.add_message(
+                    chat_id=reply.chat_id,
+                    message_id=reply.id,
+                    grouped_ids=grouped_ids or None
+                )
+                
+                if not success:
+                    await utils.answer(message, "❌ Сообщение уже существует")
+                    return
+
+                # 4. Принудительное сохранение с валидацией
+                logger.debug(f"Перед сохранением. Сообщений: {len(code.messages)}")
+                await self.save_config()
+                
+                # 5. Двойная проверка после сохранения
+                if code_name in self.codes and len(self.codes[code_name].messages) > 0:
                     await utils.answer(
                         message,
-                        f"✅ {'Рассылка создана и сообщение добавлено' if is_new else 'Сообщение добавлено'}\n"
-                        f"Код: {code_name}\n"
-                        f"Чат: {reply.chat_id}\n"
-                        f"Сообщение: {reply.id}"
+                        f"✅ {'Создана рассылка' if is_new else 'Обновлена'} | "
+                        f"Сообщений: {len(code.messages)}\n"
+                        f"Групповых ID: {len(grouped_ids)}"
                     )
                 else:
-                    await utils.answer(message, "❌ Сообщение уже существует в рассылке")
+                    await utils.answer(message, "⚠️ Ошибка сохранения конфигурации!")
+                    logger.error("Конфигурация не сохранилась после добавления")
 
             except Exception as e:
-                logger.error(f"Критическая ошибка при добавлении сообщения: {e}", exc_info=True)
-                await utils.answer(
-                    message, 
-                    f"⚠️ Ошибка при добавлении! Логи записаны.\n{type(e).__name__}: {str(e)}"
-                )
-                if is_new:
+                logger.critical(f"Critical error: {e}", exc_info=True)
+                if is_new and code_name in self.codes:
                     del self.codes[code_name]
+                await utils.answer(
+                    message,
+                    f"🚨 Ошибка! Лог: {e.__class__.__name__}: {str(e)}"
+                )
 
     async def _handle_addchat_command(
         self, message: Message, code: Broadcast, args: list
