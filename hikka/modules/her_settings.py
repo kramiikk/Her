@@ -21,11 +21,6 @@ class HerSettingsMod(loader.Module):
 
     strings = {"name": "HerSettings"}
 
-    @loader.watcher(
-        "out",
-        "only_inline",
-        contains="This message will be deleted automatically",
-    )
 
     @loader.command()
     async def nonickuser(self, message: Message):
@@ -224,6 +219,11 @@ class HerSettingsMod(loader.Module):
         self._db.set("hikka.inline", "custom_bot", args)
         self._db.set("hikka.inline", "bot_token", None)
         await utils.answer(message, self.strings("bot_updated"))
+    
+    @loader.watcher("out", "only_inline", contains="This message will be deleted automatically")
+    async def watcher(self, message: Message):
+        if message.via_bot_id == self.inline.bot_id:
+            await message.delete()
 
     @loader.watcher("out", "only_inline", contains="Opening gallery...")
     async def gallery_watcher(self, message: Message):
