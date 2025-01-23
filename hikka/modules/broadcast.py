@@ -593,14 +593,9 @@ class BroadcastManager:
                     "❌ Ответьте на сообщение, которое нужно добавить в рассылку",
                 )
                 return
-            # Debug logging
 
-            logger.debug(
-                f"Attempting to add message: chat_id={reply.chat_id}, message_id={reply.id}"
-            )
-
-            is_new = code is None
-            if is_new:
+            if code is None:
+                code = Broadcast()
                 self.codes[code_name] = code
             if len(code.messages) >= self.MAX_MESSAGES_PER_CODE:
                 await utils.answer(
