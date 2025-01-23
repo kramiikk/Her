@@ -400,13 +400,7 @@ class Form(InlineUnit):
                                     )
                                 ),
                                 input_message_content=InputTextMessageContent(
-                                    (
-                                        "🔄 <b>Transferring value to"
-                                        " userbot...</b>\n<i>This message will be"
-                                        " deleted automatically</i>"
-                                        if inline_query.from_user.id == self._me
-                                        else "🔄 <b>Transferring value to userbot...</b>"
-                                    ),
+                                    "🔄 <b>Transferring value to userbot...</b>",
                                     "HTML",
                                     disable_web_page_preview=True,
                                 ),
