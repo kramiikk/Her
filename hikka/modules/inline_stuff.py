@@ -34,7 +34,7 @@ class InlineStuff(loader.Module):
         bot = self.inline.bot
 
         try:
-            if message.reply_to_message and message.from_user.id == self.tg_id:
+            if hasattr(message, "reply_to_message") and message.reply_to_message and message.from_user.id == self.tg_id:
                 match = re.search(r"\(ID: (\d+)\)", message.reply_to_message.text)
                 if match:
                     target_user_id = int(match.group(1))
