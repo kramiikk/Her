@@ -619,8 +619,6 @@ class BroadcastManager:
                 await self._message_cache.set(key, reply)
                 
             if code.add_message(reply.chat_id, reply.id, grouped_ids):
-                if is_new:
-                    self.codes[code_name] = code
                 await self.save_config()
                 await utils.answer(
                     message,
