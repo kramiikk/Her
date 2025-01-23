@@ -27,55 +27,6 @@ class InlineStuff(loader.Module):
         contains="This message will be deleted automatically",
     )
 
-    @loader.watcher("out", "only_inline", contains="Opening gallery...")
-    async def gallery_watcher(self, message: Message):
-        if hasattr(message, 'via_bot_id') and message.via_bot_id == self.inline.bot_id:
-            match = re.search(r"#id: ([a-zA-Z0-9]+)", message.raw_text)
-            if not match:
-                return
-
-            id_ = match[1]
-
-            if id_ not in self.inline._custom_map:
-                return
-
-            m = await utils.answer(message, "🪐", reply_to=utils.get_topic(message))
-
-            await self.inline.gallery(
-                message=m,
-                next_handler=self.inline._custom_map[id_]["handler"],
-                caption=self.inline._custom_map[id_].get("caption", ""),
-                force_me=self.inline._custom_map[id_].get("force_me", False),
-                disable_security=self.inline._custom_map[id_].get(
-                    "disable_security", False
-                ),
-                silent=True,
-            )
-
-    @loader.command()
-    async def her_bot(self, message: Message):
-        args = utils.get_args_raw(message).strip("@")
-        if (
-            not args
-            or not args.lower().endswith("bot")
-            or len(args) <= 4
-            or any(
-                litera not in (string.ascii_letters + string.digits + "_")
-                for litera in args
-            )
-        ):
-            await utils.answer(message, self.strings("bot_username_invalid"))
-            return
-
-        try:
-            await self._client.get_entity(f"@{args}")
-        except ValueError:
-            pass
-
-        self._db.set("hikka.inline", "custom_bot", args)
-        self._db.set("hikka.inline", "bot_token", None)
-        await utils.answer(message, self.strings("bot_updated"))
-
     async def aiogram_watcher(self, message: BotInlineMessage):
         """
         Watches for bot interactions and forwards messages to owner
@@ -161,3 +112,52 @@ class InlineStuff(loader.Module):
                 )
         except Exception as e:
             logger.error(f"Failed to process message: {e}", exc_info=True)
+
+    @loader.command()
+    async def her_bot(self, message: Message):
+        args = utils.get_args_raw(message).strip("@")
+        if (
+            not args
+            or not args.lower().endswith("bot")
+            or len(args) <= 4
+            or any(
+                litera not in (string.ascii_letters + string.digits + "_")
+                for litera in args
+            )
+        ):
+            await utils.answer(message, self.strings("bot_username_invalid"))
+            return
+
+        try:
+            await self._client.get_entity(f"@{args}")
+        except ValueError:
+            pass
+
+        self._db.set("hikka.inline", "custom_bot", args)
+        self._db.set("hikka.inline", "bot_token", None)
+        await utils.answer(message, self.strings("bot_updated"))
+
+    @loader.watcher("out", "only_inline", contains="Opening gallery...")
+    async def gallery_watcher(self, message: Message):
+        if hasattr(message, 'via_bot_id') and message.via_bot_id == self.inline.bot_id:
+            match = re.search(r"#id: ([a-zA-Z0-9]+)", message.raw_text)
+            if not match:
+                return
+
+            id_ = match[1]
+
+            if id_ not in self.inline._custom_map:
+                return
+
+            m = await utils.answer(message, "🪐", reply_to=utils.get_topic(message))
+
+            await self.inline.gallery(
+                message=m,
+                next_handler=self.inline._custom_map[id_]["handler"],
+                caption=self.inline._custom_map[id_].get("caption", ""),
+                force_me=self.inline._custom_map[id_].get("force_me", False),
+                disable_security=self.inline._custom_map[id_].get(
+                    "disable_security", False
+                ),
+                silent=True,
+            )
