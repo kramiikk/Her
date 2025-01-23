@@ -63,42 +63,43 @@ class SimpleCache:
         self._cleaning = False
         logger.info(f"Инициализирован кэш | TTL: {ttl}s | Макс. размер: {max_size}")
 
-
     def _estimate_memory_usage(self):
         """Примерная оценка использования памяти"""
         try:
-            return sum(
-                sys.getsizeof(k) + sys.getsizeof(v[0]) + sys.getsizeof(v[1])
-                for k, v in self.cache.items()
-            ) // 1024
+            return (
+                sum(
+                    sys.getsizeof(k) + sys.getsizeof(v[0]) + sys.getsizeof(v[1])
+                    for k, v in self.cache.items()
+                )
+                // 1024
+            )
         except:
             return "N/A"
-    
+
     def _cache_state_report(self):
         """Генерирует подробный отчет о состоянии кэша"""
         if not self.cache:
             return "Кэш пуст"
-            
         current_time = time.time()
-        return "\n".join([
-            f"Ключ: {k} | Возраст: {current_time - v[0]:.1f}s | Тип: {type(v[1]).__name__}"
-            for k, v in self.cache.items()
-        ])
+        return "\n".join(
+            [
+                f"Ключ: {k} | Возраст: {current_time - v[0]:.1f}s | Тип: {type(v[1]).__name__}"
+                for k, v in self.cache.items()
+            ]
+        )
 
     async def clean_expired(self, force: bool = False):
         """Улучшенная очистка с принудительным режимом"""
         try:
             if self._cleaning and not force:
                 return
-                
             self._cleaning = True
             current_time = time.time()
             initial_size = len(self.cache)
-            
+
             keys = list(self.cache.keys())
             expired_keys = [
-                k for k in keys
-                if current_time - self.cache[k][0] > self.ttl
+                k for k in keys if current_time - self.cache[k][0] > self.ttl
             ]
 
             for key in expired_keys:
@@ -107,14 +108,12 @@ class SimpleCache:
                     logger.debug(f"Удален устаревший ключ: {key}")
                 except KeyError:
                     continue
-                    
             logger.info(
                 f"Очистка завершена. Удалено: {len(expired_keys)} | "
                 f"Текущий размер: {len(self.cache)} (было {initial_size})"
             )
 
             self._last_cleanup = current_time
-            
         except Exception as e:
             logger.error(f"Ошибка очистки кэша: {e}", exc_info=True)
         finally:
@@ -155,18 +154,20 @@ class SimpleCache:
             async with self._lock:
                 logger.debug(f"Блокировка захвачена для ключа {key}")
 
-                logger.debug(f"Состояние кэша ДО операции: {self._cache_state_report()}")
+                logger.debug(
+                    f"Состояние кэша ДО операции: {self._cache_state_report()}"
+                )
 
                 await self.clean_expired(force=True)
 
                 if key in self.cache:
                     logger.info(f"Обновление существующего ключа: {key}")
-
                 while len(self.cache) >= self.max_size:
                     oldest_key = next(iter(self.cache))
-                    logger.warning(f"Достигнут лимит кэша! Удаление ключа: {oldest_key}")
+                    logger.warning(
+                        f"Достигнут лимит кэша! Удаление ключа: {oldest_key}"
+                    )
                     del self.cache[oldest_key]
-
                 self.cache[key] = (time.time(), value)
                 self.cache.move_to_end(key)
 
@@ -176,12 +177,14 @@ class SimpleCache:
                     f"Размер кэша: {len(self.cache)}\n"
                     f"Примерный размер памяти: {self._estimate_memory_usage()}"
                 )
-                
 
-                logger.debug(f"Промежуточное состояние кэша: {self._cache_state_report()}")
-                    
+                logger.debug(
+                    f"Промежуточное состояние кэша: {self._cache_state_report()}"
+                )
         except Exception as e:
-            logger.error(f"КРИТИЧЕСКАЯ ОШИБКА при установке ключа {key}: {e}", exc_info=True)
+            logger.error(
+                f"КРИТИЧЕСКАЯ ОШИБКА при установке ключа {key}: {e}", exc_info=True
+            )
             raise
         finally:
             logger.debug(f"Блокировка отпущена для ключа {key}")
@@ -292,18 +295,24 @@ class Broadcast:
     def add_message(
         self, chat_id: int, message_id: int, grouped_ids: List[int] = None
     ) -> bool:
-        """Добавляет сообщение с проверкой дубликатов"""
+        """Добавляет сообщение с более гибкой проверкой дубликатов"""
         message_data = {
             "chat_id": chat_id,
             "message_id": message_id,
             "grouped_ids": grouped_ids or [],
         }
 
+        # Более мягкая проверка на дубликаты
+
         for existing in self.messages:
-            if existing["chat_id"] == chat_id and existing["message_id"] == message_id:
+            if (
+                existing["chat_id"] == chat_id
+                and existing["message_id"] == message_id
+                and set(existing.get("grouped_ids", []))
+                == set(message_data.get("grouped_ids", []))
+            ):
                 return False
         self.messages.append(message_data)
-
         return True
 
     @classmethod
@@ -576,7 +585,6 @@ class BroadcastManager:
     async def _handle_add_command(
         self, message: Message, code: Optional[Broadcast], code_name: str
     ):
-        """Обработчик команды add"""
         async with self._lock:
             reply = await message.get_reply_message()
             if not reply:
@@ -585,6 +593,12 @@ class BroadcastManager:
                     "❌ Ответьте на сообщение, которое нужно добавить в рассылку",
                 )
                 return
+            # Debug logging
+
+            logger.debug(
+                f"Attempting to add message: chat_id={reply.chat_id}, message_id={reply.id}"
+            )
+
             is_new = code is None
             if is_new:
                 code = Broadcast()
@@ -595,9 +609,8 @@ class BroadcastManager:
                     f"❌ Достигнут лимит сообщений ({self.MAX_MESSAGES_PER_CODE})",
                 )
                 return
-            grouped_id = getattr(reply, "grouped_id", None)
             grouped_ids = []
-
+            grouped_id = getattr(reply, "grouped_id", None)
             if grouped_id:
                 album_messages = []
                 async for album_msg in message.client.iter_messages(
@@ -617,8 +630,11 @@ class BroadcastManager:
             else:
                 key = (reply.chat_id, reply.id)
                 await self._message_cache.set(key, reply)
-                
-            if code.add_message(reply.chat_id, reply.id, grouped_ids):
+            success = code.add_message(reply.chat_id, reply.id, grouped_ids)
+
+            logger.debug(f"Message addition result: {success}")
+
+            if success:
                 await self.save_config()
                 await utils.answer(
                     message,
@@ -682,7 +698,9 @@ class BroadcastManager:
     ):
         """Обработчик команды int"""
         if len(args) < 4:
-            await utils.answer(message, "❌ Укажите минимальный и максимальный интервал в минутах")
+            await utils.answer(
+                message, "❌ Укажите минимальный и максимальный интервал в минутах"
+            )
             return
         try:
             min_val = int(args[2])
@@ -692,7 +710,9 @@ class BroadcastManager:
             return
         code.interval = (min_val, max_val)
         if not code.is_valid_interval():
-            await utils.answer(message, "❌ Некорректный интервал (0 < min < max <= 1440)")
+            await utils.answer(
+                message, "❌ Некорректный интервал (0 < min < max <= 1440)"
+            )
             return
         await self.save_config()
         await utils.answer(message, f"✅ Установлен интервал {min_val}-{max_val} минут")
@@ -738,7 +758,9 @@ class BroadcastManager:
         """Обработчик команды remove"""
         reply = await message.get_reply_message()
         if not reply:
-            await utils.answer(message, "❌ Ответьте на сообщение, которое нужно удалить из рассылки")
+            await utils.answer(
+                message, "❌ Ответьте на сообщение, которое нужно удалить из рассылки"
+            )
             return
         if code.remove_message(reply.id, reply.chat_id):
             await self.save_config()
