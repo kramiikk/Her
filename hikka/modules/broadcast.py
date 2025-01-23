@@ -194,7 +194,7 @@ class SimpleCache:
                     "timestamp": time.time(),
                     "type": type(value).__name__,
                     "is_media": bool(getattr(value, "media", None)),
-                    "group_size": len(value) if isinstance(value, list) else 1
+                    "group_size": len(value) if isinstance(value, list) else 1,
                 }
                 logger.debug(
                     f"[CACHE] Добавлена запись: {key}\n"
@@ -205,6 +205,7 @@ class SimpleCache:
                 )
 
                 # if random.randint(1, 10) == 1:
+
                 logger.debug(f"Статистика кэша: {self._estimate_ttl_stats()}")
         except Exception as e:
             logger.error(f"Критическая ошибка в методе set: {e}", exc_info=True)
@@ -272,7 +273,6 @@ class BroadcastMod(loader.Module):
                     await task
                 except asyncio.CancelledError:
                     pass
-
         await self.manager._semaphore.acquire()
         self.manager._semaphore.release()
 
@@ -928,10 +928,9 @@ class BroadcastManager:
         if not code or not messages:
             logger.warning("Пустой пакет сообщений для обработки")
             return [], []
-
         messages_to_send = []
         deleted_messages = []
-        
+
         try:
             tasks = [self._fetch_messages(msg) for msg in messages]
             results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -941,25 +940,21 @@ class BroadcastManager:
                     logger.error(f"Ошибка получения {msg_data}: {result}")
                     deleted_messages.append(msg_data)
                     continue
-                    
                 if not result:
                     logger.warning(f"Сообщение не найдено: {msg_data}")
                     deleted_messages.append(msg_data)
                     continue
-                    
                 messages_to_send.append(result)
                 logger.debug(f"Успешно получено: {msg_data['message_id']}")
-
         except Exception as e:
             logger.critical(f"Критическая ошибка обработки пакета: {e}")
             return [], messages
-
         logger.info(
             f"Обработано пакетов: {len(messages)}\n"
             f"Успешно: {len(messages_to_send)}\n"
             f"Ошибки: {len(deleted_messages)}"
         )
-        
+
         return messages_to_send, deleted_messages
 
     async def _send_message(
@@ -1152,29 +1147,26 @@ class BroadcastManager:
                     "version": 2,
                     "last_save": datetime.utcnow().timestamp(),
                     "codes": {},
-                    "active_broadcasts": []
+                    "active_broadcasts": [],
                 }
 
                 for name, code in self.codes.items():
                     if not isinstance(code, Broadcast):
                         logger.warning(f"Некорректный код рассылки: {name}")
                         continue
-
                     code_dict = {
                         "chats": list(code.chats),
                         "messages": code.messages,
                         "interval": list(code.interval),
                         "send_mode": code.send_mode,
                         "batch_mode": code.batch_mode,
-                        "active": code._active
+                        "active": code._active,
                     }
 
                     if not all(isinstance(x, int) for x in code_dict["chats"]):
                         logger.error(f"Некорректные ID чатов в {name}")
                         continue
-                        
                     config["codes"][name] = code_dict
-
                 active_broadcasts = []
                 for name, task in self.broadcast_tasks.items():
                     if not task.done() and not task.cancelled():
@@ -1182,12 +1174,12 @@ class BroadcastManager:
                         config["codes"][name]["active"] = True
                     else:
                         config["codes"][name]["active"] = False
-
                 config["active_broadcasts"] = active_broadcasts
 
                 self.db.set("broadcast", "config", config)
-                logger.info(f"Конфигурация сохранена. Активных рассылок: {len(active_broadcasts)}")
-
+                logger.info(
+                    f"Конфигурация сохранена. Активных рассылок: {len(active_broadcasts)}"
+                )
             except Exception as e:
                 logger.critical(f"ОШИБКА СОХРАНЕНИЯ КОНФИГУРАЦИИ: {e}")
                 self.db.set("broadcast_backup", "last_failed_config", config)
