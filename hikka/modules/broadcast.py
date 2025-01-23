@@ -79,11 +79,12 @@ class SimpleCache:
 
     async def _maybe_cleanup(self):
         """Проверяет необходимость очистки устаревших записей"""
-        current_time = time.time()
-        if current_time - self._last_cleanup > self.ttl:
-            logger.info("Запуск периодической очистки кэша")
-            await self.clean_expired()
-            self._last_cleanup = current_time
+        async with self._lock:
+            current_time = time.time()
+            if current_time - self._last_cleanup > self.ttl:
+                logger.info("Запуск периодической очистки кэша")
+                await self.clean_expired()
+                self._last_cleanup = current_time
 
     async def clean_expired(self):
         """Очищает устаревшие записи"""
@@ -189,20 +190,22 @@ class SimpleCache:
                     f"[CACHE] Успешно сохранено. Новый размер: {len(self.cache)} "
                     f"(было {cache_size_before}). TTL: {self.ttl} сек"
                 )
-                cache_contents = await self.get_cache_contents()
-
-                for key, meta in cache_contents.items():
-                    what = f"""
-                    Чат: {key[0]}
-                    Сообщение ID: {key[1]}
-                    Тип: {meta['type']}
-                    Медиа: {'Да' if meta['is_media'] else 'Нет'}
-                    Группа: {meta['group_size']} сообщений
-                    Время сохранения: {datetime.fromtimestamp(meta['timestamp'])}
-                    """
+                new_entry = {
+                    "timestamp": time.time(),
+                    "type": type(value).__name__,
+                    "is_media": bool(getattr(value, "media", None)),
+                    "group_size": len(value) if isinstance(value, list) else 1
+                }
                 logger.debug(
-                    f"Примерное время жизни записи: {self._estimate_ttl_stats()}\n{what}"
+                    f"[CACHE] Добавлена запись: {key}\n"
+                    f"Тип: {new_entry['type']}\n"
+                    f"Медиа: {'Да' if new_entry['is_media'] else 'Нет'}\n"
+                    f"Группа: {new_entry['group_size']} сообщений\n"
+                    f"Текущий размер кэша: {len(self.cache)}"
                 )
+
+                # if random.randint(1, 10) == 1:
+                logger.debug(f"Статистика кэша: {self._estimate_ttl_stats()}")
         except Exception as e:
             logger.error(f"Критическая ошибка в методе set: {e}", exc_info=True)
             raise
@@ -212,9 +215,10 @@ class SimpleCache:
         logger.info(f"[CACHE] Запуск фоновой очистки с интервалом {self.ttl} сек")
         while True:
             try:
-                await self.clean_expired()
-                await asyncio.sleep(self.ttl)
-                logger.debug("[CACHE] Периодическая очистка выполнена")
+                async with self._lock:
+                    await self.clean_expired()
+                    logger.debug("[CACHE] Периодическая очистка выполнена")
+                    await asyncio.sleep(self.ttl)
             except Exception as e:
                 logger.error(f"Ошибка очистки кэша: {e}")
 
@@ -259,9 +263,18 @@ class BroadcastMod(loader.Module):
             self._initialized = False
 
     async def on_unload(self):
+        "На выходе"
         await self.manager.stop_cache_cleanup()
         for task in self.manager.broadcast_tasks.values():
-            task.cancel()
+            if not task.done():
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+
+        await self.manager._semaphore.acquire()
+        self.manager._semaphore.release()
 
     async def watcher(self, message: Message):
         """Автоматически добавляет чаты в рассылку."""
@@ -565,6 +578,24 @@ class BroadcastManager:
 
         logger.info(f"Уровень прав для чата {chat_id}: {permission_level}")
         return permission_level
+
+    async def _handle_flood_wait(self, e: FloodWaitError, chat_id: int):
+        wait_time = e.seconds + random.randint(5, 15)
+        logger.info(f"Ожидание {wait_time} сек для чата {chat_id}")
+        await asyncio.sleep(wait_time)
+        self.error_counts.pop(f"{chat_id}_flood", None)
+
+    async def _handle_permanent_error(self, chat_id: int):
+        async with self._lock:
+            for code in self.codes.values():
+                code.chats.discard(chat_id)
+        await self.save_config()
+
+    async def _handle_temporary_error(self, chat_id: int):
+        error_key = f"{chat_id}_temp"
+        self.error_counts[error_key] = self.error_counts.get(error_key, 0) + 1
+        if self.error_counts[error_key] > 3:
+            await self._handle_permanent_error(chat_id)
 
     async def _handle_add_command(
         self, message: Message, code: Optional[Broadcast], code_name: str
@@ -891,51 +922,45 @@ class BroadcastManager:
             logger.error(f"Error loading configuration: {e}")
 
     async def _process_message_batch(
-        self, code: Optional[Broadcast], messages: List[dict]
+        self, code: Broadcast, messages: List[dict]
     ) -> Tuple[List[Union[Message, List[Message]]], List[dict]]:
-        """Обрабатывает пакет сообщений с улучшенной обработкой ошибок."""
-        if not code:
-            logger.warning("Код рассылки не предоставлен")
-            return [], messages
+        """Обрабатывает пакет сообщений с улучшенной обработкой ошибок и параллелизмом"""
+        if not code or not messages:
+            logger.warning("Пустой пакет сообщений для обработки")
+            return [], []
+
         messages_to_send = []
         deleted_messages = []
-
-        fetch_tasks = []
-        for msg in messages:
-            task = asyncio.create_task(self._fetch_messages(msg))
-            fetch_tasks.append((msg, task))
+        
         try:
-            results = []
-            for msg, task in fetch_tasks:
-                try:
-                    result = await task
-                    results.append((msg, result))
-                except Exception as e:
-                    logger.error(
-                        f"Ошибка при выполнении задачи для {msg}: {e}", exc_info=True
-                    )
-                    results.append((msg, e))
-            for msg_data, result in results:
-                try:
-                    if isinstance(result, Exception):
-                        deleted_messages.append(msg_data)
-                        continue
-                    if not result:
-                        deleted_messages.append(msg_data)
-                        continue
-                    messages_to_send.append(result)
-                except Exception as e:
-                    logger.error(
-                        f"Ошибка при обработке результата для {msg_data}: {e}",
-                        exc_info=True,
-                    )
+            tasks = [self._fetch_messages(msg) for msg in messages]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            for msg_data, result in zip(messages, results):
+                if isinstance(result, Exception):
+                    logger.error(f"Ошибка получения {msg_data}: {result}")
                     deleted_messages.append(msg_data)
-            return messages_to_send, deleted_messages
+                    continue
+                    
+                if not result:
+                    logger.warning(f"Сообщение не найдено: {msg_data}")
+                    deleted_messages.append(msg_data)
+                    continue
+                    
+                messages_to_send.append(result)
+                logger.debug(f"Успешно получено: {msg_data['message_id']}")
+
         except Exception as e:
-            logger.error(
-                f"Критическая ошибка в _process_message_batch: {e}", exc_info=True
-            )
+            logger.critical(f"Критическая ошибка обработки пакета: {e}")
             return [], messages
+
+        logger.info(
+            f"Обработано пакетов: {len(messages)}\n"
+            f"Успешно: {len(messages_to_send)}\n"
+            f"Ошибки: {len(deleted_messages)}"
+        )
+        
+        return messages_to_send, deleted_messages
 
     async def _send_message(
         self,
@@ -980,28 +1005,14 @@ class BroadcastManager:
             self.last_error_time[f"{chat_id}_general"] = 0
             return True
         except FloodWaitError as e:
-            error_key = f"{chat_id}_flood"
-            self.error_counts[error_key] = 0
-            wait_time = e.seconds + random.randint(5, 15)
-            logger.warning(f"FloodWait {e.seconds}s → Adjusted {wait_time}s")
-            await asyncio.sleep(wait_time)
-            raise
-        except (ChatWriteForbiddenError, UserBannedInChannelError):
-            raise
+            logger.warning(f"Флуд-контроль: {e}")
+            await self._handle_flood_wait(e, chat_id)
+        except (ChatWriteForbiddenError, UserBannedInChannelError) as e:
+            logger.info(f"Доступ запрещен: {chat_id}")
+            await self._handle_permanent_error(chat_id)
         except Exception as e:
-            logger.error(
-                f"[{code_name}][send_message] Error sending to {chat_id}: {str(e)}"
-            )
-            error_key = f"{chat_id}_general"
-            self.error_counts[error_key] = self.error_counts.get(error_key, 0) + 1
-            self.last_error_time[error_key] = time.time()
-
-            if self.error_counts[error_key] >= self.MAX_CONSECUTIVE_ERRORS:
-                wait_time = 60 * (
-                    2 ** (self.error_counts[error_key] - self.MAX_CONSECUTIVE_ERRORS)
-                )
-                await asyncio.sleep(wait_time)
-            raise
+            logger.error(f"Неизвестная ошибка: {e}")
+            await self._handle_temporary_error(chat_id)
 
     async def _send_messages_to_chats(
         self,
@@ -1134,66 +1145,53 @@ class BroadcastManager:
             await utils.answer(message, "❌ Неизвестное действие")
 
     async def save_config(self):
-        """Saves configuration to database with improved reliability and state handling"""
-        try:
-            codes_snapshot = self.codes.copy()
-            tasks_snapshot = self.broadcast_tasks.copy()
+        """Безопасное сохранение конфигурации с улучшенной обработкой состояния"""
+        async with self._lock:
+            try:
+                config = {
+                    "version": 2,
+                    "last_save": datetime.utcnow().timestamp(),
+                    "codes": {},
+                    "active_broadcasts": []
+                }
 
-            invalid_codes = set()
-            for code_name, code in codes_snapshot.items():
-                if not code or not isinstance(code, Broadcast):
-                    invalid_codes.add(code_name)
-                    continue
-                if not code.messages and not code.chats and not code._active:
-                    invalid_codes.add(code_name)
-                    continue
-            for code_name in invalid_codes:
-                codes_snapshot.pop(code_name, None)
-                task = tasks_snapshot.pop(code_name, None)
-                if task:
-                    try:
-                        if not task.done():
-                            task.cancel()
-                        await asyncio.wait_for(task, timeout=3)
-                    except Exception as e:
-                        logger.error(f"Error cleaning up task for {code_name}: {e}")
-            for code_name, code in codes_snapshot.items():
-                task = tasks_snapshot.get(code_name)
-                code._active = bool(task and not task.done() and not task.cancelled())
-            finished_tasks = [
-                code_name
-                for code_name, task in tasks_snapshot.items()
-                if task and (task.done() or task.cancelled())
-            ]
+                for name, code in self.codes.items():
+                    if not isinstance(code, Broadcast):
+                        logger.warning(f"Некорректный код рассылки: {name}")
+                        continue
 
-            for code_name in finished_tasks:
-                task = tasks_snapshot.pop(code_name)
-                try:
-                    await asyncio.wait_for(task, timeout=3)
-                except Exception as e:
-                    logger.error(f"Error cleaning finished task for {code_name}: {e}")
-            config = {
-                "version": 1,
-                "last_save": int(time.time()),
-                "codes": {
-                    name: code.to_dict()
-                    for name, code in codes_snapshot.items()
-                    if isinstance(code, Broadcast)
-                },
-                "active_broadcasts": [
-                    name
-                    for name, code in codes_snapshot.items()
-                    if code._active and name in tasks_snapshot
-                ],
-            }
+                    code_dict = {
+                        "chats": list(code.chats),
+                        "messages": code.messages,
+                        "interval": list(code.interval),
+                        "send_mode": code.send_mode,
+                        "batch_mode": code.batch_mode,
+                        "active": code._active
+                    }
 
-            self.codes = codes_snapshot
-            self.broadcast_tasks = tasks_snapshot
+                    if not all(isinstance(x, int) for x in code_dict["chats"]):
+                        logger.error(f"Некорректные ID чатов в {name}")
+                        continue
+                        
+                    config["codes"][name] = code_dict
 
-            self.db.set("broadcast", "config", config)
-        except Exception as e:
-            logger.error(f"Critical error saving configuration: {e}", exc_info=True)
-            raise
+                active_broadcasts = []
+                for name, task in self.broadcast_tasks.items():
+                    if not task.done() and not task.cancelled():
+                        active_broadcasts.append(name)
+                        config["codes"][name]["active"] = True
+                    else:
+                        config["codes"][name]["active"] = False
+
+                config["active_broadcasts"] = active_broadcasts
+
+                self.db.set("broadcast", "config", config)
+                logger.info(f"Конфигурация сохранена. Активных рассылок: {len(active_broadcasts)}")
+
+            except Exception as e:
+                logger.critical(f"ОШИБКА СОХРАНЕНИЯ КОНФИГУРАЦИИ: {e}")
+                self.db.set("broadcast_backup", "last_failed_config", config)
+                raise
 
     async def start_cache_cleanup(self):
         """Запускает фоновую очистку кэша"""
