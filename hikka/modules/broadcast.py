@@ -64,12 +64,11 @@ class SimpleCache:
         """Устанавливает значение в кэш"""
         logger.info(f"Начало операции set для ключа {key}")
         try:
-            async with self._lock:                
+            async with self._lock:
                 try:
                     await self._maybe_cleanup()
                 except Exception as e:
                     logger.error(f"Ошибка при проверке очистки: {e}", exc_info=True)
-
                 try:
                     if key in self.cache:
                         logger.info(f"Обновление существующего ключа {key}")
@@ -78,49 +77,48 @@ class SimpleCache:
                         logger.info("Успешно обновлено существующее значение")
                         return
                 except Exception as e:
-                    logger.error(f"Ошибка при обновлении существующего ключа: {e}", exc_info=True)
+                    logger.error(
+                        f"Ошибка при обновлении существующего ключа: {e}", exc_info=True
+                    )
                     raise
-
                 try:
                     while len(self.cache) >= self.max_size:
                         try:
                             oldest_key = next(iter(self.cache))
                             del self.cache[oldest_key]
                         except Exception as e:
-                            logger.error(f"Ошибка при удалении старого ключа: {e}", exc_info=True)
+                            logger.error(
+                                f"Ошибка при удалении старого ключа: {e}", exc_info=True
+                            )
                             break
                 except Exception as e:
                     logger.error(f"Ошибка при очистке кэша: {e}", exc_info=True)
                     raise
-
                 try:
                     self.cache[key] = (time.time(), value)
                 except Exception as e:
-                    logger.error(f"Ошибка при сохранении нового значения: {e}", exc_info=True)
+                    logger.error(
+                        f"Ошибка при сохранении нового значения: {e}", exc_info=True
+                    )
                     raise
-
         except Exception as e:
             logger.error(f"Критическая ошибка в методе set: {e}", exc_info=True)
             raise
 
     async def get(self, key):
         """Получает значение из кэша"""
-        logger.info(f"Начало операции get для ключа {key}")
         try:
             async with self._lock:
                 if key not in self.cache:
                     return None
-                
                 timestamp, value = self.cache[key]
                 if time.time() - timestamp > self.ttl:
                     logger.info(f"Значение для ключа {key} устарело")
                     del self.cache[key]
                     return None
-                
                 self.cache[key] = (time.time(), value)
                 self.cache.move_to_end(key)
                 return value
-                
         except Exception as e:
             logger.error(f"Ошибка при получении значения из кэша: {e}", exc_info=True)
             return None
@@ -135,19 +133,18 @@ class SimpleCache:
             async with self._lock:
                 current_time = time.time()
                 expired_keys = [
-                    k
-                    for k, (t, _) in self.cache.items()
-                    if current_time - t > self.ttl
+                    k for k, (t, _) in self.cache.items() if current_time - t > self.ttl
                 ]
-                
+
                 for key in expired_keys:
                     try:
                         del self.cache[key]
                         logger.info(f"Удален устаревший ключ: {key}")
                     except Exception as e:
-                        logger.error(f"Ошибка при удалении устаревшего ключа {key}: {e}")
+                        logger.error(
+                            f"Ошибка при удалении устаревшего ключа {key}: {e}"
+                        )
                         continue
-                        
                 logger.info(f"Очищено {len(expired_keys)} устаревших записей")
         except Exception as e:
             logger.error(f"Ошибка при очистке кэша: {e}", exc_info=True)
@@ -495,19 +492,30 @@ class BroadcastManager:
                 1 - Text only
                 2 - Full media permissions
         """
+        logger.info(f"Проверка прав доступа для чата {chat_id}")
         try:
             entity = await self.client.get_entity(chat_id)
-        except ValueError:
+            logger.debug(f"Получен объект сущности для чата {chat_id}")
+        except ValueError as e:
+            logger.warning(f"Не удалось получить сущность для чата {chat_id}: {e}")
             return self.MediaPermissions.NONE
         if not hasattr(entity, "default_banned_rights"):
+            logger.warning(f"У сущности {chat_id} отсутствуют права доступа")
             return self.MediaPermissions.NONE
         banned = entity.default_banned_rights
 
-        if banned.send_messages:
-            return self.MediaPermissions.NONE
-        if banned.send_media or banned.send_photos:
-            return self.MediaPermissions.TEXT_ONLY
-        return self.MediaPermissions.FULL_MEDIA
+        permission_level = (
+            self.MediaPermissions.NONE
+            if banned.send_messages
+            else (
+                self.MediaPermissions.TEXT_ONLY
+                if banned.send_media or banned.send_photos
+                else self.MediaPermissions.FULL_MEDIA
+            )
+        )
+
+        logger.info(f"Уровень прав для чата {chat_id}: {permission_level}")
+        return permission_level
 
     async def _handle_add_command(
         self, message: Message, code: Optional[Broadcast], code_name: str
@@ -840,16 +848,13 @@ class BroadcastManager:
         if not code:
             logger.warning("Код рассылки не предоставлен")
             return [], messages
-        
         messages_to_send = []
         deleted_messages = []
 
-        # Создаем список задач
         fetch_tasks = []
         for msg in messages:
             task = asyncio.create_task(self._fetch_messages(msg))
             fetch_tasks.append((msg, task))
-
         try:
             results = []
             for msg, task in fetch_tasks:
@@ -857,30 +862,30 @@ class BroadcastManager:
                     result = await task
                     results.append((msg, result))
                 except Exception as e:
-                    logger.error(f"Ошибка при выполнении задачи для {msg}: {e}", exc_info=True)
+                    logger.error(
+                        f"Ошибка при выполнении задачи для {msg}: {e}", exc_info=True
+                    )
                     results.append((msg, e))
-            
-            # Обрабатываем результаты
             for msg_data, result in results:
                 try:
                     if isinstance(result, Exception):
                         deleted_messages.append(msg_data)
                         continue
-                    
                     if not result:
                         deleted_messages.append(msg_data)
                         continue
-
                     messages_to_send.append(result)
-                    
                 except Exception as e:
-                    logger.error(f"Ошибка при обработке результата для {msg_data}: {e}", exc_info=True)
+                    logger.error(
+                        f"Ошибка при обработке результата для {msg_data}: {e}",
+                        exc_info=True,
+                    )
                     deleted_messages.append(msg_data)
             return messages_to_send, deleted_messages
-        
         except Exception as e:
-            logger.error(f"Критическая ошибка в _process_message_batch: {e}", exc_info=True)
-            # В случае критической ошибки, помечаем все сообщения как удаленные
+            logger.error(
+                f"Критическая ошибка в _process_message_batch: {e}", exc_info=True
+            )
             return [], messages
 
     async def _send_message(
