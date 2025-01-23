@@ -27,24 +27,7 @@ class QueryGallery(InlineUnit):
         disable_security: bool = False,
         always_allow: typing.Optional[typing.List[int]] = None,
     ) -> bool:
-        """
-        Answer inline query with a bunch of inline galleries
-        :param query: `InlineQuery` which should be answered with inline gallery
-        :param items: Array of dicts with inline results.
-                      Each dict *must* has a:
-                          - `title` - The title of the result
-                          - `description` - Short description of the result
-                          - `next_handler` - Inline gallery handler. Callback or awaitable
-                      Each dict *can* has a:
-                          - `caption` - Caption of photo. Defaults to `""`
-                          - `force_me` - Whether the button must be accessed only by owner. Defaults to `False`
-                          - `disable_security` - Whether to disable the security checks at all. Defaults to `False`
-        :param force_me: Either this gallery buttons must be pressed only by owner scope or no
-        :param always_allow: Users, that are allowed to press buttons in addition to previous rules
-        :param disable_security: By default, Her will try to check security of gallery
-                                 If you want to disable all security checks on this gallery in particular, pass `disable_security=True`
-        :return: Status of answer
-        """
+        """Answer inline query with a bunch of inline galleries"""
         if not isinstance(force_me, bool):
             logger.error(
                 "Invalid type for `force_me`. Expected `bool`, got %s",

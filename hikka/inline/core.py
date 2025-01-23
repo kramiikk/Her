@@ -44,15 +44,7 @@ class InlineManager(
     List,
     BotPM,
 ):
-    """
-    Inline buttons, galleries and other Telegram-Bot-API stuff
-    :param client: Telegram client
-    :param db: Database instance
-    :param allmodules: All modules
-    :type client: hikka.tl_cache.CustomTelegramClient
-    :type db: hikka.database.Database
-    :type allmodules: hikka.loader.Modules
-    """
+    """Inline buttons, galleries and other Telegram-Bot-API stuff"""
 
     def __init__(
         self,

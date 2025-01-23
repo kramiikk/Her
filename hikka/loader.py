@@ -226,16 +226,7 @@ def loop(
     wait_before: typing.Optional[bool] = False,
     stop_clause: typing.Optional[str] = None,
 ) -> FunctionType:
-    """
-    Create new infinite loop from class method
-    :param interval: Loop iterations delay
-    :param autostart: Start loop once module is loaded
-    :param wait_before: Insert delay before actual iteration, rather than after
-    :param stop_clause: Database key, based on which the loop will run.
-                       This key will be set to `True` once loop is started,
-                       and will stop after key resets to `False`
-    :attr status: Boolean, describing whether the loop is running
-    """
+    """Create new infinite loop from class method"""
 
     def wrapped(func):
         return InfiniteLoop(func, interval, autostart, wait_before, stop_clause)
@@ -323,62 +314,7 @@ def ratelimit(func: Command) -> Command:
 
 
 def tag(*tags, **kwarg_tags):
-    """
-    Tag function (esp. watchers) with some tags
-    Currently available tags:
-        • `no_commands` - Ignore all userbot commands in watcher
-        • `only_commands` - Capture only userbot commands in watcher
-        • `out` - Capture only outgoing events
-        • `in` - Capture only incoming events
-        • `only_messages` - Capture only messages (not join events)
-        • `editable` - Capture only messages, which can be edited (no forwards etc.)
-        • `no_media` - Capture only messages without media and files
-        • `only_media` - Capture only messages with media and files
-        • `only_photos` - Capture only messages with photos
-        • `only_videos` - Capture only messages with videos
-        • `only_audios` - Capture only messages with audios
-        • `only_docs` - Capture only messages with documents
-        • `only_stickers` - Capture only messages with stickers
-        • `only_inline` - Capture only messages with inline queries
-        • `only_channels` - Capture only messages with channels
-        • `only_groups` - Capture only messages with groups
-        • `only_pm` - Capture only messages with private chats
-        • `no_pm` - Exclude messages with private chats
-        • `no_channels` - Exclude messages with channels
-        • `no_groups` - Exclude messages with groups
-        • `no_inline` - Exclude messages with inline queries
-        • `no_stickers` - Exclude messages with stickers
-        • `no_docs` - Exclude messages with documents
-        • `no_audios` - Exclude messages with audios
-        • `no_videos` - Exclude messages with videos
-        • `no_photos` - Exclude messages with photos
-        • `no_forwards` - Exclude forwarded messages
-        • `no_reply` - Exclude messages with replies
-        • `no_mention` - Exclude messages with mentions
-        • `mention` - Capture only messages with mentions
-        • `only_reply` - Capture only messages with replies
-        • `only_forwards` - Capture only forwarded messages
-        • `startswith` - Capture only messages that start with given text
-        • `endswith` - Capture only messages that end with given text
-        • `contains` - Capture only messages that contain given text
-        • `regex` - Capture only messages that match given regex
-        • `filter` - Capture only messages that pass given function
-        • `from_id` - Capture only messages from given user
-        • `chat_id` - Capture only messages from given chat
-        • `thumb_url` - Works for inline command handlers. Will be shown in help
-        • `alias` - Set single alias for a command
-        • `aliases` - Set multiple aliases for a command
-
-    Usage example:
-
-    @loader.tag("no_commands", "out")
-    @loader.tag("no_commands", out=True)
-    @loader.tag(only_messages=True)
-    @loader.tag("only_messages", "only_pm", regex=r"^[.] ?hikka$", from_id=659800858)
-
-    💡 These tags can be used directly in `@loader.watcher`:
-    @loader.watcher("no_commands", out=True)
-    """
+    """Tag function (esp. watchers) with some tags"""
 
     def inner(func: Command) -> Command:
         for _tag in tags:

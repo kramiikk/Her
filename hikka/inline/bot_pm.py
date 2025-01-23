@@ -18,13 +18,7 @@ class BotPM(InlineUnit):
         user: typing.Union[str, int],
         state: typing.Union[str, bool],
     ) -> bool:
-        """
-        Set FSM state for user
-        :param user: user id
-        :param state: state to set
-        :return: True if state was set, False otherwise
-        :rtype: bool
-        """
+        """Set FSM state for user"""
         if not isinstance(user, (str, int)):
             logger.error(
                 (

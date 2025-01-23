@@ -28,28 +28,7 @@ class ValidationError(Exception):
 
 
 class Validator:
-    """
-    Class used as validator of config value
-    :param validator: Sync function, which raises `ValidationError` if passed
-                      value is incorrect (with explanation) and returns converted
-                      value if it is semantically correct.
-                      ⚠️ If validator returns `None`, value will always be set to `None`
-    :param doc: Docstrings for this validator as string, or dict in format:
-                {
-                    "en": "docstring",
-                    "ru": "докстрингом",
-                    "ua": "докстрінгом",
-                    "fr": "chaîne de documentation",
-                    "it": "docstring",
-                    "de": "Dokumentation",
-                    "tr": "dökümantasyon",
-                    "uz": "hujjat",
-                    "es": "documentación",
-                    "kk": "құжат",
-                }
-                Use instrumental case with lowercase
-    :param _internal_id: Do not pass anything here, or things will break
-    """
+    """Class used as validator of config value"""
 
     def __init__(
         self,
@@ -276,14 +255,7 @@ class MultiChoice(Validator):
 
 
 class Series(Validator):
-    """
-    Represents the series of value (simply `list`)
-    :param separator: With which separator values must be separated
-    :param validator: Internal validator for each sequence value
-    :param min_len: Minimal number of series items to be passed
-    :param max_len: Maximum number of series items to be passed
-    :param fixed_len: Fixed number of series items to be passed
-    """
+    """Represents the series of value (simply `list`)"""
 
     def __init__(
         self,

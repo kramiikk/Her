@@ -304,23 +304,7 @@ class Utils(InlineUnit):
         chat_id: typing.Optional[int] = None,
         message_id: typing.Optional[int] = None,
     ) -> bool:
-        """
-        Edits unit message
-        :param text: Text of message
-        :param reply_markup: Inline keyboard
-        :param photo: Url to a valid photo to attach to message
-        :param file: Url to a valid file to attach to message
-        :param video: Url to a valid video to attach to message
-        :param audio: Url to a valid audio to attach to message
-        :param gif: Url to a valid gif to attach to message
-        :param mime_type: Mime type of file
-        :param force_me: Allow only userbot owner to interact with buttons
-        :param disable_security: Disable security check for buttons
-        :param always_allow: List of user ids, which will always be allowed
-        :param disable_web_page_preview: Disable web page preview
-        :param query: Callback query
-        :return: Status of edit
-        """
+        """Edits unit message"""
         reply_markup = self._validate_markup(reply_markup) or []
 
         if text is not None and not isinstance(text, str):

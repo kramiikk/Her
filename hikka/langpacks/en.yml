@@ -73,28 +73,6 @@ her_config:
   _cmd_doc_fconfig: "<module_name> <property_name> <config_value> - set the config value for the module"
   _cls_doc: "Interactive configurator for Her"
 
-api_protection:
-  name: "APILimiter"
-  warning: "⚠️ <b>WARNING!</b>\n\nYour account exceeded the limit of requests, specified in config. In order to prevent Telegram API Flood, userbot has been <b>fully frozen</b> for {} seconds. Further info is provided in attached file. \n\nIt is recommended to get help in <code>{prefix}support</code> group!\n\nIf you think, that it is an intended behavior, then wait until userbot gets unlocked and next time, when you will be going to perform such an operation, use <code>{prefix}suspend_api_protect</code> &lt;time in seconds&gt;"
-  args_invalid: "<emoji document_id=5210952531676504517>🚫</emoji> <b>Invalid arguments</b>"
-  suspended_for: "<emoji document_id=5458450833857322148>👌</emoji> <b>API Flood Protection is disabled for {} seconds</b>"
-  on: "<emoji document_id=5458450833857322148>👌</emoji> <b>Protection enabled</b>"
-  off: "<emoji document_id=5458450833857322148>👌</emoji> <b>Protection disabled</b>"
-  u_sure: "<emoji document_id=5312383351217201533>⚠️</emoji> <b>Are you sure?</b>"
-  _cfg_time_sample: "Time sample through which the bot will count requests"
-  _cfg_threshold: "Threshold of requests to trigger protection"
-  _cfg_local_floodwait: "Freeze userbot for this amount of time, if request limit exceeds"
-  _cfg_forbidden_methods: "Forbid specified methods from being executed throughout external modules"
-  btn_no: "🚫 No"
-  btn_yes: "✅ Yes"
-  web_pin: "🔓 <b>Click the button below to show Werkzeug debug PIN. Do not give it to anyone.</b>"
-  web_pin_btn: "🐞 Show Werkzeug PIN"
-  proxied_url: "🌐 Proxied URL"
-  local_url: "🏠 Local URL"
-  debugger_disabled: "<emoji document_id=5210952531676504517>🚫</emoji> <b>Web debugger is disabled, url is not available</b>"
-  _cmd_doc_debugger: "Show the Werkzeug PIN"
-  _cls_doc: "Helps userbot avoid spamming Telegram API"
-
 $validators:
   boolean: "boolean"
   positive: "positive "

@@ -68,31 +68,7 @@ class Gallery(InlineUnit):
         silent: bool = False,
         _reattempt: bool = False,
     ) -> typing.Union[bool, InlineMessage]:
-        """
-        Send inline gallery to chat
-        :param caption: Caption for photo, or callable, returning caption
-        :param message: Where to send inline. Can be either `Message` or `int`
-        :param next_handler: Callback function, which must return url for next photo or list with photo urls
-        :param custom_buttons: Custom buttons to add above native ones
-        :param force_me: Either this gallery buttons must be pressed only by owner scope or no
-        :param always_allow: Users, that are allowed to press buttons in addition to previous rules
-        :param ttl: Time, when the gallery is going to be unloaded. Unload means, that the gallery
-                    will become unusable. Pay attention, that ttl can't
-                    be bigger, than default one (1 day) and must be either `int` or `False`
-        :param on_unload: Callback, called when gallery is unloaded and/or closed. You can clean up trash
-                          or perform another needed action
-        :param preload: Either to preload gallery photos beforehand or no. If yes - specify threshold to
-                        be loaded. Toggle this attribute, if your callback is too slow to load photos
-                        in real time
-        :param gif: Whether the gallery will be filled with gifs. If you omit this argument and specify
-                    gifs in `next_handler`, Her will try to determine the filetype of these images
-        :param manual_security: By default, Her will try to inherit inline buttons security from the caller (command)
-                                If you want to avoid this, pass `manual_security=True`
-        :param disable_security: By default, Her will try to inherit inline buttons security from the caller (command)
-                                 If you want to disable all security checks on this gallery in particular, pass `disable_security=True`
-        :param silent: Whether the gallery must be sent silently (w/o "Opening gallery..." message)
-        :return: If gallery is sent, returns :obj:`InlineMessage`, otherwise returns `False`
-        """
+        """Send inline gallery to chat"""
         with contextlib.suppress(AttributeError):
             _hikka_client_id_logging_tag = copy.copy(self._client.tg_id)  # noqa: F841
 

@@ -24,16 +24,7 @@ _CELLTYPE = type(proxy0(None).__closure__[0])
 
 
 def replace_all_refs(replace_from: typing.Any, replace_to: typing.Any) -> typing.Any:
-    """
-    :summary: Uses the :mod:`gc` module to replace all references to obj
-              :attr:`replace_from` with :attr:`replace_to` (it tries it's best,
-              anyway).
-    :param replace_from: The obj you want to replace.
-    :param replace_to: The new objject you want in place of the old one.
-    :returns: The replace_from
-    """
     # https://github.com/cart0113/pyjack/blob/dd1f9b70b71f48335d72f53ee0264cf70dbf4e28/pyjack.py
-
     _gc.collect()
 
     hit = False
