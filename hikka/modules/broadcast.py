@@ -79,12 +79,11 @@ class SimpleCache:
 
     async def _maybe_cleanup(self):
         """Проверяет необходимость очистки устаревших записей"""
-        async with self._lock:
-            current_time = time.time()
-            if current_time - self._last_cleanup > self.ttl:
-                logger.info("Запуск периодической очистки кэша")
-                await self.clean_expired()
-                self._last_cleanup = current_time
+        current_time = time.time()
+        if current_time - self._last_cleanup > self.ttl:
+            logger.info("Запуск периодической очистки кэша")
+            await self.clean_expired()
+            self._last_cleanup = current_time
 
     async def clean_expired(self):
         """Очищает устаревшие записи"""
@@ -93,31 +92,30 @@ class SimpleCache:
         logger.info("[CACHE CLEAN] Начало очистки устаревших записей")
         try:
             self._cleaning = True
-            async with self._lock:
-                current_time = time.time()
-                initial_size = len(self.cache)
-                expired_keys = []
+            current_time = time.time()
+            initial_size = len(self.cache)
+            expired_keys = []
 
-                for k, (t, _) in self.cache.items():
-                    if current_time - t > self.ttl:
-                        expired_keys.append(k)
-                        logger.debug(
-                            f"Найден устаревший ключ: {k} (возраст {current_time - t:.1f} сек)"
-                        )
-                logger.info(f"[CACHE] Найдено устаревших записей: {len(expired_keys)}")
+            for k, (t, _) in self.cache.items():
+                if current_time - t > self.ttl:
+                    expired_keys.append(k)
+                    logger.debug(
+                        f"Найден устаревший ключ: {k} (возраст {current_time - t:.1f} сек)"
+                    )
+            logger.info(f"[CACHE] Найдено устаревших записей: {len(expired_keys)}")
 
-                for key in expired_keys:
-                    try:
-                        del self.cache[key]
-                    except KeyError:
-                        pass
-                logger.info(
-                    f"[CACHE] Очистка завершена. Удалено: {len(expired_keys)}. "
-                    f"Текущий размер: {len(self.cache)} (было {initial_size})"
-                )
-                logger.debug(
-                    f"Статистика TTL после очистки: {self._estimate_ttl_stats()}"
-                )
+            for key in expired_keys:
+                try:
+                    del self.cache[key]
+                except KeyError:
+                    pass
+            logger.info(
+                f"[CACHE] Очистка завершена. Удалено: {len(expired_keys)}. "
+                f"Текущий размер: {len(self.cache)} (было {initial_size})"
+            )
+            logger.debug(
+                f"Статистика TTL после очистки: {self._estimate_ttl_stats()}"
+            )
         except Exception as e:
             logger.error(f"Ошибка при очистке кэша: {e}", exc_info=True)
         finally:
