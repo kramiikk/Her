@@ -59,98 +59,22 @@ class SimpleCache:
         self._lock = asyncio.Lock()
         self._last_cleanup = time.time()
         self._cleaning = False
+        logger.info(f"Инициализирован кэш с TTL {ttl} сек, макс. размер {max_size}")
 
-    async def set(self, key, value):
-        """Устанавливает значение в кэш"""
-        logger.info(f"Начало операции set для ключа {key}")
-        try:
-            async with self._lock:
-                try:
-                    await self._maybe_cleanup()
-                except Exception as e:
-                    logger.error(f"Ошибка при проверке очистки: {e}", exc_info=True)
-                try:
-                    if key in self.cache:
-                        logger.info(f"Обновление существующего ключа {key}")
-                        self.cache[key] = (time.time(), value)
-                        self.cache.move_to_end(key)
-                        logger.info("Успешно обновлено существующее значение")
-                        return
-                except Exception as e:
-                    logger.error(
-                        f"Ошибка при обновлении существующего ключа: {e}", exc_info=True
-                    )
-                    raise
-                try:
-                    while len(self.cache) >= self.max_size:
-                        try:
-                            oldest_key = next(iter(self.cache))
-                            del self.cache[oldest_key]
-                        except Exception as e:
-                            logger.error(
-                                f"Ошибка при удалении старого ключа: {e}", exc_info=True
-                            )
-                            break
-                except Exception as e:
-                    logger.error(f"Ошибка при очистке кэша: {e}", exc_info=True)
-                    raise
-                try:
-                    self.cache[key] = (time.time(), value)
-                except Exception as e:
-                    logger.error(
-                        f"Ошибка при сохранении нового значения: {e}", exc_info=True
-                    )
-                    raise
-        except Exception as e:
-            logger.error(f"Критическая ошибка в методе set: {e}", exc_info=True)
-            raise
-
-    async def get(self, key):
-        """Получает значение из кэша"""
-        try:
-            async with self._lock:
-                if key not in self.cache:
-                    return None
-                timestamp, value = self.cache[key]
-                if time.time() - timestamp > self.ttl:
-                    logger.info(f"Значение для ключа {key} устарело")
-                    del self.cache[key]
-                    return None
-                self.cache[key] = (time.time(), value)
-                self.cache.move_to_end(key)
-                return value
-        except Exception as e:
-            logger.error(f"Ошибка при получении значения из кэша: {e}", exc_info=True)
-            return None
-
-    async def clean_expired(self):
-        """Очищает устаревшие записи"""
-        if self._cleaning:
-            return
-        logger.info("Начало очистки устаревших записей")
-        try:
-            self._cleaning = True
-            async with self._lock:
-                current_time = time.time()
-                expired_keys = [
-                    k for k, (t, _) in self.cache.items() if current_time - t > self.ttl
-                ]
-
-                for key in expired_keys:
-                    try:
-                        del self.cache[key]
-                        logger.info(f"Удален устаревший ключ: {key}")
-                    except Exception as e:
-                        logger.error(
-                            f"Ошибка при удалении устаревшего ключа {key}: {e}"
-                        )
-                        continue
-                logger.info(f"Очищено {len(expired_keys)} устаревших записей")
-        except Exception as e:
-            logger.error(f"Ошибка при очистке кэша: {e}", exc_info=True)
-        finally:
-            self._cleaning = False
-            logger.info("Завершение очистки устаревших записей")
+    def _estimate_ttl_stats(self) -> str:
+        """Возвращает статистику времени жизни записей"""
+        if not self.cache:
+            return "Кэш пуст"
+        current_time = time.time()
+        ages = [current_time - t for t, _ in self.cache.values()]
+        avg_age = sum(ages) / len(ages)
+        max_age = max(ages)
+        return (
+            f"Средний возраст: {avg_age:.1f} сек, "
+            f"Максимальный возраст: {max_age:.1f} сек, "
+            f"Записей скоро истечёт ({self.ttl * 0.9}-{self.ttl} сек): "
+            f"{len([a for a in ages if a > self.ttl * 0.9])}"
+        )
 
     async def _maybe_cleanup(self):
         """Проверяет необходимость очистки устаревших записей"""
@@ -160,14 +84,138 @@ class SimpleCache:
             await self.clean_expired()
             self._last_cleanup = current_time
 
+    async def clean_expired(self):
+        """Очищает устаревшие записи"""
+        if self._cleaning:
+            return
+        logger.info("[CACHE CLEAN] Начало очистки устаревших записей")
+        try:
+            self._cleaning = True
+            async with self._lock:
+                current_time = time.time()
+                initial_size = len(self.cache)
+                expired_keys = []
+
+                for k, (t, _) in self.cache.items():
+                    if current_time - t > self.ttl:
+                        expired_keys.append(k)
+                        logger.debug(
+                            f"Найден устаревший ключ: {k} (возраст {current_time - t:.1f} сек)"
+                        )
+                logger.info(f"[CACHE] Найдено устаревших записей: {len(expired_keys)}")
+
+                for key in expired_keys:
+                    try:
+                        del self.cache[key]
+                    except KeyError:
+                        pass
+                logger.info(
+                    f"[CACHE] Очистка завершена. Удалено: {len(expired_keys)}. "
+                    f"Текущий размер: {len(self.cache)} (было {initial_size})"
+                )
+                logger.debug(
+                    f"Статистика TTL после очистки: {self._estimate_ttl_stats()}"
+                )
+        except Exception as e:
+            logger.error(f"Ошибка при очистке кэша: {e}", exc_info=True)
+        finally:
+            self._cleaning = False
+
+    async def get(self, key):
+        """Получает значение из кэша"""
+        logger.info(f"[CACHE GET] Попытка получения ключа {key}")
+        try:
+            async with self._lock:
+                if key not in self.cache:
+                    logger.debug(f"[CACHE] Промах кэша для ключа {key}")
+                    return None
+                timestamp, value = self.cache[key]
+                current_time = time.time()
+                age = current_time - timestamp
+                remaining_ttl = self.ttl - age
+
+                if remaining_ttl <= 0:
+                    logger.info(
+                        f"[CACHE] Устаревшая запись {key} (возраст {age:.1f} сек)"
+                    )
+                    del self.cache[key]
+                    return None
+                logger.info(
+                    f"[CACHE] Попадание кэша для {key}. "
+                    f"Остаток TTL: {remaining_ttl:.1f} сек"
+                )
+                self.cache.move_to_end(key)
+                return value
+        except Exception as e:
+            logger.error(f"Ошибка при получении значения из кэша: {e}", exc_info=True)
+            return None
+
+    async def get_cache_contents(self) -> dict:
+        """Возвращает содержимое кэша с метаданными"""
+        async with self._lock:
+            return {
+                key: {
+                    "timestamp": ts,
+                    "type": type(payload).__name__,
+                    "is_media": bool(getattr(payload, "media", None)),
+                    "group_size": len(payload) if isinstance(payload, list) else 1,
+                }
+                for key, (ts, payload) in self.cache.items()
+            }
+
+    async def set(self, key, value):
+        """Устанавливает значение в кэш"""
+        logger.info(f"[CACHE SET] Начало операции для ключа {key}")
+        logger.debug(f"Текущий размер кэша: {len(self.cache)}")
+        try:
+            async with self._lock:
+                try:
+                    await self._maybe_cleanup()
+                except Exception as e:
+                    logger.error(f"Ошибка при проверке очистки: {e}", exc_info=True)
+                if key in self.cache:
+                    logger.info(f"[CACHE] Обновление ключа {key}")
+                    old_ts, _ = self.cache[key]
+                    age = time.time() - old_ts
+                    logger.debug(f"Возраст предыдущей записи: {age:.1f} сек")
+                cache_size_before = len(self.cache)
+                while len(self.cache) >= self.max_size:
+                    oldest_key = next(iter(self.cache))
+                    logger.debug(f"Удаление старого ключа: {oldest_key}")
+                    del self.cache[oldest_key]
+                self.cache[key] = (time.time(), value)
+                logger.info(
+                    f"[CACHE] Успешно сохранено. Новый размер: {len(self.cache)} "
+                    f"(было {cache_size_before}). TTL: {self.ttl} сек"
+                )
+                cache_contents = await self.get_cache_contents()
+
+                for key, meta in cache_contents.items():
+                    what = f"""
+                    Чат: {key[0]}
+                    Сообщение ID: {key[1]}
+                    Тип: {meta['type']}
+                    Медиа: {'Да' if meta['is_media'] else 'Нет'}
+                    Группа: {meta['group_size']} сообщений
+                    Время сохранения: {datetime.fromtimestamp(meta['timestamp'])}
+                    """
+                logger.debug(
+                    f"Примерное время жизни записи: {self._estimate_ttl_stats()}\n{what}"
+                )
+        except Exception as e:
+            logger.error(f"Критическая ошибка в методе set: {e}", exc_info=True)
+            raise
+
     async def start_auto_cleanup(self):
         """Запускает фоновую задачу для периодической очистки кэша"""
+        logger.info(f"[CACHE] Запуск фоновой очистки с интервалом {self.ttl} сек")
         while True:
             try:
                 await self.clean_expired()
                 await asyncio.sleep(self.ttl)
+                logger.debug("[CACHE] Периодическая очистка выполнена")
             except Exception as e:
-                logger.error(f"Cache cleanup error: {e}")
+                logger.error(f"Ошибка очистки кэша: {e}")
 
 
 @loader.tds
