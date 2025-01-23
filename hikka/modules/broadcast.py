@@ -60,6 +60,7 @@ class SimpleCache:
         self.max_size = max_size
         self._lock = asyncio.Lock()
         self._last_cleanup = time.time()
+        self._cleaning = False
         logger.info(f"Инициализирован кэш | TTL: {ttl}s | Макс. размер: {max_size}")
 
 
