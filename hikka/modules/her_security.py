@@ -37,12 +37,6 @@ class HerSecurityMod(loader.Module):
 
     strings = {"name": "HerSecurity"}
 
-    @loader.watcher(
-        "out",
-        "only_inline",
-        contains="This message will be deleted automatically",
-    )
-
     async def client_ready(self):
         self._sgroups: typing.Iterable[str, SecurityGroup] = self.pointer(
             "sgroups", {}, item_type=SecurityGroup
