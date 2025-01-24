@@ -61,7 +61,7 @@ class SimpleCache:
         self._lock = asyncio.Lock()
         self._last_cleanup = time.time()
         self._cleaning = False
-        logger.info(f"Инициализирован кэш | TTL: {ttl}s | Макс. размер: {max_size}")
+        logger.debug(f"Инициализирован кэш | TTL: {ttl}s | Макс. размер: {max_size}")
 
     def _estimate_memory_usage(self):
         """Примерная оценка использования памяти"""
@@ -108,7 +108,7 @@ class SimpleCache:
                     logger.debug(f"Удален устаревший ключ: {key}")
                 except KeyError:
                     continue
-            logger.info(
+            logger.debug(
                 f"Очистка завершена. Удалено: {len(expired_keys)} | "
                 f"Текущий размер: {len(self.cache)} (было {initial_size})"
             )
@@ -120,11 +120,11 @@ class SimpleCache:
             self._cleaning = False
 
     async def get(self, key):
-        logger.info(f"[CACHE GET] Попытка получения ключа {key}")
+        logger.debug(f"[CACHE GET] Попытка получения ключа {key}")
         try:
             async with self._lock:
                 if key not in self.cache:
-                    logger.info(f"[CACHE] Промах кэша для ключа {key}")
+                    logger.debug(f"[CACHE] Промах кэша для ключа {key}")
                     return None
                 timestamp, value = self.cache[key]
                 current_time = time.time()
@@ -132,12 +132,12 @@ class SimpleCache:
                 remaining_ttl = self.ttl - age
 
                 if remaining_ttl <= 0:
-                    logger.info(
+                    logger.debug(
                         f"[CACHE] Устаревшая запись {key} (возраст {age:.1f} сек)"
                     )
                     del self.cache[key]
                     return None
-                logger.info(
+                logger.debug(
                     f"[CACHE] Попадание кэша для {key}. "
                     f"Остаток TTL: {remaining_ttl:.1f} сек"
                 )
@@ -149,7 +149,7 @@ class SimpleCache:
 
     async def set(self, key, value):
         """Устанавливает значение в кэш с расширенной диагностикой"""
-        logger.info(f"[CACHE SET] Начало операции для ключа {key}")
+        logger.debug(f"[CACHE SET] Начало операции для ключа {key}")
         try:
             async with self._lock:
                 logger.debug(f"Блокировка захвачена для ключа {key}")
@@ -161,7 +161,7 @@ class SimpleCache:
                 await self.clean_expired(force=True)
 
                 if key in self.cache:
-                    logger.info(f"Обновление существующего ключа: {key}")
+                    logger.debug(f"Обновление существующего ключа: {key}")
                 while len(self.cache) >= self.max_size:
                     oldest_key = next(iter(self.cache))
                     logger.warning(
@@ -171,7 +171,7 @@ class SimpleCache:
                 self.cache[key] = (time.time(), value)
                 self.cache.move_to_end(key)
 
-                logger.info(
+                logger.debug(
                     f"Успешно добавлен ключ: {key}\n"
                     f"Тип значения: {type(value)}\n"
                     f"Размер кэша: {len(self.cache)}\n"
@@ -192,7 +192,7 @@ class SimpleCache:
 
     async def start_auto_cleanup(self):
         """Запускает фоновую задачу для периодической очистки кэша"""
-        logger.info(f"[CACHE] Запуск фоновой очистки с интервалом {self.ttl} сек")
+        logger.debug(f"[CACHE] Запуск фоновой очистки с интервалом {self.ttl} сек")
         while True:
             try:
                 async with self._lock:
@@ -498,21 +498,21 @@ class BroadcastManager:
 
             if message:
                 if msg_data.get("grouped_ids"):
-                    logger.info(
+                    logger.debug(
                         f"Обработка группы сообщений: {msg_data['grouped_ids']}"
                     )
                     messages = []
                     for msg_id in msg_data["grouped_ids"]:
-                        logger.info(f"Получение сгруппированного сообщения {msg_id}")
+                        logger.debug(f"Получение сгруппированного сообщения {msg_id}")
                         grouped_msg = await self.client.get_messages(
                             msg_data["chat_id"], ids=msg_id
                         )
                         if grouped_msg:
                             messages.append(grouped_msg)
                     if messages:
-                        logger.info(f"Сохранение {len(messages)} сообщений в кэш")
+                        logger.debug(f"Сохранение {len(messages)} сообщений в кэш")
                         await self._message_cache.set(key, messages)
-                        logger.info("Возврат группы сообщений")
+                        logger.debug("Возврат группы сообщений")
                         return messages[0] if len(messages) == 1 else messages
                 else:
                     await self._message_cache.set(key, message)
@@ -545,7 +545,7 @@ class BroadcastManager:
                 1 - Text only
                 2 - Full media permissions
         """
-        logger.info(f"Проверка прав доступа для чата {chat_id}")
+        logger.debug(f"Проверка прав доступа для чата {chat_id}")
         try:
             entity = await self.client.get_entity(chat_id)
             logger.debug(f"Получен объект сущности для чата {chat_id}")
@@ -567,12 +567,12 @@ class BroadcastManager:
             )
         )
 
-        logger.info(f"Уровень прав для чата {chat_id}: {permission_level}")
+        logger.debug(f"Уровень прав для чата {chat_id}: {permission_level}")
         return permission_level
 
     async def _handle_flood_wait(self, e: FloodWaitError, chat_id: int):
         wait_time = e.seconds + random.randint(5, 15)
-        logger.info(f"Ожидание {wait_time} сек для чата {chat_id}")
+        logger.debug(f"Ожидание {wait_time} сек для чата {chat_id}")
         await asyncio.sleep(wait_time)
         self.error_counts.pop(f"{chat_id}_flood", None)
 
@@ -643,9 +643,6 @@ class BroadcastManager:
                         f"Сообщений: {len(code.messages)}\n"
                         f"Групповых ID: {len(grouped_ids)}",
                     )
-                else:
-                    await utils.answer(message, "⚠️ Ошибка сохранения конфигурации!")
-                    logger.error("Конфигурация не сохранилась после добавления")
             except Exception as e:
                 logger.critical(f"Critical error: {e}", exc_info=True)
                 if is_new and code_name in self.codes:
@@ -915,7 +912,7 @@ class BroadcastManager:
                 return
 
             for code_name, code_data in config.get('codes', {}).items():
-                logger.error(f"Восстановление кода {code_name}: {code_data}")
+                logger.debug(f"Восстановление кода {code_name}: {code_data}")
                 
                 broadcast = Broadcast(
                     chats=set(code_data.get('chats', [])),
@@ -928,7 +925,7 @@ class BroadcastManager:
                 
                 self.codes[code_name] = broadcast
                 
-                logger.error(f"Восстановлен код {code_name}: {broadcast}")
+                logger.debug(f"Восстановлен код {code_name}: {broadcast}")
         except Exception as e:
             logger.error(f"Ошибка загрузки конфигурации: {e}", exc_info=True)
 
@@ -958,9 +955,9 @@ class BroadcastManager:
                 messages_to_send.append(result)
                 logger.debug(f"Успешно получено: {msg_data['message_id']}")
         except Exception as e:
-            logger.critical(f"Критическая ошибка обработки пакета: {e}")
+            logger.error(f"Критическая ошибка обработки пакета: {e}")
             return [], messages
-        logger.info(
+        logger.debug(
             f"Обработано пакетов: {len(messages)}\n"
             f"Успешно: {len(messages_to_send)}\n"
             f"Ошибки: {len(deleted_messages)}"
@@ -1011,10 +1008,10 @@ class BroadcastManager:
             self.last_error_time[f"{chat_id}_general"] = 0
             return True
         except FloodWaitError as e:
-            logger.warning(f"Флуд-контроль: {e}")
+            logger.error(f"Флуд-контроль: {e}")
             await self._handle_flood_wait(e, chat_id)
         except (ChatWriteForbiddenError, UserBannedInChannelError) as e:
-            logger.info(f"Доступ запрещен: {chat_id}")
+            logger.error(f"Доступ запрещен: {chat_id}")
             await self._handle_permanent_error(chat_id)
         except Exception as e:
             logger.error(f"Неизвестная ошибка: {e}")
@@ -1153,11 +1150,11 @@ class BroadcastManager:
     async def save_config(self):
         try:
             # Логируем максимально подробно
-            logger.error(f"ПОЛНЫЙ СТАТУС КОДОВ: {self.codes}")
-            logger.error(f"КОЛИЧЕСТВО КОДОВ: {len(self.codes)}")
+            logger.debug(f"ПОЛНЫЙ СТАТУС КОДОВ: {self.codes}")
+            logger.debug(f"КОЛИЧЕСТВО КОДОВ: {len(self.codes)}")
             
             for code_name, code in self.codes.items():
-                logger.error(f"КОД {code_name}: chats={code.chats}, messages={code.messages}")
+                logger.debug(f"КОД {code_name}: chats={code.chats}, messages={code.messages}")
                 
             config = {
                 "codes": {
@@ -1174,12 +1171,12 @@ class BroadcastManager:
                 "timestamp": datetime.utcnow().timestamp()
             }
 
-            logger.error(f"ФИНАЛЬНАЯ КОНФИГУРАЦИЯ: {config}")
+            logger.debug(f"ФИНАЛЬНАЯ КОНФИГУРАЦИЯ: {config}")
             
             # Используем прямое сохранение без asyncio
             self.db.set("broadcast", "config", config)
             
-            logger.error("КОНФИГУРАЦИЯ SUPPOSEDLY СОХРАНЕНА")
+            logger.debug("КОНФИГУРАЦИЯ СОХРАНЕНА")
         except Exception as e:
             logger.error(f"КРИТИЧЕСКАЯ ОШИБКА СОХРАНЕНИЯ: {e}", exc_info=True)
 
