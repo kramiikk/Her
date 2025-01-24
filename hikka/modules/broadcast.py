@@ -498,21 +498,21 @@ class BroadcastManager:
 
             if message:
                 if msg_data.get("grouped_ids"):
-                    logger.debug(
+                    logger.info(
                         f"Обработка группы сообщений: {msg_data['grouped_ids']}"
                     )
                     messages = []
                     for msg_id in msg_data["grouped_ids"]:
-                        logger.debug(f"Получение сгруппированного сообщения {msg_id}")
+                        logger.info(f"Получение сгруппированного сообщения {msg_id}")
                         grouped_msg = await self.client.get_messages(
                             msg_data["chat_id"], ids=msg_id
                         )
                         if grouped_msg:
                             messages.append(grouped_msg)
                     if messages:
-                        logger.debug(f"Сохранение {len(messages)} сообщений в кэш")
+                        logger.info(f"Сохранение {len(messages)} сообщений в кэш")
                         await self._message_cache.set(key, messages)
-                        logger.debug("Возврат группы сообщений")
+                        logger.info("Возврат группы сообщений")
                         return messages[0] if len(messages) == 1 else messages
                 else:
                     await self._message_cache.set(key, message)
@@ -545,7 +545,7 @@ class BroadcastManager:
                 1 - Text only
                 2 - Full media permissions
         """
-        logger.debug(f"Проверка прав доступа для чата {chat_id}")
+        logger.info(f"Проверка прав доступа для чата {chat_id}")
         try:
             entity = await self.client.get_entity(chat_id)
             logger.debug(f"Получен объект сущности для чата {chat_id}")
@@ -567,12 +567,12 @@ class BroadcastManager:
             )
         )
 
-        logger.debug(f"Уровень прав для чата {chat_id}: {permission_level}")
+        logger.info(f"Уровень прав для чата {chat_id}: {permission_level}")
         return permission_level
 
     async def _handle_flood_wait(self, e: FloodWaitError, chat_id: int):
         wait_time = e.seconds + random.randint(5, 15)
-        logger.debug(f"Ожидание {wait_time} сек для чата {chat_id}")
+        logger.info(f"Ожидание {wait_time} сек для чата {chat_id}")
         await asyncio.sleep(wait_time)
         self.error_counts.pop(f"{chat_id}_flood", None)
 
@@ -643,6 +643,9 @@ class BroadcastManager:
                         f"Сообщений: {len(code.messages)}\n"
                         f"Групповых ID: {len(grouped_ids)}",
                     )
+                else:
+                    await utils.answer(message, "⚠️ Ошибка сохранения конфигурации!")
+                    logger.error("Конфигурация не сохранилась после добавления")
             except Exception as e:
                 logger.critical(f"Critical error: {e}", exc_info=True)
                 if is_new and code_name in self.codes:
@@ -902,18 +905,32 @@ class BroadcastManager:
         except Exception as e:
             logger.error(f"Ошибка обработки неудачных чатов для {code_name}: {e}")
 
+    async def _start_broadcast_task(self, code_name: str, code: Broadcast):
+        """Запускает или перезапускает задачу рассылки для кода."""
+        if code_name in self.broadcast_tasks and not self.broadcast_tasks[code_name].done():
+            self.broadcast_tasks[code_name].cancel()
+            try:
+                await self.broadcast_tasks[code_name]  # Дождаться завершения отмененной задачи
+            except asyncio.CancelledError:
+                pass  # Ожидаемо, можно игнорировать
+
+        self.broadcast_tasks[code_name] = asyncio.create_task(self._broadcast_loop(code_name))
+        logger.info(f"Запущена задача рассылки для кода: {code_name}")
+
+
     async def _load_config(self):
         try:
             config = self.db.get("broadcast", "config", {})
             logger.error(f"ЗАГРУЖЕННАЯ КОНФИГУРАЦИЯ: {config}")
-            
+
             if not config or 'codes' not in config:
                 logger.warning("Конфигурация пуста")
                 return
 
+            logger.info("Перезапуск активных рассылок из конфигурации...")
             for code_name, code_data in config.get('codes', {}).items():
-                logger.debug(f"Восстановление кода {code_name}: {code_data}")
-                
+                logger.error(f"Восстановление кода {code_name}: {code_data}")
+
                 broadcast = Broadcast(
                     chats=set(code_data.get('chats', [])),
                     messages=code_data.get('messages', []),
@@ -922,12 +939,18 @@ class BroadcastManager:
                     batch_mode=code_data.get('batch_mode', False)
                 )
                 broadcast._active = code_data.get('active', False)
-                
+
                 self.codes[code_name] = broadcast
-                
-                logger.debug(f"Восстановлен код {code_name}: {broadcast}")
+                logger.error(f"Восстановлен код {code_name}: {broadcast}")
+
+                if broadcast._active: # Проверяем active и запускаем задачу
+                    await self._start_broadcast_task(code_name, broadcast)
+
+            logger.info("Перезапуск активных рассылок завершен.")
+
         except Exception as e:
             logger.error(f"Ошибка загрузки конфигурации: {e}", exc_info=True)
+
 
     async def _process_message_batch(
         self, code: Broadcast, messages: List[dict]
@@ -955,9 +978,9 @@ class BroadcastManager:
                 messages_to_send.append(result)
                 logger.debug(f"Успешно получено: {msg_data['message_id']}")
         except Exception as e:
-            logger.error(f"Критическая ошибка обработки пакета: {e}")
+            logger.critical(f"Критическая ошибка обработки пакета: {e}")
             return [], messages
-        logger.debug(
+        logger.info(
             f"Обработано пакетов: {len(messages)}\n"
             f"Успешно: {len(messages_to_send)}\n"
             f"Ошибки: {len(deleted_messages)}"
@@ -1008,10 +1031,10 @@ class BroadcastManager:
             self.last_error_time[f"{chat_id}_general"] = 0
             return True
         except FloodWaitError as e:
-            logger.error(f"Флуд-контроль: {e}")
+            logger.warning(f"Флуд-контроль: {e}")
             await self._handle_flood_wait(e, chat_id)
         except (ChatWriteForbiddenError, UserBannedInChannelError) as e:
-            logger.error(f"Доступ запрещен: {chat_id}")
+            logger.info(f"Доступ запрещен: {chat_id}")
             await self._handle_permanent_error(chat_id)
         except Exception as e:
             logger.error(f"Неизвестная ошибка: {e}")
@@ -1150,12 +1173,12 @@ class BroadcastManager:
     async def save_config(self):
         try:
             # Логируем максимально подробно
-            logger.debug(f"ПОЛНЫЙ СТАТУС КОДОВ: {self.codes}")
-            logger.debug(f"КОЛИЧЕСТВО КОДОВ: {len(self.codes)}")
-            
+            logger.error(f"ПОЛНЫЙ СТАТУС КОДОВ: {self.codes}")
+            logger.error(f"КОЛИЧЕСТВО КОДОВ: {len(self.codes)}")
+
             for code_name, code in self.codes.items():
-                logger.debug(f"КОД {code_name}: chats={code.chats}, messages={code.messages}")
-                
+                logger.error(f"КОД {code_name}: chats={code.chats}, messages={code.messages}")
+
             config = {
                 "codes": {
                     name: {
@@ -1171,12 +1194,12 @@ class BroadcastManager:
                 "timestamp": datetime.utcnow().timestamp()
             }
 
-            logger.debug(f"ФИНАЛЬНАЯ КОНФИГУРАЦИЯ: {config}")
-            
+            logger.error(f"ФИНАЛЬНАЯ КОНФИГУРАЦИЯ: {config}")
+
             # Используем прямое сохранение без asyncio
             self.db.set("broadcast", "config", config)
-            
-            logger.debug("КОНФИГУРАЦИЯ СОХРАНЕНА")
+
+            logger.error("КОНФИГУРАЦИЯ SUPPOSEDLY СОХРАНЕНА")
         except Exception as e:
             logger.error(f"КРИТИЧЕСКАЯ ОШИБКА СОХРАНЕНИЯ: {e}", exc_info=True)
 
