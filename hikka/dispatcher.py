@@ -68,8 +68,6 @@ ALL_TAGS = [
     "from_id",
     "chat_id",
     "thumb_url",
-    "alias",
-    "aliases",
 ]
 
 

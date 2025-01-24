@@ -416,14 +416,12 @@ class SecurityManager:
             cmd = None
 
         if callable(func):
-            command = self._client.loader.find_alias(cmd, include_legacy=True) or cmd
-
             for info in self._sgroups.copy().values():
                 if user_id in info.users:
                     for permission in info.permissions:
                         if (
                             permission["rule_type"] == "command"
-                            and permission["rule"] == command
+                            and permission["rule"] == cmd
                         ):
                             return True
 
@@ -435,7 +433,7 @@ class SecurityManager:
 
             for info in self._tsec_user.copy():
                 if info["target"] == user_id:
-                    if info["rule_type"] == "command" and info["rule"] == command:
+                    if info["rule_type"] == "command" and info["rule"] == cmd:
                         return True
 
                     if (
@@ -447,7 +445,7 @@ class SecurityManager:
             if chat:
                 for info in self._tsec_chat.copy():
                     if info["target"] == chat:
-                        if info["rule_type"] == "command" and info["rule"] == command:
+                        if info["rule_type"] == "command" and info["rule"] == cmd:
                             return True
 
                         if (

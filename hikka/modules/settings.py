@@ -280,11 +280,6 @@ class CoreMod(loader.Module):
     def __init__(self):
         self.config = loader.ModuleConfig(
             loader.ConfigValue(
-                "alias_emoji",
-                "<emoji document_id=4974259868996207180>▪️</emoji>",
-                "just emoji in .aliases",
-            ),
-            loader.ConfigValue(
                 "FLOOD_WAIT_PROTECT",
                 2,
                 "How long to wait in seconds between edits in commands",
@@ -474,69 +469,6 @@ class CoreMod(loader.Module):
                 newprefix=utils.escape_html(args),
                 oldprefix=utils.escape_html(oldprefix),
             ),
-        )
-
-    @loader.command()
-    async def aliases(self, message: Message):
-        await utils.answer(
-            message,
-            "<b>🔗 Aliases:</b>\n"
-            + "\n".join(
-                [
-                    (self.config["alias_emoji"] + f" <code>{i}</code> &lt;- {y}")
-                    for i, y in self.allmodules.aliases.items()
-                ]
-            ),
-        )
-
-    @loader.command()
-    async def addalias(self, message: Message):
-        if len(args := utils.get_args(message)) != 2:
-            await utils.answer(message, "<emoji document_id=5210952531676504517>🚫</emoji> <b>You must provide a command and the alias for it</b>")
-            return
-
-        alias, cmd = args
-        if self.allmodules.add_alias(alias, cmd):
-            self.set(
-                "aliases",
-                {
-                    **self.get("aliases", {}),
-                    alias: cmd,
-                },
-            )
-            await utils.answer(
-                message,
-                "<emoji document_id=5197474765387864959>👍</emoji> <b>Alias created. Access it with</b> <code>{}</code>".format(utils.escape_html(alias)),
-            )
-        else:
-            await utils.answer(
-                message,
-                "<emoji document_id=5210952531676504517>🚫</emoji> <b>Command</b> <code>{}</code> <b>does not exist</b>".format(utils.escape_html(cmd)),
-            )
-
-    @loader.command()
-    async def delalias(self, message: Message):
-        args = utils.get_args(message)
-
-        if len(args) != 1:
-            await utils.answer(message, "<emoji document_id=5210952531676504517>🚫</emoji> <b>You must provide a command and the alias for it</b>")
-            return
-
-        alias = args[0]
-
-        if not self.allmodules.remove_alias(alias):
-            await utils.answer(
-                message,
-                "<emoji document_id=5210952531676504517>🚫</emoji> <b>Alias</b> <code>{}</code> <b>does not exist</b>".format(utils.escape_html(alias)),
-            )
-            return
-
-        current = self.get("aliases", {})
-        del current[alias]
-        self.set("aliases", current)
-        await utils.answer(
-            message,
-            "<emoji document_id=5197474765387864959>👍</emoji> <b>Alias</b> <code>{}</code> <b>removed</b>.".format(utils.escape_html(alias)),
         )
 
     @loader.command()

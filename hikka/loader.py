@@ -335,7 +335,6 @@ class Modules:
         self._initial_registration = True
         self.commands = {}
         self.callback_handlers = {}
-        self.aliases = {}
         self.modules = []  # skipcq: PTC-W0052
         self.libraries = []
         self.watchers = []
@@ -485,23 +484,11 @@ class Modules:
 
         return ret
 
-    def add_aliases(self, aliases: dict):
-        """Saves aliases and applies them to <core>/<file> modules"""
-        self.aliases.update(aliases)
-        for alias, cmd in aliases.items():
-            self.add_alias(alias, cmd)
-
     def register_raw_handlers(self, instance: Module):
         """Register event handlers for a module"""
         for name, handler in utils.iter_attrs(instance):
             if getattr(handler, "is_raw_handler", False):
                 self.client.dispatcher.raw_handlers.append(handler)
-
-    @property
-    def _remove_core_protection(self) -> bool:
-        from . import main
-
-        return self._db.get(main.__name__, "remove_core_protection", False)
 
     def register_commands(self, instance: Module):
         """Register commands from instance"""
@@ -511,10 +498,8 @@ class Modules:
             )
 
         for _command, cmd in instance.hikka_commands.items():
-            # Restrict overwriting core modules' commands
             if (
-                not self._remove_core_protection
-                and _command.lower() in self._core_commands
+                _command.lower() in self._core_commands
                 and not instance.__origin__.startswith("<core")
             ):
                 with contextlib.suppress(Exception):
@@ -523,10 +508,6 @@ class Modules:
                 raise CoreOverwriteError(command=_command)
 
             self.commands.update({_command.lower(): cmd})
-
-        for alias, cmd in self.aliases.copy().items():
-            if cmd in instance.hikka_commands:
-                self.add_alias(alias, cmd)
 
     def register_watchers(self, instance: Module):
         """Register watcher from instance"""
@@ -574,7 +555,7 @@ class Modules:
 
         for module in self.modules:
             if module.__class__.__name__ == instance.__class__.__name__:
-                if not self._remove_core_protection and module.__origin__.startswith(
+                if module.__origin__.startswith(
                     "<core"
                 ):
                     raise CoreOverwriteError(
@@ -594,50 +575,13 @@ class Modules:
 
         self.modules += [instance]
 
-    def find_alias(
-        self,
-        alias: str,
-        include_legacy: bool = False,
-    ) -> typing.Optional[str]:
-        if not alias:
-            return None
-
-        for command_name, _command in self.commands.items():
-            aliases = []
-            if getattr(_command, "alias", None) and not (
-                aliases := getattr(_command, "aliases", None)
-            ):
-                aliases = [_command.alias]
-
-            if not aliases:
-                continue
-
-            if any(
-                alias.lower() == _alias.lower()
-                and alias.lower() not in self._core_commands
-                for _alias in aliases
-            ):
-                return command_name
-
-        if alias in self.aliases and include_legacy:
-            return self.aliases[alias]
-
-        return None
-
     def dispatch(self, _command: str) -> typing.Tuple[str, typing.Optional[str]]:
         """Dispatch command to appropriate module"""
-
-        return next(
-            (
-                (cmd, self.commands[cmd.lower()])
-                for cmd in [
-                    _command,
-                    self.aliases.get(_command.lower()),
-                    self.find_alias(_command),
-                ]
-                if cmd and cmd.lower() in self.commands
-            ),
-            (_command, None),
+        cmd_lower = _command.lower()
+        return (
+            (cmd_lower, self.commands[cmd_lower])
+            if cmd_lower in self.commands
+            else (_command, None)
         )
 
     def send_config(self, skip_hook: bool = False):
@@ -762,72 +706,23 @@ class Modules:
             name,
         )
 
-    async def unload_module(self, classname: str) -> typing.List[str]:
-        """Remove module and all stuff from it"""
-        worked = []
-        for module in self.modules:
-            if classname.lower() in (
-                module.name.lower(),
-                module.__class__.__name__.lower(),
-            ):
-                if not self._remove_core_protection and module.__origin__.startswith(
-                    "<core"
-                ):
-                    raise CoreUnloadError(module.__class__.__name__)
-
-                worked += [module.__class__.__name__]
-
-                name = module.__class__.__name__
-                path = os.path.join(
-                    LOADED_MODULES_DIR,
-                    f"{name}_{self.client.tg_id}.py",
-                )
-
-                if os.path.isfile(path):
-                    os.remove(path)
-
-                self.modules.remove(module)
-
-                await module.on_unload()
-
-                self.unregister_raw_handlers(module, "unload")
-                self.unregister_loops(module, "unload")
-                self.unregister_commands(module, "unload")
-                self.unregister_watchers(module, "unload")
-        return worked
-
-    def unregister_loops(self, instance: Module, purpose: str):
+    def unregister_loops(self, instance: Module):
         for name, method in utils.iter_attrs(instance):
             if isinstance(method, InfiniteLoop):
                 method.stop()
 
-    def unregister_commands(self, instance: Module, purpose: str):
+    def unregister_commands(self, instance: Module):
         for name, cmd in self.commands.copy().items():
             if cmd.__self__.__class__.__name__ == instance.__class__.__name__:
                 del self.commands[name]
-                for alias, _command in self.aliases.copy().items():
-                    if _command == name:
-                        del self.aliases[alias]
 
-    def unregister_watchers(self, instance: Module, purpose: str):
+    def unregister_watchers(self, instance: Module):
         for _watcher in self.watchers.copy():
             if _watcher.__self__.__class__.__name__ == instance.__class__.__name__:
                 self.watchers.remove(_watcher)
 
-    def unregister_raw_handlers(self, instance: Module, purpose: str):
+    def unregister_raw_handlers(self, instance: Module):
         """Unregister event handlers for a module"""
         for handler in self.client.dispatcher.raw_handlers:
             if handler.__self__.__class__.__name__ == instance.__class__.__name__:
                 self.client.dispatcher.raw_handlers.remove(handler)
-
-    def add_alias(self, alias: str, cmd: str) -> bool:
-        """Make an alias"""
-        if cmd not in self.commands:
-            return False
-
-        self.aliases[alias.lower().strip()] = cmd
-        return True
-
-    def remove_alias(self, alias: str) -> bool:
-        """Remove an alias"""
-        return bool(self.aliases.pop(alias.lower().strip(), None))
