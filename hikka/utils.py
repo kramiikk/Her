@@ -33,20 +33,11 @@ from hikkatl import hints
 from hikkatl.tl.custom.message import Message
 from hikkatl.tl.functions.account import UpdateNotifySettingsRequest
 from hikkatl.tl.functions.channels import (
-    CreateChannelRequest,
-    EditAdminRequest,
     EditPhotoRequest,
-    InviteToChannelRequest,
-)
-from hikkatl.tl.functions.messages import (
-    GetDialogFiltersRequest,
-    SetHistoryTTLRequest,
-    UpdateDialogFilterRequest,
 )
 from hikkatl.tl.types import (
     Channel,
     Chat,
-    ChatAdminRights,
     InputDocument,
     InputPeerNotifySettings,
     MessageEntityBankCard,

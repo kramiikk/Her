@@ -13,7 +13,6 @@ import inspect
 import logging
 import re
 import sys
-import traceback
 import typing
 
 from hikkatl import events

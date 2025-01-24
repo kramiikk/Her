@@ -831,5 +831,3 @@ class Modules:
     def remove_alias(self, alias: str) -> bool:
         """Remove an alias"""
         return bool(self.aliases.pop(alias.lower().strip(), None))
-
-        return True
