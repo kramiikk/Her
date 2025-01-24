@@ -18,7 +18,6 @@ import os
 import re
 import sys
 import typing
-from functools import wraps
 from pathlib import Path
 from types import FunctionType
 from uuid import uuid4
@@ -27,7 +26,6 @@ from hikkatl.tl.tlobject import TLObject
 
 from . import security, utils, validators
 from .database import Database
-from .translations import Strings, Translator
 from .types import (
     Command,
     ConfigValue,
@@ -66,8 +64,6 @@ __all__ = [
     "get_callback_handlers",
     "validators",
     "Database",
-    "Strings",
-    "Translator",
     "ConfigValue",
     "ModuleConfig",
     "owner",
@@ -241,54 +237,6 @@ LOADED_MODULES_PATH = Path(LOADED_MODULES_DIR)
 LOADED_MODULES_PATH.mkdir(parents=True, exist_ok=True)
 
 
-def translatable_docstring(cls):
-    """Decorator that makes triple-quote docstrings translatable"""
-
-    @wraps(cls.config_complete)
-    def config_complete(self, *args, **kwargs):
-        def proccess_decorators(mark: str, obj: str):
-            nonlocal self
-            for attr in dir(func_):
-                if (
-                    attr.endswith("_doc")
-                    and len(attr) == 6
-                    and isinstance(getattr(func_, attr), str)
-                ):
-                    var = f"strings_{attr.split('_')[0]}"
-                    if not hasattr(self, var):
-                        setattr(self, var, {})
-
-                    getattr(self, var).setdefault(f"{mark}{obj}", getattr(func_, attr))
-
-        for command_, func_ in get_commands(cls).items():
-            proccess_decorators("_cmd_doc_", command_)
-            try:
-                func_.__doc__ = self.strings[f"_cmd_doc_{command_}"]
-            except AttributeError:
-                func_.__func__.__doc__ = self.strings[f"_cmd_doc_{command_}"]
-
-        self.__doc__ = self.strings["_cls_doc"]
-
-        return (
-            self.config_complete._old_(self, *args, **kwargs)
-            if not kwargs.pop("reload_dynamic_translate", None)
-            else True
-        )
-
-    config_complete._old_ = cls.config_complete
-    cls.config_complete = config_complete
-
-    for command_, func in get_commands(cls).items():
-        cls.strings[f"_cmd_doc_{command_}"] = inspect.getdoc(func)
-
-    cls.strings["_cls_doc"] = inspect.getdoc(cls)
-
-    return cls
-
-
-tds = translatable_docstring  # Shorter name for modules to use
-
-
 def ratelimit(func: Command) -> Command:
     """Decorator that causes ratelimiting for this command to be enforced more strictly"""
     func.ratelimit = True
@@ -383,7 +331,6 @@ class Modules:
         client: "CustomTelegramClient",  # type: ignore  # noqa: F821
         db: Database,
         allclients: list,
-        translator: Translator,
     ):
         self._initial_registration = True
         self.commands = {}
@@ -399,7 +346,6 @@ class Modules:
         self.client = client
         self._db = db
         self.db = db
-        self.translator = translator
         self.secure_boot = False
         asyncio.ensure_future(self._junk_collector())
 
@@ -727,16 +673,10 @@ class Modules:
                 )
 
         if not hasattr(mod, "name"):
-            mod.name = mod.strings["name"]
+            mod.name = getattr(mod, 'name', mod.__class__.__name__)
 
         if skip_hook:
             return
-
-        if not hasattr(mod, "strings"):
-            mod.strings = {}
-
-        mod.strings = Strings(mod, self.translator)
-        mod.translator = self.translator
 
         try:
             mod.config_complete()
@@ -891,15 +831,5 @@ class Modules:
     def remove_alias(self, alias: str) -> bool:
         """Remove an alias"""
         return bool(self.aliases.pop(alias.lower().strip(), None))
-
-    async def log(self, *args, **kwargs):
-        """Unnecessary placeholder for logging"""
-
-    async def reload_translations(self) -> bool:
-        if not await self.translator.init():
-            return False
-
-        for module in self.modules:
-            module.config_complete(reload_dynamic_translate=True)
 
         return True

@@ -57,7 +57,6 @@ from ._internal import restart
 from .dispatcher import CommandDispatcher
 from .secure import patcher
 from .tl_cache import CustomTelegramClient
-from .translations import Translator
 from .version import __version__
 
 web_available = False
@@ -671,10 +670,7 @@ class Her:
         client.hikka_db = db
         await db.init()
 
-        translator = Translator(client, db)
-
-        await translator.init()
-        modules = loader.Modules(client, db, self.clients, translator)
+        modules = loader.Modules(client, db, self.clients, None)
         client.loader = modules
 
         await self._add_dispatcher(client, modules, db)

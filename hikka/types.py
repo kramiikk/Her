@@ -266,7 +266,6 @@ class Module:
 
         from . import utils  # Avoiding circular import
         from .loader import USER_INSTALL, VALID_PIP_PACKAGES
-        from .translations import Strings
 
         def _raise(e: Exception):
             if suspend_on_error:
@@ -437,11 +436,6 @@ class Module:
                             or lib_obj.config.getdef(conf)
                         ),
                     )
-
-        if hasattr(lib_obj, "strings"):
-            lib_obj.strings = Strings(lib_obj, self.translator)
-
-        lib_obj.translator = self.translator
 
         for old_lib in self.allmodules.libraries:
             if old_lib.name == lib_obj.name:

@@ -439,9 +439,7 @@ async def answer(
             result = await message.client.send_file(
                 message.peer_id,
                 file,
-                caption=message.client.loader.lookup("translations").strings(
-                    "too_long"
-                ),
+                caption="too long",
                 reply_to=kwargs.get("reply_to") or get_topic(message),
             )
 

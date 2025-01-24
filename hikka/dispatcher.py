@@ -401,8 +401,7 @@ class CommandDispatcher:
                 seconds = f"{seconds} seconds" if seconds else ""
                 fw_time = f"{hours}{minutes}{seconds}"
                 txt = (
-                    self._client.loader.lookup("translations")
-                    .strings("fw_error")
+                    "<emoji document_id=5877458226823302157>🕒</emoji> <b>Call</b> <code>{}</code> <b>caused FloodWait of {} on method</b> <code>{}</code>"
                     .format(
                         utils.escape_html(message.message),
                         fw_time,
@@ -411,8 +410,7 @@ class CommandDispatcher:
                 )
             else:
                 txt = (
-                    self._client.loader.lookup("translations")
-                    .strings("rpc_error")
+                    "<emoji document_id=5877477244938489129>🚫</emoji> <b>Call</b> <code>{}</code> <b>failed due to RPC error:</b> <code>{}</code>"
                     .format(
                         utils.escape_html(message.message),
                         utils.escape_html(str(exc)),
