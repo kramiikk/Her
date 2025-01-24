@@ -906,34 +906,31 @@ class BroadcastManager:
             logger.error(f"Ошибка обработки неудачных чатов для {code_name}: {e}")
 
     async def _load_config(self):
-        """Loads configuration from database with improved state handling"""
         try:
             config = self.db.get("broadcast", "config", {})
-            logger.debug(f"Загруженная конфигурация: {config}")
-            if not config:
+            logger.error(f"ЗАГРУЖЕННАЯ КОНФИГУРАЦИЯ: {config}")
+            
+            if not config or 'codes' not in config:
                 logger.warning("Конфигурация пуста")
                 return
-            for code_name, code_data in config.get("codes", {}).items():
-                broadcast = Broadcast.from_dict(code_data)
-                self.codes[code_name] = broadcast
-                broadcast._active = False
-            active_broadcasts = config.get("active_broadcasts", [])
-            for code_name in active_broadcasts:
-                try:
-                    if code_name not in self.codes:
-                        continue
-                    code = self.codes[code_name]
 
-                    if not code.messages or not code.chats:
-                        continue
-                    code._active = True
-                    self.broadcast_tasks[code_name] = asyncio.create_task(
-                        self._broadcast_loop(code_name)
-                    )
-                except Exception as e:
-                    continue
+            for code_name, code_data in config.get('codes', {}).items():
+                logger.error(f"Восстановление кода {code_name}: {code_data}")
+                
+                broadcast = Broadcast(
+                    chats=set(code_data.get('chats', [])),
+                    messages=code_data.get('messages', []),
+                    interval=tuple(code_data.get('interval', (10, 13))),
+                    send_mode=code_data.get('send_mode', 'auto'),
+                    batch_mode=code_data.get('batch_mode', False)
+                )
+                broadcast._active = code_data.get('active', False)
+                
+                self.codes[code_name] = broadcast
+                
+                logger.error(f"Восстановлен код {code_name}: {broadcast}")
         except Exception as e:
-            logger.error(f"Error loading configuration: {e}")
+            logger.error(f"Ошибка загрузки конфигурации: {e}", exc_info=True)
 
     async def _process_message_batch(
         self, code: Broadcast, messages: List[dict]
@@ -1154,40 +1151,37 @@ class BroadcastManager:
             await utils.answer(message, "❌ Неизвестное действие")
 
     async def save_config(self):
-        async with self._lock:
-            try:
-                config = {
-                    "version": 2,
-                    "last_save": datetime.utcnow().timestamp(),
-                    "codes": {},
-                    "active_broadcasts": [],
-                }
+        try:
+            # Логируем максимально подробно
+            logger.error(f"ПОЛНЫЙ СТАТУС КОДОВ: {self.codes}")
+            logger.error(f"КОЛИЧЕСТВО КОДОВ: {len(self.codes)}")
+            
+            for code_name, code in self.codes.items():
+                logger.error(f"КОД {code_name}: chats={code.chats}, messages={code.messages}")
+                
+            config = {
+                "codes": {
+                    name: {
+                        "chats": list(code.chats),
+                        "messages": code.messages,
+                        "interval": list(code.interval),
+                        "send_mode": code.send_mode,
+                        "batch_mode": code.batch_mode,
+                        "active": code._active
+                    } for name, code in self.codes.items()
+                },
+                "version": 2,
+                "timestamp": datetime.utcnow().timestamp()
+            }
 
-                active_broadcasts = []
-                for name, code in self.codes.items():
-                    # Критически важный отладочный вывод
-
-                    logger.debug(f"Сохранение кода рассылки: {name}")
-                    logger.debug(f"Код рассылки: {code}")
-                    logger.debug(f"Сериализация кода: {code.to_dict()}")
-
-                    code_dict = code.to_dict()
-                    config["codes"][name] = code_dict
-
-                    if code._active:
-                        active_broadcasts.append(name)
-                config["active_broadcasts"] = active_broadcasts
-
-                # Явное логирование перед сохранением
-
-                logger.debug(f"Финальная конфигурация: {config}")
-
-                self.db.set("broadcast", "config", config)
-                logger.info(
-                    f"Конфигурация сохранена. Активных рассылок: {len(active_broadcasts)}"
-                )
-            except Exception as e:
-                logger.critical(f"ОШИБКА СОХРАНЕНИЯ КОНФИГУРАЦИИ: {e}", exc_info=True)
+            logger.error(f"ФИНАЛЬНАЯ КОНФИГУРАЦИЯ: {config}")
+            
+            # Используем прямое сохранение без asyncio
+            self.db.set("broadcast", "config", config)
+            
+            logger.error("КОНФИГУРАЦИЯ SUPPOSEDLY СОХРАНЕНА")
+        except Exception as e:
+            logger.error(f"КРИТИЧЕСКАЯ ОШИБКА СОХРАНЕНИЯ: {e}", exc_info=True)
 
     async def start_cache_cleanup(self):
         """Запускает фоновую очистку кэша"""
