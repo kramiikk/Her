@@ -268,7 +268,6 @@ class RawMessageEditor(SudoMessageEditor):
                 logger.error(e)
                 logger.error(text)
 
-@loader.tds
 class CoreMod(loader.Module):
     """Control core userbot settings"""
 

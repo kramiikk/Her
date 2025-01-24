@@ -202,8 +202,6 @@ class SimpleCache:
             except Exception as e:
                 logger.error(f"Ошибка очистки кэша: {e}")
 
-
-@loader.tds
 class BroadcastMod(loader.Module):
     """Модуль для массовой рассылки."""
 
