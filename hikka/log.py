@@ -138,7 +138,6 @@ def init():
     )
     logging.getLogger().setLevel(logging.NOTSET)
     logging.getLogger("hikkatl").setLevel(logging.WARNING)
-    logging.getLogger("aiohttp").setLevel(logging.WARNING)
     logging.getLogger("git.cmd").setLevel(logging.WARNING)
     logging.getLogger("asyncio").setLevel(logging.WARNING)
     logging.getLogger("matplotlib").setLevel(logging.WARNING)

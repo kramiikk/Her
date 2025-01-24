@@ -29,7 +29,6 @@ import git
 import grapheme
 import hikkatl
 import requests
-from aiogram.types import Message as AiogramMessage
 from hikkatl import hints
 from hikkatl.tl.custom.message import Message
 from hikkatl.tl.functions.account import UpdateNotifySettingsRequest
@@ -198,7 +197,7 @@ def get_args_split_by(
     ]
 
 
-def get_chat_id(message: typing.Union[Message, AiogramMessage]) -> int:
+def get_chat_id(message: Message) -> int:
     """
     Get the chat ID, but without -100 if its a channel
     :param message: Message to get chat ID from
