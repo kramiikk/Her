@@ -118,35 +118,35 @@ class Integer(Validator):
         minimum: typing.Optional[int] = None,
         maximum: typing.Optional[int] = None,
     ):
-        _signs = (
-            "positive"
-            if minimum is not None and minimum == 0
-            else (
-                "negative"
-                if maximum is not None and maximum == 0
-                else {}
-            )
-        )
-        _digits = (
-            {"en": VALIDATORS_TRANSLATIONS["digits"].format(digits=digits)}
-            if digits is not None
-            else {}
-        )
+        _signs = {}  # Initialize _signs as a dictionary
+        if minimum is not None and minimum == 0:
+            _signs = {"en": "positive"} # Now always assign a dictionary
+        elif maximum is not None and maximum == 0:
+            _signs = {"en": "negative"} # Now always assign a dictionary
+        else:
+            _signs = {} # Explicitly initialize as empty dictionary
+
+        _digits = {} # Initialize _digits as a dictionary
+        if digits is not None:
+            _digits = {"en": VALIDATORS_TRANSLATIONS["digits"].format(digits=digits)} # Now always assign a dictionary
+        else:
+            _digits = {} # Explicitly initialize as empty dictionary
+
 
         if minimum is not None and minimum != 0:
             doc = (
                 {
                     "en": VALIDATORS_TRANSLATIONS["integer_min"].format(
-                        sign=_signs.get("en", ""),
-                        digits=_digits.get("en", ""),
+                        sign=_signs.get("en", ""), # .get() is now safe, as _signs is a dictionary
+                        digits=_digits.get("en", ""), # .get() is now safe, as _digits is a dictionary
                         minimum=minimum,
                     )
                 }
                 if maximum is None and maximum != 0
                 else {
                     "en": VALIDATORS_TRANSLATIONS["integer_range"].format(
-                        sign=_signs.get("en", ""),
-                        digits=_digits.get("en", ""),
+                        sign=_signs.get("en", ""), # .get() is now safe, as _signs is a dictionary
+                        digits=_digits.get("en", ""), # .get() is now safe, as _digits is a dictionary
                         minimum=minimum,
                         maximum=maximum,
                     )
@@ -155,7 +155,7 @@ class Integer(Validator):
         elif maximum is None and maximum != 0:
             doc = {
                 "en": VALIDATORS_TRANSLATIONS["integer"].format(
-                    sign=_signs.get("en", ""), digits=_digits.get("en", "")
+                    sign=_signs.get("en", ""), digits=_digits.get("en", "") # .get() is now safe
                 )
             }
         else:
@@ -530,15 +530,14 @@ class Float(Validator):
         minimum: typing.Optional[float] = None,
         maximum: typing.Optional[float] = None,
     ):
-        _signs = (
-            "positive"
-            if minimum is not None and minimum == 0
-            else (
-                "negative"
-                if maximum is not None and maximum == 0
-                else {}
-            )
-        )
+        _signs = {} # Initialize _signs as dictionary
+        if minimum is not None and minimum == 0:
+            _signs = {"en": "positive"} # Now always assign a dictionary
+        elif maximum is not None and maximum == 0:
+            _signs = {"en": "negative"} # Now always assign a dictionary
+        else:
+            _signs = {} # Explicitly initialize as empty dictionary
+
 
         if minimum is not None and minimum != 0:
             doc = (
