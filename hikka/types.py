@@ -31,15 +31,6 @@ from hikkatl.tl.types import (
 
 from . import version, utils
 from ._reference_finder import replace_all_refs
-from .inline.types import (
-    BotInlineCall,
-    BotInlineMessage,
-    BotMessage,
-    InlineCall,
-    InlineMessage,
-    InlineQuery,
-    InlineUnit,
-)
 from .pointers import PointerDict, PointerList
 
 __all__ = [
@@ -50,15 +41,7 @@ __all__ = [
     "StringLoader",
     "Module",
     "get_commands",
-    "get_inline_handlers",
     "get_callback_handlers",
-    "BotInlineCall",
-    "BotMessage",
-    "InlineCall",
-    "InlineMessage",
-    "InlineQuery",
-    "InlineUnit",
-    "BotInlineMessage",
     "PointerDict",
     "PointerList",
 ]
@@ -115,7 +98,6 @@ class Module:
         self._client = self.allmodules.client
         self.lookup = self.allmodules.lookup
         self.get_prefix = self.allmodules.get_prefix
-        self.inline = self.allmodules.inline
         self.allclients = self.allmodules.allclients
         self.tg_id = self._client.tg_id
         self._tg_id = self._client.tg_id
@@ -179,16 +161,6 @@ class Module:
         return get_commands(self)
 
     @property
-    def inline_handlers(self) -> typing.Dict[str, Command]:
-        """List of inline handlers that module supports"""
-        return get_inline_handlers(self)
-
-    @property
-    def hikka_inline_handlers(self) -> typing.Dict[str, Command]:
-        """List of inline handlers that module supports"""
-        return get_inline_handlers(self)
-
-    @property
     def callback_handlers(self) -> typing.Dict[str, Command]:
         """List of callback handlers that module supports"""
         return get_callback_handlers(self)
@@ -216,14 +188,6 @@ class Module:
     def hikka_commands(self, _):
         pass
 
-    @inline_handlers.setter
-    def inline_handlers(self, _):
-        pass
-
-    @hikka_inline_handlers.setter
-    def hikka_inline_handlers(self, _):
-        pass
-
     @callback_handlers.setter
     def callback_handlers(self, _):
         pass
@@ -242,23 +206,11 @@ class Module:
 
     async def animate(
         self,
-        message: typing.Union[Message, InlineMessage],
+        message: Message,
         frames: typing.List[str],
         interval: typing.Union[float, int],
-        *,
-        inline: bool = False,
     ) -> None:
-        """
-        Animate message
-        :param message: Message to animate
-        :param frames: A List of strings which are the frames of animation
-        :param interval: Animation delay
-        :param inline: Whether to use inline bot for animation
-        :returns message:
-
-        Please, note that if you set `inline=True`, first frame will be shown with an empty
-        button due to the limitations of Telegram API
-        """
+        """Animate message"""
         from . import utils
 
         if interval < 0.1:
@@ -269,18 +221,7 @@ class Module:
             interval = 0.1
 
         for frame in frames:
-            if isinstance(message, Message):
-                if inline:
-                    message = await self.inline.form(
-                        message=message,
-                        text=frame,
-                        reply_markup={"text": "\u0020\u2800", "data": "empty"},
-                    )
-                else:
-                    message = await utils.answer(message, frame)
-            elif isinstance(message, InlineMessage) and inline:
-                await utils.answer(message, frame)
-
+            message = await utils.answer(message, frame)
             await asyncio.sleep(interval)
 
         return message
@@ -302,29 +243,6 @@ class Module:
         item_type: typing.Optional[typing.Any] = None,
     ) -> typing.Union[JSONSerializable, PointerList, PointerDict]:
         return self._db.pointer(self.__class__.__name__, key, default, item_type)
-
-    async def _decline(
-        self,
-        call: InlineCall,
-        channel: EntityLike,
-        event: asyncio.Event,
-    ):
-        from . import utils
-
-        self._db.set(
-            "hikka.main",
-            "declined_joins",
-            list(set(self._db.get("hikka.main", "declined_joins", []) + [channel.id])),
-        )
-        event.status = False
-        event.set()
-        await call.edit(
-            (
-                "✖️ <b>Declined joining <a"
-                f' href="https://t.me/{channel.username}">{utils.escape_html(channel.title)}</a></b>'
-            ),
-            photo="https://imgur.com/a/gWKLn7h.png",
-        )
 
     async def import_lib(
         self,
@@ -552,7 +470,6 @@ class Library:
         self._tg_id = self._client.tg_id
         self.lookup = self.allmodules.lookup
         self.get_prefix = self.allmodules.get_prefix
-        self.inline = self.allmodules.inline
         self.allclients = self.allmodules.allclients
 
     def _lib_get(
@@ -961,11 +878,6 @@ class CacheRecordFullUser:
 def get_commands(mod: Module) -> dict:
     """Introspect the module to get its commands"""
     return _get_members(mod, "cmd", "is_command")
-
-
-def get_inline_handlers(mod: Module) -> dict:
-    """Introspect the module to get its inline handlers"""
-    return _get_members(mod, "_inline_handler", "is_inline_handler")
 
 
 def get_callback_handlers(mod: Module) -> dict:

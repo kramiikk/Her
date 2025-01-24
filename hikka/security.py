@@ -135,10 +135,6 @@ def unrestricted(func: Command) -> Command:
     return _sec(func, ALL)
 
 
-def inline_everyone(func: Command) -> Command:
-    return _sec(func, EVERYONE)
-
-
 def _sec(func: Command, flags: int) -> Command:
     prev = getattr(func, "security", 0)
     func.security = prev | OWNER | flags
@@ -206,7 +202,7 @@ class SecurityManager:
 
         if all(
             not rule.startswith(rule_type)
-            for rule_type in {"command", "module", "inline"}
+            for rule_type in {"command", "module"}
         ):
             raise ValueError(f"Invalid rule: {rule}")
 
@@ -299,24 +295,6 @@ class SecurityManager:
 
         return config & self._db.get(__name__, "bounding_mask", DEFAULT_PERMISSIONS)
 
-    def _check_tsec_inline(self, user_id: int, command: str) -> bool:
-        """
-        Checks if user is permitted to execute certain inline command
-
-        :param user_id: user ID
-        :param command: command name
-        :return: True if permitted, False otherwise
-        """
-
-        return command and any(
-            (
-                rule["target"] == user_id
-                and rule["rule_type"] == "inline"
-                and rule["rule"] == command
-            )
-            for rule in self._tsec_user
-        )
-
     def check_tsec(self, user_id: int, command: str) -> bool:
         for info in self._sgroups.copy().values():
             if user_id in info.users:
@@ -347,19 +325,10 @@ class SecurityManager:
         message: typing.Optional[Message],
         func: typing.Union[Command, int],
         user_id: typing.Optional[int] = None,
-        inline_cmd: typing.Optional[str] = None,
         *,
         usernames: typing.Optional[typing.List[str]] = None,
     ) -> bool:
-        """
-        Checks if message sender is permitted to execute certain function
-
-        :param message: Message to check or None if you manually pass user_id
-        :param func: function or flags
-        :param user_id: user ID
-        :param inline_cmd: Inline command name if it's inline query
-        :return: True if permitted, False otherwise
-        """
+        """Checks if message sender is permitted to execute certain function"""
 
         self._reload_rights()
 
@@ -432,11 +401,6 @@ class SecurityManager:
 
         if user_id in self._db.get(main.__name__, "blacklist_users", []):
             return False
-
-        if message is None:  # In case of checking inline query security map
-            return self._check_tsec_inline(user_id, inline_cmd) or bool(
-                config & EVERYONE
-            )
 
         try:
             chat = utils.get_chat_id(message)

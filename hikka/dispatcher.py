@@ -44,14 +44,12 @@ ALL_TAGS = [
     "only_audios",
     "only_docs",
     "only_stickers",
-    "only_inline",
     "only_channels",
     "only_groups",
     "only_pm",
     "no_pm",
     "no_channels",
     "no_groups",
-    "no_inline",
     "no_stickers",
     "no_docs",
     "no_audios",
@@ -413,12 +411,6 @@ class CommandDispatcher:
                 )
             else:
                 txt = (
-                    "<emoji document_id=5877477244938489129>🚫</emoji> <b>Call"
-                    f" </b><code>{utils.escape_html(message.message)}</code><b> failed"
-                    " due to RPC (Telegram) error:</b>"
-                    f" <code>{utils.escape_html(str(exc))}</code>"
-                )
-                txt = (
                     self._client.loader.lookup("translations")
                     .strings("rpc_error")
                     .format(
@@ -427,20 +419,11 @@ class CommandDispatcher:
                     )
                 )
         else:
-            if not self._db.get(main.__name__, "inlinelogs", True):
-                txt = (
-                    "<emoji document_id=5877477244938489129>🚫</emoji><b> Call</b>"
-                    f" <code>{utils.escape_html(message.message)}</code><b>"
-                    " failed!</b>"
-                )
-            else:
-                exc = "\n".join(traceback.format_exc().splitlines()[1:])
-                txt = (
-                    "<emoji document_id=5877477244938489129>🚫</emoji><b> Call</b>"
-                    f" <code>{utils.escape_html(message.message)}</code><b>"
-                    " failed!</b>\n\n<b>🧾 Logs:</b>\n<pre><code"
-                    f' class="language-logs">{utils.escape_html(exc)}</code></pre>'
-                )
+            txt = (
+                "<emoji document_id=5877477244938489129>🚫</emoji><b> Call</b>"
+                f" <code>{utils.escape_html(message.message)}</code><b>"
+                " failed!</b>"
+            )
 
         with contextlib.suppress(Exception):
             await message.reply(txt)
@@ -487,7 +470,6 @@ class CommandDispatcher:
             "only_audios": lambda: utils.mime_type(m).startswith("audio/"),
             "only_stickers": lambda: getattr(m, "sticker", False),
             "only_docs": lambda: getattr(m, "document", False),
-            "only_inline": lambda: getattr(m, "via_bot_id", False),
             "only_channels": lambda: (
                 getattr(m, "is_channel", False) and not getattr(m, "is_group", False)
             ),
@@ -504,7 +486,6 @@ class CommandDispatcher:
             ),
             "no_pm": lambda: not getattr(m, "private", False),
             "only_pm": lambda: getattr(m, "private", False),
-            "no_inline": lambda: not getattr(m, "via_bot_id", False),
             "no_stickers": lambda: not getattr(m, "sticker", False),
             "no_docs": lambda: not getattr(m, "document", False),
             "no_audios": lambda: not utils.mime_type(m).startswith("audio/"),

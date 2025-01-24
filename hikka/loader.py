@@ -27,14 +27,12 @@ from hikkatl.tl.tlobject import TLObject
 
 from . import security, utils, validators
 from .database import Database
-from .inline.core import InlineManager
 from .translations import Strings, Translator
 from .types import (
     Command,
     ConfigValue,
     CoreOverwriteError,
     CoreUnloadError,
-    InlineMessage,
     JSONSerializable,
     Library,
     LibraryConfig,
@@ -47,7 +45,6 @@ from .types import (
     StringLoader,
     get_callback_handlers,
     get_commands,
-    get_inline_handlers,
 )
 
 __all__ = [
@@ -56,7 +53,6 @@ __all__ = [
     "Command",
     "CoreOverwriteError",
     "CoreUnloadError",
-    "InlineMessage",
     "JSONSerializable",
     "Library",
     "LibraryConfig",
@@ -67,11 +63,9 @@ __all__ = [
     "StopLoop",
     "StringLoader",
     "get_commands",
-    "get_inline_handlers",
     "get_callback_handlers",
     "validators",
     "Database",
-    "InlineManager",
     "Strings",
     "Translator",
     "ConfigValue",
@@ -88,7 +82,6 @@ __all__ = [
     "group_member",
     "pm",
     "unrestricted",
-    "inline_everyone",
     "loop",
 ]
 
@@ -112,7 +105,6 @@ group_admin = security.group_admin
 group_member = security.group_member
 pm = security.pm
 unrestricted = security.unrestricted
-inline_everyone = security.inline_everyone
 
 
 async def stop_placeholder() -> bool:
@@ -275,13 +267,6 @@ def translatable_docstring(cls):
             except AttributeError:
                 func_.__func__.__doc__ = self.strings[f"_cmd_doc_{command_}"]
 
-        for inline_handler_, func_ in get_inline_handlers(cls).items():
-            proccess_decorators("_ihandle_doc_", inline_handler_)
-            try:
-                func_.__doc__ = self.strings[f"_ihandle_doc_{inline_handler_}"]
-            except AttributeError:
-                func_.__func__.__doc__ = self.strings[f"_ihandle_doc_{inline_handler_}"]
-
         self.__doc__ = self.strings["_cls_doc"]
 
         return (
@@ -295,9 +280,6 @@ def translatable_docstring(cls):
 
     for command_, func in get_commands(cls).items():
         cls.strings[f"_cmd_doc_{command_}"] = inspect.getdoc(func)
-
-    for inline_handler_, func in get_inline_handlers(cls).items():
-        cls.strings[f"_ihandle_doc_{inline_handler_}"] = inspect.getdoc(func)
 
     cls.strings["_cls_doc"] = inspect.getdoc(cls)
 
@@ -361,13 +343,6 @@ def debug_method(*args, **kwargs):
     return _mark_method("is_debug_method", *args, **kwargs)
 
 
-def inline_handler(*args, **kwargs):
-    """
-    Decorator that marks function as inline handler
-    """
-    return _mark_method("is_inline_handler", *args, **kwargs)
-
-
 def watcher(*args, **kwargs):
     """
     Decorator that marks function as watcher
@@ -412,7 +387,6 @@ class Modules:
     ):
         self._initial_registration = True
         self.commands = {}
-        self.inline_handlers = {}
         self.callback_handlers = {}
         self.aliases = {}
         self.modules = []  # skipcq: PTC-W0052
@@ -428,29 +402,25 @@ class Modules:
         self.translator = translator
         self.secure_boot = False
         asyncio.ensure_future(self._junk_collector())
-        self.inline = InlineManager(self.client, self._db, self)
-        self.client.hikka_inline = self.inline
 
     async def _junk_collector(self):
         """
-        Periodically reloads commands, inline handlers, callback handlers and watchers from loaded
+        Periodically reloads commands, callback handlers and watchers from loaded
         modules to prevent zombie handlers
         """
         while True:
             await asyncio.sleep(60)
             commands = {}
-            inline_handlers = {}
             callback_handlers = {}
             watchers = []
             for module in self.modules:
                 commands.update(module.hikka_commands)
-                inline_handlers.update(module.hikka_inline_handlers)
                 callback_handlers.update(module.hikka_callback_handlers)
                 watchers.extend(module.hikka_watchers.values())
 
             self.commands = commands
-            self.inline_handlers = inline_handlers
             self.callback_handlers = callback_handlers
+
             self.watchers = watchers
 
     async def register_all(
@@ -611,34 +581,6 @@ class Modules:
         for alias, cmd in self.aliases.copy().items():
             if cmd in instance.hikka_commands:
                 self.add_alias(alias, cmd)
-
-        self.register_inline_stuff(instance)
-
-    def register_inline_stuff(self, instance: Module):
-        for name, func in instance.hikka_inline_handlers.copy().items():
-            self.inline_handlers.update({name.lower(): func})
-
-        for name, func in instance.hikka_callback_handlers.copy().items():
-            self.callback_handlers.update({name.lower(): func})
-
-    def unregister_inline_stuff(self, instance: Module, purpose: str):
-        for name, func in instance.hikka_inline_handlers.copy().items():
-            if name.lower() in self.inline_handlers and (
-                hasattr(func, "__self__")
-                and hasattr(self.inline_handlers[name], "__self__")
-                and func.__self__.__class__.__name__
-                == self.inline_handlers[name].__self__.__class__.__name__
-            ):
-                del self.inline_handlers[name.lower()]
-
-        for name, func in instance.hikka_callback_handlers.copy().items():
-            if name.lower() in self.callback_handlers and (
-                hasattr(func, "__self__")
-                and hasattr(self.callback_handlers[name], "__self__")
-                and func.__self__.__class__.__name__
-                == self.callback_handlers[name].__self__.__class__.__name__
-            ):
-                del self.callback_handlers[name.lower()]
 
     def register_watchers(self, instance: Module):
         """Register watcher from instance"""
@@ -811,7 +753,6 @@ class Modules:
 
     async def send_ready(self):
         """Send all data to all modules"""
-        await self.inline.register_manager()
         await asyncio.gather(
             *[self.send_ready_one_wrapper(mod) for mod in self.modules]
         )
@@ -913,7 +854,6 @@ class Modules:
                 self.unregister_loops(module, "unload")
                 self.unregister_commands(module, "unload")
                 self.unregister_watchers(module, "unload")
-                self.unregister_inline_stuff(module, "unload")
         return worked
 
     def unregister_loops(self, instance: Module, purpose: str):

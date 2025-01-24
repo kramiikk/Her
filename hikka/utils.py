@@ -77,7 +77,6 @@ from hikkatl.tl.types import (
 )
 
 from ._internal import fw_protect
-from .inline.types import BotInlineCall, InlineCall, InlineMessage
 from .tl_cache import CustomTelegramClient
 from .types import HikkaReplyMarkup, ListLike, Module
 
@@ -359,7 +358,7 @@ def relocate_entities(
 
 
 async def answer_file(
-    message: typing.Union[Message, InlineCall, InlineMessage],
+    message: Message,
     file: typing.Union[str, bytes, io.IOBase, InputDocument],
     caption: typing.Optional[str] = None,
     **kwargs,
@@ -380,9 +379,6 @@ async def answer_file(
             "This is the cool module, check it out!",
         )
     """
-    if isinstance(message, (InlineCall, InlineMessage)):
-        message = message.form["caller"]
-
     if topic := get_topic(message):
         kwargs.setdefault("reply_to", topic)
 
@@ -406,65 +402,20 @@ async def answer_file(
 
 
 async def answer(
-    message: typing.Union[Message, InlineCall, InlineMessage],
+    message: Message,
     response: str,
     *,
     reply_markup: typing.Optional[HikkaReplyMarkup] = None,
     **kwargs,
-) -> typing.Union[InlineCall, InlineMessage, Message]:
-    """
-    Use this to give the response to a command
-    :param message: Message to answer to. Can be a tl message or hikka inline object
-    :param response: Response to send
-    :param reply_markup: Reply markup to send. If specified, inline form will be used
-    :return: Message or inline object
-
-    :example:
-        >>> await utils.answer(message, "Hello world!")
-        >>> await utils.answer(
-            message,
-            "https://some-url.com/photo.jpg",
-            caption="Hello, this is your photo!",
-            asfile=True,
-        )
-        >>> await utils.answer(
-            message,
-            "Hello world!",
-            reply_markup={"text": "Hello!", "data": "world"},
-            silent=True,
-            disable_security=True,
-        )
-    """
+) -> Message:
+    """Use this to give the response to a command"""
 
     if isinstance(message, list) and message:
         message = message[0]
 
-    if reply_markup is not None:
-        if not isinstance(reply_markup, (list, dict)):
-            raise ValueError("reply_markup must be a list or dict")
-
-        if reply_markup:
-            kwargs.pop("message", None)
-            if isinstance(message, (InlineMessage, InlineCall, BotInlineCall)):
-                await message.edit(response, reply_markup, **kwargs)
-                return
-
-            reply_markup = message.client.loader.inline._normalize_markup(reply_markup)
-            result = await message.client.loader.inline.form(
-                response,
-                message=message if message.out else get_chat_id(message),
-                reply_markup=reply_markup,
-                **kwargs,
-            )
-            return result
-
-    if isinstance(message, (InlineMessage, InlineCall, BotInlineCall)):
-        await message.edit(response)
-        return message
-
     kwargs.setdefault("link_preview", False)
 
-    if not (edit := (message.out and not message.via_bot_id and not message.fwd_from)):
+    if not (edit := (message.out and not message.fwd_from)):
         kwargs.setdefault(
             "reply_to",
             getattr(message, "reply_to_msg_id", None),
@@ -483,38 +434,19 @@ async def answer(
         text, entities = parse_mode.parse(response)
 
         if len(text) >= 4096 and not hasattr(message, "hikka_grepped"):
-            try:
-                if not message.client.loader.inline.init_complete:
-                    raise
+            file = io.BytesIO(text.encode("utf-8"))
+            file.name = "command_result.txt"
 
-                strings = list(smart_split(text, entities, 4096))
+            result = await message.client.send_file(
+                message.peer_id,
+                file,
+                caption=message.client.loader.lookup("translations").strings(
+                    "too_long"
+                ),
+                reply_to=kwargs.get("reply_to") or get_topic(message),
+            )
 
-                if len(strings) > 10:
-                    raise
-
-                list_ = await message.client.loader.inline.list(
-                    message=message,
-                    strings=strings,
-                )
-
-                if not list_:
-                    raise
-
-                return list_
-            except Exception:
-                file = io.BytesIO(text.encode("utf-8"))
-                file.name = "command_result.txt"
-
-                result = await message.client.send_file(
-                    message.peer_id,
-                    file,
-                    caption=message.client.loader.lookup("translations").strings(
-                        "too_long"
-                    ),
-                    reply_to=kwargs.get("reply_to") or get_topic(message),
-                )
-
-                return result
+            return result
 
         result = await (message.edit if edit else message.respond)(
             text,
@@ -643,148 +575,6 @@ async def set_avatar(
     )
 
     return True
-
-
-async def invite_inline_bot(
-    client: CustomTelegramClient,
-    peer: hints.EntityLike,
-) -> None:
-    """
-    Invites inline bot to a chat
-    :param client: Client to use
-    :param peer: Peer to invite bot to
-    :return: None
-    :raise RuntimeError: If error occurred while inviting bot
-    """
-
-    try:
-        await client(InviteToChannelRequest(peer, [client.loader.inline.bot_username]))
-    except Exception as e:
-        raise RuntimeError(
-            "Can't invite inline bot to old asset chat, which is required by module"
-        ) from e
-
-    with contextlib.suppress(Exception):
-        await client(
-            EditAdminRequest(
-                channel=peer,
-                user_id=client.loader.inline.bot_username,
-                admin_rights=ChatAdminRights(ban_users=True),
-                rank="Her",
-            )
-        )
-
-
-async def asset_channel(
-    client: CustomTelegramClient,
-    title: str,
-    description: str,
-    *,
-    channel: bool = False,
-    silent: bool = False,
-    archive: bool = False,
-    invite_bot: bool = False,
-    avatar: typing.Optional[str] = None,
-    ttl: typing.Optional[int] = None,
-    forum: bool = False,
-    _folder: typing.Optional[str] = None,
-) -> typing.Tuple[Channel, bool]:
-    """
-    Create new channel (if needed) and return its entity
-    :param client: Telegram client to create channel by
-    :param title: Channel title
-    :param description: Description
-    :param channel: Whether to create a channel or supergroup
-    :param silent: Automatically mute channel
-    :param archive: Automatically archive channel
-    :param invite_bot: Add inline bot and assure it's in chat
-    :param avatar: Url to an avatar to set as pfp of created peer
-    :param ttl: Time to live for messages in channel
-    :param forum: Whether to create a forum channel
-    :return: Peer and bool: is channel new or pre-existent
-    """
-    if not hasattr(client, "_channels_cache"):
-        client._channels_cache = {}
-
-    if (
-        title in client._channels_cache
-        and client._channels_cache[title]["exp"] > time.time()
-    ):
-        return client._channels_cache[title]["peer"], False
-
-    async for d in client.iter_dialogs():
-        if d.title == title:
-            client._channels_cache[title] = {"peer": d.entity, "exp": int(time.time())}
-            if invite_bot:
-                if all(
-                    participant.id != client.loader.inline.bot_id
-                    for participant in (
-                        await client.get_participants(d.entity, limit=100)
-                    )
-                ):
-                    await fw_protect()
-                    await invite_inline_bot(client, d.entity)
-
-            return d.entity, False
-
-    await fw_protect()
-
-    peer = (
-        await client(
-            CreateChannelRequest(
-                title,
-                description,
-                megagroup=not channel,
-                forum=forum,
-            )
-        )
-    ).chats[0]
-
-    if invite_bot:
-        await fw_protect()
-        await invite_inline_bot(client, peer)
-
-    if silent:
-        await fw_protect()
-        await dnd(client, peer, archive)
-    elif archive:
-        await fw_protect()
-        await client.edit_folder(peer, 1)
-
-    if avatar:
-        await fw_protect()
-        await set_avatar(client, peer, avatar)
-
-    if ttl:
-        await fw_protect()
-        await client(SetHistoryTTLRequest(peer=peer, period=ttl))
-
-    if _folder:
-        if _folder != "hikka":
-            raise NotImplementedError
-
-        folders = await client(GetDialogFiltersRequest())
-
-        try:
-            folder = next(folder for folder in folders if folder.title == "hikka")
-        except Exception:
-            folder = None
-
-        if folder is not None and not any(
-            peer.id == getattr(folder_peer, "channel_id", None)
-            for folder_peer in folder.include_peers
-        ):
-            folder.include_peers += [await client.get_input_entity(peer)]
-
-            await client(
-                UpdateDialogFilterRequest(
-                    folder.id,
-                    folder,
-                )
-            )
-
-    client._channels_cache[title] = {"peer": peer, "exp": int(time.time())}
-    return peer, True
 
 
 async def dnd(
@@ -1506,12 +1296,8 @@ def get_topic(message: Message) -> typing.Optional[int]:
             and message.reply_to
             and message.reply_to.forum_topic
         )
-        else (
-            message.form["top_msg_id"]
-            if isinstance(message, (InlineCall, InlineMessage))
-            else None
+        else None
         )
-    )
 
 
 def get_ram_usage() -> float:
