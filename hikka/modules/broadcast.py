@@ -202,6 +202,7 @@ class SimpleCache:
             except Exception as e:
                 logger.error(f"Ошибка очистки кэша: {e}")
 
+
 class BroadcastMod(loader.Module):
     """Модуль для массовой рассылки."""
 
@@ -355,7 +356,7 @@ class Broadcast:
 
     def to_dict(self) -> dict:
         """Сериализует объект в словарь"""
-        return {
+        result = {
             "chats": list(self.chats),
             "messages": self.messages,
             "interval": list(self.interval),
@@ -363,6 +364,12 @@ class Broadcast:
             "batch_mode": self.batch_mode,
             "active": self._active,
         }
+
+        # Явная проверка и логирование
+
+        logger.debug(f"Сериализация словаря: {result}")
+
+        return result
 
 
 class BroadcastManager:
@@ -902,7 +909,9 @@ class BroadcastManager:
         """Loads configuration from database with improved state handling"""
         try:
             config = self.db.get("broadcast", "config", {})
+            logger.debug(f"Загруженная конфигурация: {config}")
             if not config:
+                logger.warning("Конфигурация пуста")
                 return
             for code_name, code_data in config.get("codes", {}).items():
                 broadcast = Broadcast.from_dict(code_data)
@@ -1145,7 +1154,6 @@ class BroadcastManager:
             await utils.answer(message, "❌ Неизвестное действие")
 
     async def save_config(self):
-        """Безопасное сохранение конфигурации с улучшенной обработкой состояния"""
         async with self._lock:
             try:
                 config = {
@@ -1157,36 +1165,29 @@ class BroadcastManager:
 
                 active_broadcasts = []
                 for name, code in self.codes.items():
-                    if not isinstance(code, Broadcast):
-                        logger.warning(f"Некорректный код рассылки: {name}")
-                        continue
-                    # Сериализуем данные рассылки
+                    # Критически важный отладочный вывод
+
+                    logger.debug(f"Сохранение кода рассылки: {name}")
+                    logger.debug(f"Код рассылки: {code}")
+                    logger.debug(f"Сериализация кода: {code.to_dict()}")
 
                     code_dict = code.to_dict()
-
-                    # Проверка корректности данных
-
-                    if not all(isinstance(x, int) for x in code_dict["chats"]):
-                        logger.error(f"Некорректные ID чатов в {name}")
-                        continue
                     config["codes"][name] = code_dict
-
-                    # Добавляем в активные рассылки если она активна
 
                     if code._active:
                         active_broadcasts.append(name)
                 config["active_broadcasts"] = active_broadcasts
 
-                # Сохраняем конфигурацию
+                # Явное логирование перед сохранением
+
+                logger.debug(f"Финальная конфигурация: {config}")
 
                 self.db.set("broadcast", "config", config)
                 logger.info(
                     f"Конфигурация сохранена. Активных рассылок: {len(active_broadcasts)}"
                 )
             except Exception as e:
-                logger.critical(f"ОШИБКА СОХРАНЕНИЯ КОНФИГУРАЦИИ: {e}")
-                self.db.set("broadcast_backup", "last_failed_config", config)
-                raise
+                logger.critical(f"ОШИБКА СОХРАНЕНИЯ КОНФИГУРАЦИИ: {e}", exc_info=True)
 
     async def start_cache_cleanup(self):
         """Запускает фоновую очистку кэша"""
