@@ -670,7 +670,7 @@ class Her:
         client.hikka_db = db
         await db.init()
 
-        modules = loader.Modules(client, db, self.clients, None)
+        modules = loader.Modules(client, db, self.clients)
         client.loader = modules
 
         await self._add_dispatcher(client, modules, db)
