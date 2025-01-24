@@ -689,8 +689,8 @@ class Modules:
                 if method.autostart:
                     method.start()
 
-        self.unregister_commands(mod, "update")
-        self.unregister_raw_handlers(mod, "update")
+        self.unregister_commands(mod)
+        self.unregister_raw_handlers(mod)
 
         self.register_commands(mod)
         self.register_watchers(mod)
@@ -715,11 +715,6 @@ class Modules:
         for name, cmd in self.commands.copy().items():
             if cmd.__self__.__class__.__name__ == instance.__class__.__name__:
                 del self.commands[name]
-
-    def unregister_watchers(self, instance: Module):
-        for _watcher in self.watchers.copy():
-            if _watcher.__self__.__class__.__name__ == instance.__class__.__name__:
-                self.watchers.remove(_watcher)
 
     def unregister_raw_handlers(self, instance: Module):
         """Unregister event handlers for a module"""
