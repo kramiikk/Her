@@ -645,7 +645,7 @@ class BroadcastManager:
                     )
                 else:
                     await utils.answer(message, "⚠️ Ошибка сохранения конфигурации!")
-                    logger.error("Конфигурация не сохранилась после добавления")
+                    logger.debug("Конфигурация не сохранилась после добавления")
             except Exception as e:
                 logger.critical(f"Critical error: {e}", exc_info=True)
                 if is_new and code_name in self.codes:
@@ -921,7 +921,7 @@ class BroadcastManager:
     async def _load_config(self):
         try:
             config = self.db.get("broadcast", "config", {})
-            logger.error(f"ЗАГРУЖЕННАЯ КОНФИГУРАЦИЯ: {config}")
+            logger.debug(f"ЗАГРУЖЕННАЯ КОНФИГУРАЦИЯ: {config}")
 
             if not config or 'codes' not in config:
                 logger.warning("Конфигурация пуста")
@@ -929,7 +929,7 @@ class BroadcastManager:
 
             logger.info("Перезапуск активных рассылок из конфигурации...")
             for code_name, code_data in config.get('codes', {}).items():
-                logger.error(f"Восстановление кода {code_name}: {code_data}")
+                logger.debug(f"Восстановление кода {code_name}: {code_data}")
 
                 broadcast = Broadcast(
                     chats=set(code_data.get('chats', [])),
@@ -941,7 +941,7 @@ class BroadcastManager:
                 broadcast._active = code_data.get('active', False)
 
                 self.codes[code_name] = broadcast
-                logger.error(f"Восстановлен код {code_name}: {broadcast}")
+                logger.debug(f"Восстановлен код {code_name}: {broadcast}")
 
                 if broadcast._active: # Проверяем active и запускаем задачу
                     await self._start_broadcast_task(code_name, broadcast)
@@ -968,7 +968,7 @@ class BroadcastManager:
 
             for msg_data, result in zip(messages, results):
                 if isinstance(result, Exception):
-                    logger.error(f"Ошибка получения {msg_data}: {result}")
+                    logger.debug(f"Ошибка получения {msg_data}: {result}")
                     deleted_messages.append(msg_data)
                     continue
                 if not result:
@@ -1034,7 +1034,7 @@ class BroadcastManager:
             logger.warning(f"Флуд-контроль: {e}")
             await self._handle_flood_wait(e, chat_id)
         except (ChatWriteForbiddenError, UserBannedInChannelError) as e:
-            logger.info(f"Доступ запрещен: {chat_id}")
+            logger.error(f"Доступ запрещен: {chat_id}")
             await self._handle_permanent_error(chat_id)
         except Exception as e:
             logger.error(f"Неизвестная ошибка: {e}")
@@ -1173,11 +1173,11 @@ class BroadcastManager:
     async def save_config(self):
         try:
             # Логируем максимально подробно
-            logger.error(f"ПОЛНЫЙ СТАТУС КОДОВ: {self.codes}")
-            logger.error(f"КОЛИЧЕСТВО КОДОВ: {len(self.codes)}")
+            logger.debug(f"ПОЛНЫЙ СТАТУС КОДОВ: {self.codes}")
+            logger.debug(f"КОЛИЧЕСТВО КОДОВ: {len(self.codes)}")
 
             for code_name, code in self.codes.items():
-                logger.error(f"КОД {code_name}: chats={code.chats}, messages={code.messages}")
+                logger.debug(f"КОД {code_name}: chats={code.chats}, messages={code.messages}")
 
             config = {
                 "codes": {
@@ -1194,12 +1194,12 @@ class BroadcastManager:
                 "timestamp": datetime.utcnow().timestamp()
             }
 
-            logger.error(f"ФИНАЛЬНАЯ КОНФИГУРАЦИЯ: {config}")
+            logger.debug(f"ФИНАЛЬНАЯ КОНФИГУРАЦИЯ: {config}")
 
             # Используем прямое сохранение без asyncio
             self.db.set("broadcast", "config", config)
 
-            logger.error("КОНФИГУРАЦИЯ SUPPOSEDLY СОХРАНЕНА")
+            logger.debug("КОНФИГУРАЦИЯ SUPPOSEDLY СОХРАНЕНА")
         except Exception as e:
             logger.error(f"КРИТИЧЕСКАЯ ОШИБКА СОХРАНЕНИЯ: {e}", exc_info=True)
 
