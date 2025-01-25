@@ -61,15 +61,22 @@ class SimpleCache:
             try:
                 self._cleaning = True
                 current_time = time.time()
-                expired_keys = [
-                    k
-                    for k, (ts, _) in self.cache.items()
-                    if current_time - ts > self.ttl
-                ]
-
-                for key in expired_keys:
+                expired = []
+                kept = []
+                
+                for k, (ts, _) in self.cache.items():
+                    if current_time - ts > self.ttl:
+                        expired.append(k)
+                    else:
+                        kept.append(k)
+                
+                for key in expired:
                     del self.cache[key]
-                logger.debug(f"Очищено {len(expired_keys)} записей")
+                    
+                logger.debug(
+                    f"Очистка кэша: удалено {len(expired)}, осталось {len(kept)}, "
+                    f"старейший: {min(kept, key=lambda x: self.cache[x][0]) if kept else 'нет'}"
+                )
             finally:
                 self._cleaning = False
 
@@ -77,6 +84,7 @@ class SimpleCache:
         try:
             async with self._lock:
                 if key not in self.cache:
+                    logger.debug(f"[CACHE MISS] {key}")
                     return None
                 timestamp, value = self.cache[key]
                 current_time = time.time()
@@ -87,6 +95,7 @@ class SimpleCache:
                     del self.cache[key]
                     return None
                 self.cache.move_to_end(key)
+                logger.debug(f"[CACHE HIT] {key} (TTL: {remaining_ttl:.1f}s)")
                 return value
         except Exception as e:
             logger.error(f"Ошибка при получении значения из кэша: {e}", exc_info=True)
@@ -96,7 +105,7 @@ class SimpleCache:
         """Устанавливает значение в кэш с расширенной диагностикой"""
         try:
             async with self._lock:
-
+                logger.debug(f"[CACHE SET] {key}")
                 await self.clean_expired(force=True)
 
                 while len(self.cache) >= self.max_size:
@@ -404,33 +413,16 @@ class BroadcastManager:
             if cached:
                 logger.debug(f"Cache hit for {key}")
                 return cached
-            message = await self.client.get_messages(
-                msg_data["chat_id"], ids=msg_data["message_id"]
-            )
-
-            if not message:
-                logger.error(f"Сообщение {msg_data} не найдено")
-                return None
-            await self._message_cache.set(key, message)
-
+                
             if msg_data.get("grouped_ids"):
                 group_key = (
                     msg_data["chat_id"],
-                    tuple(sorted(msg_data["grouped_ids"])),
+                    frozenset(sorted(msg_data["grouped_ids"])),
                 )
-
-                has_all_messages = True
-                for msg_id in msg_data["grouped_ids"]:
-                    if not await self._message_cache.get((msg_data["chat_id"], msg_id)):
-                        has_all_messages = False
-                        break
-                cached_group = None
-                if has_all_messages:
-                    cached_group = await self._message_cache.get(group_key)
-
-                    if cached_group:
-                        logger.debug(f"[GROUP CACHE HIT] Найдена группа: {group_key}")
-                        return cached_group
+                cached_group = await self._message_cache.get(group_key)
+                if cached_group:
+                    logger.debug(f"[GROUP CACHE HIT] Найдена группа: {group_key}")
+                    return cached_group
                 grouped_messages = []
                 for msg_id in msg_data["grouped_ids"]:
 
