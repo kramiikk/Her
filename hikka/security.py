@@ -10,10 +10,8 @@ import logging
 import time
 import typing
 
-from hikkatl.hints import EntityLike
 from hikkatl.tl.functions.messages import GetFullChatRequest
 from hikkatl.tl.types import ChatParticipantAdmin, ChatParticipantCreator, Message
-from hikkatl.utils import get_display_name
 
 from . import main, utils
 from .database import Database
@@ -153,8 +151,6 @@ class SecurityManager:
 
         self._any_admin = self.any_admin = db.get(__name__, "any_admin", False)
         self._default = self.default = db.get(__name__, "default", DEFAULT_PERMISSIONS)
-        self._tsec_chat = self.tsec_chat = db.pointer(__name__, "tsec_chat", [])
-        self._tsec_user = self.tsec_user = db.pointer(__name__, "tsec_user", [])
         self._owner = self.owner = db.pointer(__name__, "owner", [])
 
         self._reload_rights()
@@ -164,110 +160,10 @@ class SecurityManager:
         self._sgroups = sgroups
 
     def _reload_rights(self):
-        """
-        Internal method to ensure that account owner is always in the owner list
-        and to clear out outdated tsec rules
-        """
+        """Internal method to ensure that account owner is always in the owner list"""
 
         if self._client.tg_id not in self._owner:
             self._owner.append(self._client.tg_id)
-
-        for info in self._tsec_user.copy():
-            if info["expires"] and info["expires"] < time.time():
-                self._tsec_user.remove(info)
-
-        for info in self._tsec_chat.copy():
-            if info["expires"] and info["expires"] < time.time():
-                self._tsec_chat.remove(info)
-
-    def add_rule(
-        self,
-        target_type: str,
-        target: EntityLike,
-        rule: str,
-        duration: int,
-    ):
-        """
-        Adds a targeted security rule
-
-        :param target_type: "user" or "chat"
-        :param target: target entity
-        :param rule: rule name
-        :param duration: rule duration in seconds
-        :return: None
-        """
-
-        if target_type not in {"chat", "user"}:
-            raise ValueError(f"Invalid target_type: {target_type}")
-
-        if all(
-            not rule.startswith(rule_type)
-            for rule_type in {"command", "module"}
-        ):
-            raise ValueError(f"Invalid rule: {rule}")
-
-        if duration < 0:
-            raise ValueError(f"Invalid duration: {duration}")
-
-        (self._tsec_chat if target_type == "chat" else self._tsec_user).append(
-            {
-                "target": target.id,
-                "rule_type": rule.split("/")[0],
-                "rule": rule.split("/", maxsplit=1)[1],
-                "expires": int(time.time() + duration) if duration else 0,
-                "entity_name": get_display_name(target),
-                "entity_url": utils.get_entity_url(target),
-            }
-        )
-
-    def remove_rules(self, target_type: str, target_id: int) -> bool:
-        """
-        Removes all targeted security rules for the given target
-
-        :param target_type: "user" or "chat"
-        :param target_id: target entity ID
-        :return: True if any rules were removed
-        """
-
-        any_ = False
-
-        if target_type == "user":
-            for rule in self.tsec_user.copy():
-                if rule["target"] == target_id:
-                    self.tsec_user.remove(rule)
-                    any_ = True
-        elif target_type == "chat":
-            for rule in self.tsec_chat.copy():
-                if rule["target"] == target_id:
-                    self.tsec_chat.remove(rule)
-                    any_ = True
-
-        return any_
-
-    def remove_rule(self, target_type: str, target_id: int, rule_cont: str) -> bool:
-        """
-        Removes targeted security rules for the given target
-
-        :param target_type: "user" or "chat"
-        :param target_id: target entity ID
-        :param rule_cont: rule name (module or command)
-        :return: True if any rules were removed
-        """
-
-        any_ = False
-
-        if target_type == "user":
-            for rule in self.tsec_user.copy():
-                if rule["target"] == target_id and rule["rule"] == rule_cont:
-                    self.tsec_user.remove(rule)
-                    any_ = True
-        elif target_type == "chat":
-            for rule in self.tsec_chat.copy():
-                if rule["target"] == target_id and rule["rule"] == rule_cont:
-                    self.tsec_chat.remove(rule)
-                    any_ = True
-
-        return any_
 
     def get_flags(self, func: typing.Union[Command, int]) -> int:
         """
@@ -294,31 +190,6 @@ class SecurityManager:
             return False
 
         return config & self._db.get(__name__, "bounding_mask", DEFAULT_PERMISSIONS)
-
-    def check_tsec(self, user_id: int, command: str) -> bool:
-        for info in self._sgroups.copy().values():
-            if user_id in info.users:
-                for permission in info.permissions:
-                    if (
-                        permission["rule_type"] == "command"
-                        and permission["rule"] == command
-                        or permission["rule_type"] == "module"
-                        and permission["rule"] == command
-                    ):
-                        return True
-
-        for info in self._tsec_user.copy():
-            if info["target"] == user_id and (
-                info["rule_type"] == "command"
-                and info["rule"] == command
-                or info["rule_type"] == "module"
-                and command in self._client.loader.commands
-                and info["rule"]
-                == self._client.loader.commands[command].__qualname__.split(".")[0]
-            ):
-                return True
-
-        return False
 
     async def check(
         self,
@@ -428,29 +299,6 @@ class SecurityManager:
                         if (
                             permission["rule_type"] == "module"
                             and permission["rule"] == func.__self__.__class__.__name__
-                        ):
-                            return True
-
-            for info in self._tsec_user.copy():
-                if info["target"] == user_id:
-                    if info["rule_type"] == "command" and info["rule"] == cmd:
-                        return True
-
-                    if (
-                        info["rule_type"] == "module"
-                        and info["rule"] == func.__self__.__class__.__name__
-                    ):
-                        return True
-
-            if chat:
-                for info in self._tsec_chat.copy():
-                    if info["target"] == chat:
-                        if info["rule_type"] == "command" and info["rule"] == cmd:
-                            return True
-
-                        if (
-                            info["rule_type"] == "module"
-                            and info["rule"] == func.__self__.__class__.__name__
                         ):
                             return True
 

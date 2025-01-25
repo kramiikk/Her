@@ -99,17 +99,6 @@ class CommandDispatcher:
 
         self.check_security = self.security.check
         self._me = self._client.hikka_me.id
-        self._cached_usernames = [
-            (
-                self._client.hikka_me.username.lower()
-                if self._client.hikka_me.username
-                else str(self._client.hikka_me.id)
-            )
-        ]
-
-        self._cached_usernames.extend(
-            getattr(self._client.hikka_me, "usernames", None) or []
-        )
 
         self.raw_handlers = []
 
@@ -298,8 +287,6 @@ class CommandDispatcher:
         if not message.message or len(message.message) == len(prefix):
             return False  # Message is just the prefix
 
-        initiator = getattr(event, "sender_id", 0)
-
         command = message.message[len(prefix):].strip().split(maxsplit=1)[0]
         tag = command.split("@", maxsplit=1)
 
@@ -307,27 +294,15 @@ class CommandDispatcher:
             if tag[1] == "me":
                 if not message.out:
                     return False
-            elif tag[1].lower() not in self._cached_usernames:
-                return False
         elif (
             event.out
             or event.mentioned
             and event.message is not None
             and event.message.message is not None
-            and not any(
-                f"@{username}" not in command.lower()
-                for username in self._cached_usernames
-            )
         ):
             pass
         elif (
             not event.is_private
-            and not self._db.get(main.__name__, "no_nickname", False)
-            and command not in self._db.get(main.__name__, "nonickcmds", [])
-            and initiator not in self._db.get(main.__name__, "nonickusers", [])
-            and not self.security.check_tsec(initiator, command)
-            and utils.get_chat_id(event)
-            not in self._db.get(main.__name__, "nonickchats", [])
         ):
             return False
 
@@ -336,11 +311,6 @@ class CommandDispatcher:
         if (
             not func
             or not await self._handle_ratelimit(message, func)
-            or not await self.security.check(
-                message,
-                func,
-                usernames=self._cached_usernames,
-            )
         ):
             return False
 
