@@ -58,13 +58,20 @@ class SimpleCache:
         if self._cleaning and not force:
             return
         async with self._lock:
-            self._cleaning = True
-            current_time = time.time()
-            expired_keys = [
-                k for k, (ts, _) in self.cache.items() if current_time - ts > self.ttl
-            ]
-            for key in expired_keys:
-                del self.cache[key]
+            try:
+                self._cleaning = True
+                current_time = time.time()
+                expired_keys = [
+                    k
+                    for k, (ts, _) in self.cache.items()
+                    if current_time - ts > self.ttl
+                ]
+
+                for key in expired_keys:
+                    del self.cache[key]
+                logger.debug(f"Очищено {len(expired_keys)} записей")
+            finally:
+                self._cleaning = False
 
     async def get(self, key):
         try:
@@ -157,19 +164,19 @@ class BroadcastMod(loader.Module):
 
     async def on_unload(self):
         self._active = False
-        await self.manager.stop_cache_cleanup()
 
         for task in self.manager.broadcast_tasks.values():
             if not task.done():
                 task.cancel()
-        try:
-            await asyncio.gather(
-                *self.manager.broadcast_tasks.values(), return_exceptions=True
-            )
-        except Exception as e:
-            logger.error(f"Ошибка при завершении задач: {e}")
-        if self.manager.adaptive_interval_task:
-            self.manager.adaptive_interval_task.cancel()
+        results = await asyncio.gather(
+            *self.manager.broadcast_tasks.values(), return_exceptions=True
+        )
+
+        for result in results:
+            if isinstance(result, asyncio.CancelledError):
+                logger.debug("Задача отменена корректно")
+            elif isinstance(result, Exception):
+                logger.error(f"Ошибка при отмене: {result}")
 
     async def watcher(self, message: Message):
         """Автоматически добавляет чаты в рассылку."""
@@ -360,10 +367,7 @@ class BroadcastManager:
         async with self._lock:
             if not self.flood_wait_times:
                 return
-            time_since_last_flood = time.time() - self.last_flood_time
-            reset_period = 43200
-
-            if time_since_last_flood > reset_period:
+            if (time.time() - self.last_flood_time) > 43200:
                 for code in self.codes.values():
                     code.interval = code.original_interval
                 self.flood_wait_times = []
@@ -849,7 +853,6 @@ class BroadcastManager:
             logger.error(f"Ошибка загрузки: {e}", exc_info=True)
 
     async def _process_message_batch(self, code: Broadcast, messages: List[dict]):
-        """Обработка пакета сообщений с принудительной перезагрузкой"""
         valid_messages = []
         deleted_messages = []
 
@@ -857,12 +860,14 @@ class BroadcastManager:
             try:
                 message = await self._fetch_messages(msg_data)
                 if not message:
-                    raise ValueError("Сообщение не найдено")
+                    logger.error(f"Сообщение {msg_data} не найдено, удаление")
+                    deleted_messages.append(msg_data)
+                    continue
                 valid_messages.append(message)
-                break
             except Exception as e:
                 logger.error(f"Ошибка загрузки {msg_data}: {str(e)}")
                 deleted_messages.append(msg_data)
+        logger.debug(f"Найдено валидных сообщений: {len(valid_messages)}")
         return valid_messages, deleted_messages
 
     async def _restart_all_broadcasts(self):
@@ -875,21 +880,19 @@ class BroadcastManager:
                     await asyncio.sleep(30)
 
     async def _start_broadcast_task(self, code_name: str, code: Broadcast):
-        """Запускает или перезапускает задачу рассылки для кода."""
-        logger.debug(f"Запуск задачи рассылки для {code_name}")
-        if (
-            code_name in self.broadcast_tasks
-            and not self.broadcast_tasks[code_name].done()
-        ):
-            self.broadcast_tasks[code_name].cancel()
-            try:
-                await self.broadcast_tasks[code_name]
-            except asyncio.CancelledError:
-                pass
+        if code_name in self.broadcast_tasks:
+            task = self.broadcast_tasks[code_name]
+            if not task.done():
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+        code._active = True
         self.broadcast_tasks[code_name] = asyncio.create_task(
             self._broadcast_loop(code_name)
         )
-        logger.debug(f"Задача для {code_name} успешно создана")
+        logger.info(f"Задача для {code_name} перезапущена")
 
     async def _send_message(
         self,
