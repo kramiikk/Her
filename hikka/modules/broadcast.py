@@ -404,61 +404,92 @@ class BroadcastManager:
                 await self.save_config()
 
     async def _fetch_messages(self, msg_data: dict):
-        """Получает сообщения с улучшенной обработкой ошибок"""
         try:
-            key = (msg_data["chat_id"], msg_data["message_id"])
-            logger.debug(f"Fetching message: {key}")
-            
-            if cached := await self._message_cache.get(key):
-                logger.debug(f"Cache hit for {key}")
-                return cached
-
-            message = await self.client.get_messages(
-                msg_data["chat_id"], 
-                ids=msg_data["message_id"]
-            )
-            
-            if not message:
-                logger.error(f"Сообщение {msg_data} не найдено")
-                return None
-
-            await self._message_cache.set(key, message)
-
-            if msg_data.get("grouped_ids"):
-                group_key = (
-                    msg_data["chat_id"],
-                    frozenset(sorted(msg_data["grouped_ids"])),
+            # Проверяем наличие групповых ID
+            is_group_message = msg_data.get("grouped_ids") and len(msg_data.get("grouped_ids", [])) > 0
+    
+            if not is_group_message:
+                # Логика для одиночного сообщения
+                key = (msg_data["chat_id"], msg_data["message_id"])
+                logger.debug(f"Fetching single message: {key}")
+                
+                cached_message = await self._message_cache.get(key)
+                if cached_message:
+                    logger.debug(f"Cache hit for single message {key}")
+                    return cached_message
+    
+                message = await self.client.get_messages(
+                    msg_data["chat_id"], 
+                    ids=msg_data["message_id"]
                 )
-                cached_group = await self._message_cache.get(group_key)
+                
+                if not message:
+                    logger.error(f"Одиночное сообщение не найдено: чат {msg_data['chat_id']}, ID {msg_data['message_id']}")
+                    return None
+    
+                await self._message_cache.set(key, message)
+                return message
+            
+            else:
+                # Логика для групповых сообщений
+                logger.debug(f"Fetching group messages: {msg_data}")
+                
+                # Включаем текущее сообщение в список для загрузки
+                all_message_ids = [msg_data["message_id"]] + msg_data.get("grouped_ids", [])
+                all_message_ids = list(set(all_message_ids))
+                
+                # Кэш для группы
+                group_cache_key = (
+                    msg_data["chat_id"], 
+                    frozenset(sorted(all_message_ids))
+                )
+                
+                # Проверяем кэш группы
+                cached_group = await self._message_cache.get(group_cache_key)
                 if cached_group:
-                    logger.debug(f"[GROUP CACHE HIT] Найдена группа: {group_key}")
+                    logger.debug(f"Cache hit for group {group_cache_key}")
                     return cached_group
-
-                grouped_messages = [message]
-                for msg_id in msg_data["grouped_ids"]:
-                    if msg_id == msg_data["message_id"]:
-                        continue
-                    msg_key = (msg_data["chat_id"], msg_id)
-                    if cached_msg := await self._message_cache.get(msg_key):
+    
+                # Загружаем все сообщения группы
+                grouped_messages = []
+                for message_id in all_message_ids:
+                    message_key = (msg_data["chat_id"], message_id)
+                    
+                    # Проверяем кэш каждого сообщения
+                    cached_msg = await self._message_cache.get(message_key)
+                    if cached_msg:
                         grouped_messages.append(cached_msg)
                         continue
+    
+                    # Загружаем сообщение
+                    message = await self.client.get_messages(
+                        msg_data["chat_id"], 
+                        ids=message_id
+                    )
                     
-                    msg = await self.client.get_messages(msg_data["chat_id"], ids=msg_id)
-                    if msg:
-                        await self._message_cache.set(msg_key, msg)
-                        grouped_messages.append(msg)
-
-                if len(grouped_messages) == len(msg_data["grouped_ids"]):
-                    await self._message_cache.set(group_key, grouped_messages)
-                    logger.debug(f"[GROUP CACHE SET] Сохранена группа: {group_key}")
-                    return grouped_messages
+                    if not message:
+                        logger.error(f"Сообщение группы не найдено: чат {msg_data['chat_id']}, ID {message_id}")
+                        continue
+    
+                    # Кэшируем каждое сообщение
+                    await self._message_cache.set(message_key, message)
+                    grouped_messages.append(message)
+    
+                # Если не все сообщения группы найдены
+                if len(grouped_messages) != len(all_message_ids):
+                    logger.warning(f"Не все сообщения группы найдены. Найдено: {len(grouped_messages)}, Ожидалось: {len(all_message_ids)}")
+                    return None
+    
+                # Кэшируем группу
+                await self._message_cache.set(group_cache_key, grouped_messages)
                 
-                logger.warning(f"Не удалось загрузить полную группу для {group_key}")
-                return None
-
-            return message
+                return grouped_messages
+    
         except Exception as e:
-            logger.error(f"Failed to fetch message {msg_data}: {str(e)}")
+            logger.error(
+                f"Критическая ошибка получения сообщения/группы: {e}", 
+                exc_info=True
+            )
             return None
 
     async def _get_chat_id(self, chat_identifier: str) -> Optional[int]:
