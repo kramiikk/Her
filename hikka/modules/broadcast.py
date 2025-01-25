@@ -37,12 +37,10 @@ class RateLimiter:
 
             self.requests = [t for t in self.requests if now - t < self.time_window]
 
-            # Добавить таймаут для избежания вечной блокировки
-
             while len(self.requests) >= self.max_requests:
                 wait_time = self.time_window - (now - self.requests[0])
                 await asyncio.sleep(wait_time)
-                now = time.time()  # Обновить время после сна
+                now = time.time()
                 self.requests = [t for t in self.requests if now - t < self.time_window]
 
     async def get_stats(self) -> dict:
@@ -63,7 +61,6 @@ class SimpleCache:
         self._lock = asyncio.Lock()
         self._last_cleanup = time.time()
         self._cleaning = False
-        logger.debug(f"Инициализирован кэш | TTL: {ttl}s | Макс. размер: {max_size}")
 
     def _estimate_memory_usage(self):
         """Примерная оценка использования памяти"""
@@ -102,18 +99,15 @@ class SimpleCache:
             ]
             for key in expired_keys:
                 del self.cache[key]
-            logger.debug(f"Удалено устаревших записей: {len(expired_keys)}")
         except Exception as e:
             logger.error(f"Ошибка очистки кэша: {e}", exc_info=True)
         finally:
             self._cleaning = False
 
     async def get(self, key):
-        logger.debug(f"[CACHE GET] Попытка получения ключа {key}")
         try:
             async with self._lock:
                 if key not in self.cache:
-                    logger.debug(f"[CACHE] Промах кэша для ключа {key}")
                     return None
                 timestamp, value = self.cache[key]
                 current_time = time.time()
@@ -121,15 +115,8 @@ class SimpleCache:
                 remaining_ttl = self.ttl - age
 
                 if remaining_ttl <= 0:
-                    logger.debug(
-                        f"[CACHE] Устаревшая запись {key} (возраст {age:.1f} сек)"
-                    )
                     del self.cache[key]
                     return None
-                logger.debug(
-                    f"[CACHE] Попадание кэша для {key}. "
-                    f"Остаток TTL: {remaining_ttl:.1f} сек"
-                )
                 self.cache.move_to_end(key)
                 return value
         except Exception as e:
@@ -138,19 +125,11 @@ class SimpleCache:
 
     async def set(self, key, value):
         """Устанавливает значение в кэш с расширенной диагностикой"""
-        logger.debug(f"[CACHE SET] Начало операции для ключа {key}")
         try:
             async with self._lock:
-                logger.debug(f"Блокировка захвачена для ключа {key}")
-
-                logger.debug(
-                    f"Состояние кэша ДО операции: {self._cache_state_report()}"
-                )
 
                 await self.clean_expired(force=True)
 
-                if key in self.cache:
-                    logger.debug(f"Обновление существующего ключа: {key}")
                 while len(self.cache) >= self.max_size:
                     oldest_key = next(iter(self.cache))
                     logger.warning(
@@ -159,29 +138,12 @@ class SimpleCache:
                     del self.cache[oldest_key]
                 self.cache[key] = (time.time(), value)
                 self.cache.move_to_end(key)
-
-                logger.debug(
-                    f"Успешно добавлен ключ: {key}\n"
-                    f"Тип значения: {type(value)}\n"
-                    f"Размер кэша: {len(self.cache)}\n"
-                    f"Примерный размер памяти: {self._estimate_memory_usage()}"
-                )
-
-                logger.debug(
-                    f"Промежуточное состояние кэша: {self._cache_state_report()}"
-                )
         except Exception as e:
-            logger.error(
-                f"КРИТИЧЕСКАЯ ОШИБКА при установке ключа {key}: {e}", exc_info=True
-            )
+            logger.error(f"КРИТИЧЕСКАЯ ОШИБКА {key}: {e}", exc_info=True)
             raise
-        finally:
-            logger.debug(f"Блокировка отпущена для ключа {key}")
-            logger.debug(f"Состояние кэша ПОСЛЕ операции: {self._cache_state_report()}")
 
     async def start_auto_cleanup(self):
         """Запускает фоновую задачу для периодической очистки кэша"""
-        logger.debug(f"[CACHE] Запуск фоновой очистки с интервалом {self.ttl} сек")
         while True:
             try:
                 async with self._lock:
@@ -291,8 +253,6 @@ class Broadcast:
             "grouped_ids": grouped_ids,
         }
 
-        # Проверка на абсолютные дубликаты
-
         for existing in self.messages:
             if (
                 existing["chat_id"] == new_message["chat_id"]
@@ -312,9 +272,7 @@ class Broadcast:
             send_mode=data.get("send_mode", "auto"),
             batch_mode=data.get("batch_mode", False),
         )
-        instance._active = data.get(
-            "active", False
-        )  # Восстанавливаем состояние активности
+        instance._active = data.get("active", False)
         return instance
 
     def get_next_message_index(self) -> int:
@@ -345,7 +303,7 @@ class Broadcast:
 
     def to_dict(self) -> dict:
         """Сериализует объект в словарь"""
-        result = {
+        return {
             "chats": list(self.chats),
             "messages": self.messages,
             "interval": list(self.interval),
@@ -353,12 +311,6 @@ class Broadcast:
             "batch_mode": self.batch_mode,
             "active": self._active,
         }
-
-        # Явная проверка и логирование
-
-        logger.debug(f"Сериализация словаря: {result}")
-
-        return result
 
 
 class BroadcastManager:
@@ -448,12 +400,8 @@ class BroadcastManager:
                     if failed_chats:
                         await self._handle_failed_chats(code_name, failed_chats)
                     elapsed = time.time() - start_time
-                    min_interval = max(
-                        1, code.interval[0] * 60 - elapsed
-                    )  # Минимум 1 секунда
-                    max_interval = max(
-                        2, code.interval[1] * 60 - elapsed
-                    )  # Минимум 2 секунды
+                    min_interval = max(1, code.interval[0] * 60 - elapsed)
+                    max_interval = max(2, code.interval[1] * 60 - elapsed)
 
                     await asyncio.sleep(random.uniform(min_interval, max_interval))
                 except asyncio.CancelledError:
@@ -474,15 +422,10 @@ class BroadcastManager:
         """Получает сообщения с улучшенной обработкой ошибок"""
         try:
             key = (msg_data["chat_id"], msg_data["message_id"])
-            logger.debug(f"[CACHE CHECK] Проверка ключа {key}")
-
-            # Проверка основного сообщения
 
             cached = await self._message_cache.get(key)
             if cached:
-                logger.debug(f"[CACHE HIT] Найдено в кэше: {key}")
                 return cached
-            logger.debug(f"[CACHE MISS] Отсутствует в кэше: {key}")
             message = await self.client.get_messages(
                 msg_data["chat_id"], ids=msg_data["message_id"]
             )
@@ -490,12 +433,7 @@ class BroadcastManager:
             if not message:
                 logger.error(f"Сообщение {msg_data} не найдено")
                 return None
-            # Сохраняем основное сообщение
-
             await self._message_cache.set(key, message)
-            logger.debug(f"[CACHE SET] Сохранено сообщение {key}")
-
-            # Обработка групповых сообщений
 
             if msg_data.get("grouped_ids"):
                 group_key = (
@@ -503,56 +441,20 @@ class BroadcastManager:
                     tuple(sorted(msg_data["grouped_ids"])),
                 )
 
-                # 1. Проверяем наличие всех сообщений группы
-
                 has_all_messages = True
                 for msg_id in msg_data["grouped_ids"]:
                     if not await self._message_cache.get(...):
                         has_all_messages = False
-                        break  # Добавить прерывание цикла
-                # 2. Если все сообщения есть - проверяем группу целиком
-
+                        break
                 cached_group = None
                 if has_all_messages:
                     cached_group = await self._message_cache.get(group_key)
-                    # Улучшенная проверка даты
 
-                    if isinstance(cached_group, list) and len(cached_group) > 0:
-                        try:
-                            if not hasattr(cached_group[0], "date"):
-                                logger.error(
-                                    f"Группа {group_key} повреждена: нет атрибута date"
-                                )
-                                await self._message_cache.set(group_key, None)
-                                return None
-                            if cached_group[0].date < datetime.now() - timedelta(
-                                days=14
-                            ):
-                                logger.warning(
-                                    f"Группа {group_key} устарела ({cached_group[0].date})"
-                                )
-                                # Инвалидируем всю группу и отдельные сообщения
-
-                                for msg in cached_group:
-                                    await self._message_cache.set(
-                                        (msg.chat_id, msg.id), None
-                                    )
-                                await self._message_cache.set(group_key, None)
-                                return None
-                        except Exception as e:
-                            logger.error(
-                                f"Ошибка проверки даты группы {group_key}: {str(e)}"
-                            )
-                            return None
                     if cached_group:
                         logger.debug(f"[GROUP CACHE HIT] Найдена группа: {group_key}")
                         return cached_group
-                # 3. Если группа не полная - загружаем заново
-
-                logger.debug(f"[GROUP CACHE MISS] Загрузка группы: {group_key}")
                 grouped_messages = []
                 for msg_id in msg_data["grouped_ids"]:
-                    # Используем уже загруженное основное сообщение
 
                     if msg_id == msg_data["message_id"]:
                         grouped_messages.append(message)
@@ -565,8 +467,6 @@ class BroadcastManager:
                         await self._message_cache.set(
                             (msg_data["chat_id"], msg_id), msg
                         )
-                # Сохраняем полную группу только если все сообщения получены
-
                 if len(grouped_messages) == len(msg_data["grouped_ids"]):
                     await self._message_cache.set(group_key, grouped_messages)
                     logger.debug(f"[GROUP CACHE SET] Сохранена группа: {group_key}")
@@ -593,7 +493,6 @@ class BroadcastManager:
 
     async def _handle_flood_wait(self, e: FloodWaitError, chat_id: int):
         wait_time = e.seconds + random.randint(5, 15)
-        logger.info(f"Ожидание {wait_time} сек для чата {chat_id}")
         await asyncio.sleep(wait_time)
         self.error_counts.pop(f"{chat_id}_flood", None)
 
@@ -618,15 +517,11 @@ class BroadcastManager:
                 await utils.answer(message, "❌ Ответьте на сообщение для добавления")
                 return
             try:
-                # 1. Создаем новую рассылку при необходимости
 
                 is_new = code is None
                 if is_new:
                     code = Broadcast()
                     self.codes[code_name] = code
-                    logger.debug(f"Создан новый код рассылки: {code_name}")
-                # 2. Обработка групповых сообщений
-
                 grouped_ids = []
                 if getattr(reply, "grouped_id", None):
                     async for msg in self.client.iter_messages(
@@ -634,13 +529,10 @@ class BroadcastManager:
                     ):
                         if getattr(msg, "grouped_id", None) == reply.grouped_id:
                             grouped_ids.append(msg.id)
-                            # Кэшируем каждое сообщение отдельно
 
                             await self._message_cache.set((msg.chat_id, msg.id), msg)
                     grouped_ids = sorted(list(set(grouped_ids)))
                     logger.debug(f"Найдено групповых сообщений: {len(grouped_ids)}")
-                # 3. Добавление в рассылку
-
                 success = code.add_message(
                     chat_id=reply.chat_id,
                     message_id=reply.id,
@@ -650,12 +542,7 @@ class BroadcastManager:
                 if not success:
                     await utils.answer(message, "❌ Сообщение уже существует")
                     return
-                # 4. Принудительное сохранение с валидацией
-
-                logger.debug(f"Перед сохранением. Сообщений: {len(code.messages)}")
                 await self.save_config()
-
-                # 5. Двойная проверка после сохранения
 
                 if code_name in self.codes and len(self.codes[code_name].messages) > 0:
                     await utils.answer(
@@ -666,9 +553,7 @@ class BroadcastManager:
                     )
                 else:
                     await utils.answer(message, "⚠️ Ошибка сохранения конфигурации!")
-                    logger.debug("Конфигурация не сохранилась после добавления")
             except Exception as e:
-                logger.critical(f"Critical error: {e}", exc_info=True)
                 if is_new and code_name in self.codes:
                     del self.codes[code_name]
                 await utils.answer(
@@ -934,27 +819,20 @@ class BroadcastManager:
         ):
             self.broadcast_tasks[code_name].cancel()
             try:
-                await self.broadcast_tasks[
-                    code_name
-                ]  # Дождаться завершения отмененной задачи
+                await self.broadcast_tasks[code_name]
             except asyncio.CancelledError:
-                pass  # Ожидаемо, можно игнорировать
+                pass
         self.broadcast_tasks[code_name] = asyncio.create_task(
             self._broadcast_loop(code_name)
         )
-        logger.info(f"Запущена задача рассылки для кода: {code_name}")
 
     async def _load_config(self):
         try:
             config = self.db.get("broadcast", "config", {})
-            logger.debug(f"ЗАГРУЖЕННАЯ КОНФИГУРАЦИЯ: {config}")
 
             if not config or "codes" not in config:
-                logger.warning("Конфигурация пуста")
                 return
-            logger.info("Перезапуск активных рассылок из конфигурации...")
             for code_name, code_data in config.get("codes", {}).items():
-                logger.debug(f"Восстановление кода {code_name}: {code_data}")
 
                 broadcast = Broadcast(
                     chats=set(code_data.get("chats", [])),
@@ -966,11 +844,9 @@ class BroadcastManager:
                 broadcast._active = code_data.get("active", False)
 
                 self.codes[code_name] = broadcast
-                logger.debug(f"Восстановлен код {code_name}: {broadcast}")
 
-                if broadcast._active:  # Проверяем active и запускаем задачу
+                if broadcast._active:
                     await self._start_broadcast_task(code_name, broadcast)
-            logger.info("Перезапуск активных рассылок завершен.")
         except Exception as e:
             logger.error(f"Ошибка загрузки конфигурации: {e}", exc_info=True)
 
@@ -985,8 +861,6 @@ class BroadcastManager:
                     message = await self._fetch_messages(msg_data)
                     if not message:
                         raise ValueError("Сообщение не найдено")
-                    # Проверка актуальности сообщения
-
                     valid_messages.append(message)
                     break
                 except FloodWaitError as e:
@@ -1040,7 +914,7 @@ class BroadcastManager:
             self.last_error_time[f"{chat_id}_general"] = 0
             return True
         except FloodWaitError as e:
-            logger.warning(f"Флуд-контроль: {e}")
+            logger.error(f"Флуд-контроль: {e}")
             await self._handle_flood_wait(e, chat_id)
         except (ChatWriteForbiddenError, UserBannedInChannelError) as e:
             logger.error(f"Доступ запрещен: {chat_id}")
@@ -1057,8 +931,6 @@ class BroadcastManager:
         success_count = 0
         failed_chats = set()
 
-        # Приоритет для новых чатов (последние 20 добавленных)
-
         new_chats = active_chats[-20:]
         active_chats = new_chats + active_chats[:-20]
 
@@ -1066,31 +938,22 @@ class BroadcastManager:
             if not self._active or not code._active:
                 break
             try:
-                # Пропускаем чаты с частыми ошибками
-
                 if self.error_counts.get(chat_id, 0) > 3:
                     continue
-                # Отправка сообщения
-
                 result = await self._send_message(chat_id, messages)
 
                 if result:
                     success_count += 1
-                    # Сброс счетчика ошибок при успехе
 
                     self.error_counts[chat_id] = 0
                 else:
                     failed_chats.add(chat_id)
-                # Динамическое регулирование скорости
-
                 if success_count % 10 == 0:
                     await asyncio.sleep(random.uniform(0.2, 0.7))
             except Exception as e:
                 logger.error(f"Ошибка в чате {chat_id}: {str(e)}")
                 failed_chats.add(chat_id)
                 self.error_counts[chat_id] = self.error_counts.get(chat_id, 0) + 1
-        # Автоматическое удаление проблемных чатов
-
         if failed_chats:
             code.chats -= failed_chats
             await self.save_config()
@@ -1139,15 +1002,7 @@ class BroadcastManager:
 
     async def save_config(self):
         try:
-            # Логируем максимально подробно
 
-            logger.debug(f"ПОЛНЫЙ СТАТУС КОДОВ: {self.codes}")
-            logger.debug(f"КОЛИЧЕСТВО КОДОВ: {len(self.codes)}")
-
-            for code_name, code in self.codes.items():
-                logger.debug(
-                    f"КОД {code_name}: chats={code.chats}, messages={code.messages}"
-                )
             config = {
                 "codes": {
                     name: {
@@ -1164,13 +1019,7 @@ class BroadcastManager:
                 "timestamp": datetime.utcnow().timestamp(),
             }
 
-            logger.debug(f"ФИНАЛЬНАЯ КОНФИГУРАЦИЯ: {config}")
-
-            # Используем прямое сохранение без asyncio
-
             self.db.set("broadcast", "config", config)
-
-            logger.debug("КОНФИГУРАЦИЯ СОХРАНЕНА")
         except Exception as e:
             logger.error(f"КРИТИЧЕСКАЯ ОШИБКА СОХРАНЕНИЯ: {e}", exc_info=True)
 
