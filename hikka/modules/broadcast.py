@@ -408,19 +408,19 @@ class BroadcastManager:
         try:
             key = (msg_data["chat_id"], msg_data["message_id"])
             logger.debug(f"Fetching message: {key}")
-            cached = await self._message_cache.get(key)
-            if cached:
+            
+            if cached := await self._message_cache.get(key):
                 logger.debug(f"Cache hit for {key}")
                 return cached
-            # Сначала загружаем основное сообщение
 
             message = await self.client.get_messages(
-                msg_data["chat_id"], ids=msg_data["message_id"]
+                msg_data["chat_id"], 
+                ids=msg_data["message_id"]
             )
+            
             if not message:
                 logger.error(f"Сообщение {msg_data} не найдено")
                 return None
-            # Кэшируем основное сообщение перед обработкой группы
 
             await self._message_cache.set(key, message)
 
@@ -432,29 +432,30 @@ class BroadcastManager:
                 cached_group = await self._message_cache.get(group_key)
                 if cached_group:
                     logger.debug(f"[GROUP CACHE HIT] Найдена группа: {group_key}")
-                    # Обновляем TTL для отдельных сообщений
-
-                    for msg in cached_group:
-                        await self._message_cache.set((msg.chat_id, msg.id), msg)
                     return cached_group
-                grouped_messages = [message]  # Добавляем уже загруженное сообщение
+
+                grouped_messages = [message]
                 for msg_id in msg_data["grouped_ids"]:
                     if msg_id == msg_data["message_id"]:
-                        continue  # Уже добавлено
-                    msg = await self.client.get_messages(
-                        msg_data["chat_id"], ids=msg_id
-                    )
+                        continue
+                    msg_key = (msg_data["chat_id"], msg_id)
+                    if cached_msg := await self._message_cache.get(msg_key):
+                        grouped_messages.append(cached_msg)
+                        continue
+                    
+                    msg = await self.client.get_messages(msg_data["chat_id"], ids=msg_id)
                     if msg:
+                        await self._message_cache.set(msg_key, msg)
                         grouped_messages.append(msg)
-                        await self._message_cache.set(
-                            (msg_data["chat_id"], msg_id), msg
-                        )
+
                 if len(grouped_messages) == len(msg_data["grouped_ids"]):
                     await self._message_cache.set(group_key, grouped_messages)
                     logger.debug(f"[GROUP CACHE SET] Сохранена группа: {group_key}")
                     return grouped_messages
+                
                 logger.warning(f"Не удалось загрузить полную группу для {group_key}")
                 return None
+
             return message
         except Exception as e:
             logger.error(f"Failed to fetch message {msg_data}: {str(e)}")
@@ -700,6 +701,7 @@ class BroadcastManager:
             )
             return
         if code.remove_message(reply.id, reply.chat_id):
+            await self._message_cache.set((reply.chat_id, reply.id), None)
             await self.save_config()
             await utils.answer(message, "✅ Сообщение удалено из рассылки")
         else:
