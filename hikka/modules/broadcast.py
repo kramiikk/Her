@@ -1030,7 +1030,7 @@ class BroadcastManager:
             await self._restart_all_broadcasts()
             await utils.answer(message, "✅ Рассылки возобновлены")
         elif action == "status":
-            status = "активна" if self.manager.global_pause else "не активна"
+            status = "активна" if self.global_pause else "не активна"
             await utils.answer(message, f"Глобальная пауза: {status}")
         if not code_name:
             await utils.answer(message, "❌ Укажите код рассылки")
