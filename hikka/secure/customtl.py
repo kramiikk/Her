@@ -1,8 +1,8 @@
+# Friendly Telegram (telegram userbot)
+# Copyright (C) 2018-2019 The Authors
 # ©️ Dan Gazizullin, codrago 2021-2024
 # This file is a part of Her
 # 🌐 https://github.com/hikariatama/Hikka
-# You can redistribute it and/or modify it under the terms of the GNU AGPLv3
-# 🔑 https://www.gnu.org/licenses/agpl-3.0.html
 
 import asyncio
 import time

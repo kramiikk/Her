@@ -1,12 +1,8 @@
-#    Friendly Telegram (telegram userbot)
-#    Copyright (C) 2018-2019 The Authors
+# Friendly Telegram (telegram userbot)
+# Copyright (C) 2018-2019 The Authors
 # ©️ Dan Gazizullin, codrago 2021-2024
 # This file is a part of Her
 # 🌐 https://github.com/hikariatama/Hikka
-# You can redistribute it and/or modify it under the terms of the GNU AGPLv3
-# 🔑 https://www.gnu.org/licenses/agpl-3.0.html
-
-# meta developer: @bsolute
 
 import asyncio
 import contextlib
@@ -431,42 +427,6 @@ class CoreMod(loader.Module):
                 await utils.answer(message, "<emoji document_id=5210952531676504517>🚫</emoji> <b>Killed</b>")
         else:
             await utils.answer(message, "<emoji document_id=5210952531676504517>🚫</emoji> <b>No command is running in that message</b>")
-
-    @loader.command()
-    async def setprefix(self, message: Message):
-        if not (args := utils.get_args_raw(message)):
-            await utils.answer(message, "<emoji document_id=5382187118216879236>❓</emoji> <b>What should the prefix be set to?</b>")
-            return
-
-        if len(args) != 1 and self.config.get("allow_nonstandart_prefixes") is False:
-            await utils.answer(message, "<emoji document_id=5210952531676504517>🚫</emoji> <b>Prefix must be one symbol in length</b>")
-            return
-
-        if args == "s":
-            await utils.answer(message, "<emoji document_id=5210952531676504517>🚫</emoji> <b>Prefix must be one symbol in length</b>")
-            return
-
-        oldprefix = utils.escape_html(self.get_prefix())
-
-        self._db.set(
-            main.__name__,
-            "command_prefix",
-            args,
-        )
-        await utils.answer(
-            message,
-            "{} <b>Command prefix updated. Use the following command to change it back:</b>\n<pre><code class=\"language-her\">{newprefix}setprefix {oldprefix}</code></pre>".format(
-                "<emoji document_id=5197474765387864959>👍</emoji>",
-                newprefix=utils.escape_html(args),
-                oldprefix=utils.escape_html(oldprefix),
-            ),
-        )
-
-    @loader.command()
-    async def cleardb(self, message: Message):
-        self._db.clear()
-        self._db.save()
-        await utils.answer(message, "<emoji document_id=5197474765387864959>👍</emoji> <b>Database cleared</b>")
 
     @loader.command()
     async def restart(self, message: Message):
