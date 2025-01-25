@@ -399,9 +399,10 @@ class BroadcastManager:
         """Получает сообщения с улучшенной обработкой ошибок"""
         try:
             key = (msg_data["chat_id"], msg_data["message_id"])
-
+            logger.debug(f"Fetching message: {key}")
             cached = await self._message_cache.get(key)
             if cached:
+                logger.debug(f"Cache hit for {key}")
                 return cached
             message = await self.client.get_messages(
                 msg_data["chat_id"], ids=msg_data["message_id"]
@@ -452,7 +453,7 @@ class BroadcastManager:
                 return None
             return message
         except Exception as e:
-            logger.error(f"Ошибка _fetch_messages: {str(e)}", exc_info=True)
+            logger.error(f"Failed to fetch message {msg_data}: {str(e)}")
             return None
 
     async def _get_chat_id(self, chat_identifier: str) -> Optional[int]:
@@ -1028,6 +1029,9 @@ class BroadcastManager:
             self.global_pause = False
             await self._restart_all_broadcasts()
             await utils.answer(message, "✅ Рассылки возобновлены")
+        elif action == "status":
+            status = "активна" if self.manager.global_pause else "не активна"
+            await utils.answer(message, f"Глобальная пауза: {status}")
         if not code_name:
             await utils.answer(message, "❌ Укажите код рассылки")
             return
