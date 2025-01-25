@@ -156,18 +156,18 @@ class BroadcastMod(loader.Module):
             self._initialized = False
 
     async def on_unload(self):
-        "На выходе"
         self._active = False
         await self.manager.stop_cache_cleanup()
+
         for task in self.manager.broadcast_tasks.values():
             if not task.done():
                 task.cancel()
-                try:
-                    await task
-                except asyncio.CancelledError:
-                    pass
-        await self.manager._semaphore.acquire()
-        self.manager._semaphore.release()
+        try:
+            await asyncio.gather(
+                *self.manager.broadcast_tasks.values(), return_exceptions=True
+            )
+        except Exception as e:
+            logger.error(f"Ошибка при завершении задач: {e}")
         if self.manager.adaptive_interval_task:
             self.manager.adaptive_interval_task.cancel()
 
@@ -260,8 +260,7 @@ class Broadcast:
 class BroadcastManager:
     """Manages broadcast operations and state."""
 
-    GLOBAL_MINUTE_LIMITER = RateLimiter(30, 60)
-    GLOBAL_HOUR_LIMITER = RateLimiter(500, 3600)
+    GLOBAL_LIMITER = RateLimiter(max_requests=20, time_window=60)
     _semaphore = asyncio.Semaphore(3)
 
     class MediaPermissions:
@@ -290,32 +289,32 @@ class BroadcastManager:
 
     async def _broadcast_loop(self, code_name: str):
         """Main broadcast loop with enhanced debug logging"""
-        async with self._semaphore:
-            code = self.codes.get(code_name)
-            if not code or not code.messages:
-                return
-            while self._active and not self.global_pause:
+        logger.info(f"Старт цикла рассылки для {code_name}")
+        code = self.codes.get(code_name)
+        if not code or not code.messages:
+            logger.error(f"Нет сообщений или кода для {code_name}")
+            return
+        while self._active and code._active and not self.global_pause:
 
-                start_time = time.time()
-                deleted_messages = []
-                messages_to_send = []
+            if self.global_pause or not self._active:
+                break
+            start_time = time.time()
+            deleted_messages = []
+            messages_to_send = []
 
-                if self.global_pause:
-                    break
-                try:
-                    if not self._active:
-                        break
-                    current_messages = code.messages.copy()
-                    if not current_messages:
-                        await asyncio.sleep(30)
-                        continue
-                    if not current_messages:
-                        batches = []
-                    batches = [
-                        current_messages[i : i + 5]
-                        for i in range(0, len(current_messages), 5)
-                    ]
+            try:
+                current_messages = code.messages.copy()
+                if not current_messages:
+                    await asyncio.sleep(30)
+                    continue
+                if not current_messages:
+                    batches = []
+                batches = [
+                    current_messages[i : i + 5]
+                    for i in range(0, len(current_messages), 5)
+                ]
 
+                async with self._semaphore:
                     for batch in batches:
                         batch_messages, deleted = await self._process_message_batch(
                             code, batch
@@ -327,33 +326,34 @@ class BroadcastManager:
                             m for m in code.messages if m not in deleted_messages
                         ]
                         await self.save_config()
-                    if not messages_to_send:
-                        logger.warning(f"[{code_name}] Нет сообщений для отправки")
-                        continue
-                    if not code.batch_mode:
-                        next_index = code.get_next_message_index()
-                        messages_to_send = [
-                            messages_to_send[next_index % len(messages_to_send)]
-                        ]
-                    failed_chats = await self._send_messages_to_chats(
-                        code, messages_to_send
-                    )
+                if not messages_to_send:
+                    logger.warning(f"[{code_name}] Нет сообщений для отправки")
+                    continue
+                if not code.batch_mode:
+                    next_index = code.get_next_message_index()
+                    messages_to_send = [
+                        messages_to_send[next_index % len(messages_to_send)]
+                    ]
+                failed_chats = await self._send_messages_to_chats(
+                    code, messages_to_send
+                )
 
-                    if failed_chats:
-                        await self._handle_failed_chats(code_name, failed_chats)
-                    elapsed = time.time() - start_time
-                    min_interval = max(1, code.interval[0] * 60 - elapsed)
-                    max_interval = max(2, code.interval[1] * 60 - elapsed)
+                if failed_chats:
+                    await self._handle_failed_chats(code_name, failed_chats)
+                elapsed = time.time() - start_time
+                min_interval = max(1, code.interval[0] * 60 - elapsed)
+                max_interval = max(2, code.interval[1] * 60 - elapsed)
 
-                    await asyncio.sleep(random.uniform(min_interval, max_interval))
-                except asyncio.CancelledError:
-                    break
-                except Exception as e:
-                    logger.error(
-                        f"[{code_name}] Error in broadcast loop: {str(e)}",
-                        exc_info=True,
-                    )
-                    await asyncio.sleep(30)
+                await asyncio.sleep(random.uniform(min_interval, max_interval))
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(
+                    f"[{code_name}] Error in broadcast loop: {str(e)}",
+                    exc_info=True,
+                )
+                await asyncio.sleep(30)
+                continue
 
     async def _check_and_adjust_intervals(self):
         """Проверка условий для восстановления интервалов"""
@@ -854,20 +854,15 @@ class BroadcastManager:
         deleted_messages = []
 
         for msg_data in messages:
-            for attempt in range(3):
-                try:
-                    message = await self._fetch_messages(msg_data)
-                    if not message:
-                        raise ValueError("Сообщение не найдено")
-                    valid_messages.append(message)
-                    break
-                except FloodWaitError as e:
-                    await self._handle_flood_wait(e, msg_data["chat_id"])
-                except Exception as e:
-                    logger.error(f"Ошибка загрузки {msg_data}: {str(e)}")
-                    if attempt == 2:
-                        deleted_messages.append(msg_data)
-                    await asyncio.sleep(2**attempt)
+            try:
+                message = await self._fetch_messages(msg_data)
+                if not message:
+                    raise ValueError("Сообщение не найдено")
+                valid_messages.append(message)
+                break
+            except Exception as e:
+                logger.error(f"Ошибка загрузки {msg_data}: {str(e)}")
+                deleted_messages.append(msg_data)
         return valid_messages, deleted_messages
 
     async def _restart_all_broadcasts(self):
@@ -881,6 +876,7 @@ class BroadcastManager:
 
     async def _start_broadcast_task(self, code_name: str, code: Broadcast):
         """Запускает или перезапускает задачу рассылки для кода."""
+        logger.debug(f"Запуск задачи рассылки для {code_name}")
         if (
             code_name in self.broadcast_tasks
             and not self.broadcast_tasks[code_name].done()
@@ -893,6 +889,7 @@ class BroadcastManager:
         self.broadcast_tasks[code_name] = asyncio.create_task(
             self._broadcast_loop(code_name)
         )
+        logger.debug(f"Задача для {code_name} успешно создана")
 
     async def _send_message(
         self,
@@ -902,6 +899,7 @@ class BroadcastManager:
     ) -> bool:
         if self.global_pause:
             return False
+        await self.GLOBAL_LIMITER.acquire()
         try:
 
             async def forward_messages(messages: Union[Message, List[Message]]) -> None:
@@ -917,9 +915,6 @@ class BroadcastManager:
                         messages=[messages],
                         from_peer=messages.chat_id,
                     )
-
-            await self.GLOBAL_MINUTE_LIMITER.acquire()
-            await self.GLOBAL_HOUR_LIMITER.acquire()
 
             await asyncio.sleep(random.uniform(1, 3))
 
@@ -967,6 +962,21 @@ class BroadcastManager:
 
         new_chats = active_chats[-20:]
         active_chats = new_chats + active_chats[:-20]
+        valid_chats = []
+
+        for chat_id in active_chats:
+            try:
+                await self.client.get_entity(chat_id)
+                valid_chats.append(chat_id)
+            except Exception:
+                logger.warning(f"Чат {chat_id} недоступен, удаление")
+                code.chats.remove(chat_id)
+        await self.save_config()
+
+        if not valid_chats:
+            logger.error("Нет валидных чатов для отправки")
+            return set()
+        active_chats = list(valid_chats)
 
         for chat_id in active_chats:
             if not self._active or not code._active:
