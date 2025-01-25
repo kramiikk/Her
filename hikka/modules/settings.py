@@ -273,6 +273,14 @@ class CoreMod(loader.Module):
             ),
         )
         self.activecmds = {}
+    
+    def format_duration(self, duration):
+        if duration >= 1:
+            return f"{round(duration, 2)} сек"
+        elif duration >= 0.001:
+            return f"{round(duration * 1000, 2)} мс"
+        else:
+            return f"{round(duration * 1e6, 2)} мкс"
 
     async def client_ready(self, client, db):
         self.db = db
@@ -328,6 +336,7 @@ class CoreMod(loader.Module):
         start_time = time.perf_counter()
         result, res, cerr = await self.cexecute(code, message, reply)
         stop_time = time.perf_counter()
+        duration = stop_time - start_time
 
         result = str(result)
         res = str(res)
@@ -346,7 +355,7 @@ class CoreMod(loader.Module):
 <emoji document_id=5431376038628171216>💻</emoji> Код:
 <pre><code class="language-python">{code}</code></pre>
 {result}
-<emoji document_id=5451732530048802485>⏳</emoji> Выполнен за {round(stop_time - start_time, 5)} секунд</b>""",
+<emoji document_id=5451732530048802485>⏳</emoji> Выполнен за {self.format_duration(duration)}</b>""",
         )
 
     @loader.command()
