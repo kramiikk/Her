@@ -91,31 +91,19 @@ class SimpleCache:
         )
 
     async def clean_expired(self, force: bool = False):
-        """Улучшенная очистка с принудительным режимом"""
+        """Удаляет устаревшие записи из кэша"""
         try:
             if self._cleaning and not force:
                 return
             self._cleaning = True
             current_time = time.time()
-            initial_size = len(self.cache)
-
-            keys = list(self.cache.keys())
             expired_keys = [
-                k for k in keys if current_time - self.cache[k][0] > self.ttl
+                k for k, (ts, _) in self.cache.items()
+                if current_time - ts > self.ttl
             ]
-
             for key in expired_keys:
-                try:
-                    del self.cache[key]
-                    logger.debug(f"Удален устаревший ключ: {key}")
-                except KeyError:
-                    continue
-            logger.debug(
-                f"Очистка завершена. Удалено: {len(expired_keys)} | "
-                f"Текущий размер: {len(self.cache)} (было {initial_size})"
-            )
-
-            self._last_cleanup = current_time
+                del self.cache[key]
+            logger.debug(f"Удалено устаревших записей: {len(expired_keys)}")
         except Exception as e:
             logger.error(f"Ошибка очистки кэша: {e}", exc_info=True)
         finally:
@@ -199,8 +187,8 @@ class SimpleCache:
             try:
                 async with self._lock:
                     await self.clean_expired()
-                    logger.debug("[CACHE] Периодическая очистка выполнена")
-                    await asyncio.sleep(self.ttl)
+                logger.debug("[CACHE] Периодическая очистка выполнена")
+                await asyncio.sleep(self.ttl)
             except Exception as e:
                 logger.error(f"Ошибка очистки кэша: {e}")
 
