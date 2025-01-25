@@ -1199,7 +1199,7 @@ class BroadcastManager:
             # Используем прямое сохранение без asyncio
             self.db.set("broadcast", "config", config)
 
-            logger.debug("КОНФИГУРАЦИЯ SUPPOSEDLY СОХРАНЕНА")
+            logger.debug("КОНФИГУРАЦИЯ СОХРАНЕНА")
         except Exception as e:
             logger.error(f"КРИТИЧЕСКАЯ ОШИБКА СОХРАНЕНИЯ: {e}", exc_info=True)
 
