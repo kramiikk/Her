@@ -385,8 +385,8 @@ class BroadcastManager:
     NOTIFY_DELAY = 1
     NOTIFY_GROUP_SIZE = 30
     PERMISSION_CHECK_INTERVAL = 1800
-    GLOBAL_MINUTE_LIMITER = RateLimiter(20, 60)
-    GLOBAL_HOUR_LIMITER = RateLimiter(250, 3600)
+    GLOBAL_MINUTE_LIMITER = RateLimiter(30, 60)
+    GLOBAL_HOUR_LIMITER = RateLimiter(500, 3600)
     MAX_PERMISSION_RETRIES = 3
     _semaphore = asyncio.Semaphore(3)
 
@@ -423,7 +423,7 @@ class BroadcastManager:
                 try:
                     current_messages = code.messages.copy()
                     if not current_messages:
-                        await asyncio.sleep(300)
+                        await asyncio.sleep(30)
                         continue
                     try:
                         if not current_messages:
@@ -444,14 +444,14 @@ class BroadcastManager:
                             messages_to_send.extend(batch_messages)
                             deleted_messages.extend(deleted)
                         if not messages_to_send:
-                            await asyncio.sleep(300)
+                            await asyncio.sleep(30)
                             continue
                     except Exception as batch_error:
                         logger.error(
                             f"[{code_name}] Batch processing error: {batch_error}",
                             exc_info=True,
                         )
-                        await asyncio.sleep(300)
+                        await asyncio.sleep(30)
                         continue
                     if deleted_messages:
                         code.messages = [
@@ -468,7 +468,7 @@ class BroadcastManager:
 
                     if failed_chats:
                         await self._handle_failed_chats(code_name, failed_chats)
-                    await asyncio.sleep(60)
+                    await asyncio.sleep(30)
                     await self.save_config()
                 except asyncio.CancelledError:
                     break
@@ -477,12 +477,12 @@ class BroadcastManager:
                         f"[{code_name}] Error in broadcast loop: {str(e)}",
                         exc_info=True,
                     )
-                    await asyncio.sleep(300)
+                    await asyncio.sleep(30)
 
     async def _calculate_and_sleep(self, min_interval: int, max_interval: int):
         """Вычисляет время сна и засыпает."""
         sleep_time = random.uniform(min_interval * 60, max_interval * 60)
-        await asyncio.sleep(max(60, sleep_time - 15))
+        await asyncio.sleep(sleep_time - 15)
 
     async def _fetch_messages(self, msg_data: dict):
         """Получает сообщения с улучшенной обработкой ошибок"""
@@ -1119,7 +1119,6 @@ class BroadcastManager:
                 current_batch = chats[i : i + batch_size]
                 tasks = [send_to_chat(chat_id) for chat_id in current_batch]
                 await asyncio.gather(*tasks)
-                await self._calculate_and_sleep(code.interval[0], code.interval[1])
             if media_restricted_chats:
                 message = (
                     f"⚠️ Рассылка '{code_name}':\n"
