@@ -98,8 +98,7 @@ class SimpleCache:
             self._cleaning = True
             current_time = time.time()
             expired_keys = [
-                k for k, (ts, _) in self.cache.items()
-                if current_time - ts > self.ttl
+                k for k, (ts, _) in self.cache.items() if current_time - ts > self.ttl
             ]
             for key in expired_keys:
                 del self.cache[key]
@@ -443,7 +442,7 @@ class BroadcastManager:
                             messages_to_send[next_index % len(messages_to_send)]
                         ]
                     failed_chats = await self._send_messages_to_chats(
-                        code, code_name, messages_to_send
+                        code, messages_to_send
                     )
 
                     if failed_chats:
@@ -517,25 +516,33 @@ class BroadcastManager:
                 if has_all_messages:
                     cached_group = await self._message_cache.get(group_key)
                     # Улучшенная проверка даты
+
                     if isinstance(cached_group, list) and len(cached_group) > 0:
                         try:
-                            if not hasattr(cached_group[0], 'date'):
-                                logger.error(f"Группа {group_key} повреждена: нет атрибута date")
+                            if not hasattr(cached_group[0], "date"):
+                                logger.error(
+                                    f"Группа {group_key} повреждена: нет атрибута date"
+                                )
                                 await self._message_cache.set(group_key, None)
                                 return None
-                                
-                            if cached_group[0].date < datetime.now() - timedelta(days=14):
-                                logger.warning(f"Группа {group_key} устарела ({cached_group[0].date})")
+                            if cached_group[0].date < datetime.now() - timedelta(
+                                days=14
+                            ):
+                                logger.warning(
+                                    f"Группа {group_key} устарела ({cached_group[0].date})"
+                                )
                                 # Инвалидируем всю группу и отдельные сообщения
+
                                 for msg in cached_group:
                                     await self._message_cache.set(
-                                        (msg.chat_id, msg.id), 
-                                        None
+                                        (msg.chat_id, msg.id), None
                                     )
                                 await self._message_cache.set(group_key, None)
                                 return None
                         except Exception as e:
-                            logger.error(f"Ошибка проверки даты группы {group_key}: {str(e)}")
+                            logger.error(
+                                f"Ошибка проверки даты группы {group_key}: {str(e)}"
+                            )
                             return None
                     if cached_group:
                         logger.debug(f"[GROUP CACHE HIT] Найдена группа: {group_key}")
@@ -583,8 +590,6 @@ class BroadcastManager:
             return entity.id
         except Exception:
             return None
-        logger.info(f"Уровень прав для чата {chat_id}: {permission_level}")
-        return permission_level
 
     async def _handle_flood_wait(self, e: FloodWaitError, chat_id: int):
         wait_time = e.seconds + random.randint(5, 15)
@@ -982,12 +987,6 @@ class BroadcastManager:
                         raise ValueError("Сообщение не найдено")
                     # Проверка актуальности сообщения
 
-                    if isinstance(
-                        message, Message
-                    ) and message.date < datetime.now() - timedelta(days=14):
-                        logger.warning(f"Сообщение {msg_data} устарело")
-                        deleted_messages.append(msg_data)
-                        break
                     valid_messages.append(message)
                     break
                 except FloodWaitError as e:
@@ -1001,7 +1000,6 @@ class BroadcastManager:
 
     async def _send_message(
         self,
-        code_name: str,
         chat_id: int,
         msg: Union[Message, List[Message]],
         send_mode: str = "auto",
@@ -1051,7 +1049,7 @@ class BroadcastManager:
             logger.error(f"Неизвестная ошибка: {e}")
             await self._handle_temporary_error(chat_id)
 
-    async def _send_messages_to_chats(self, code, code_name, messages):
+    async def _send_messages_to_chats(self, code, messages):
         """Улучшенная отправка с приоритетом новых чатов"""
         active_chats = list(code.chats)
         random.shuffle(active_chats)
@@ -1074,7 +1072,7 @@ class BroadcastManager:
                     continue
                 # Отправка сообщения
 
-                result = await self._send_message(code_name, chat_id, messages)
+                result = await self._send_message(chat_id, messages)
 
                 if result:
                     success_count += 1
