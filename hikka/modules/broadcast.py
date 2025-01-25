@@ -63,20 +63,20 @@ class SimpleCache:
                 current_time = time.time()
                 expired = []
                 kept = []
-                
+
                 for k, (ts, _) in self.cache.items():
                     if current_time - ts > self.ttl:
                         expired.append(k)
                     else:
                         kept.append(k)
-                
                 for key in expired:
                     del self.cache[key]
-                    
                 logger.debug(
-                    f"Очистка кэша: удалено {len(expired)}, осталось {len(kept)}, "
-                    f"старейший: {min(kept, key=lambda x: self.cache[x][0]) if kept else 'нет'}"
+                    f"Очистка кэша: удалено {len(expired)}, осталось {len(kept)}"
                 )
+                if kept:
+                    oldest_key = min(kept, key=lambda x: self.cache[x][0])
+                    logger.debug(f"Старейший элемент: {oldest_key}")
             finally:
                 self._cleaning = False
 
@@ -160,6 +160,7 @@ class BroadcastMod(loader.Module):
     async def client_ready(self):
         """Initialization sequence"""
         self.manager = BroadcastManager(self._client, self.db, self._client.tg_id)
+        self.manager._message_cache = SimpleCache(ttl=14400, max_size=200)
         try:
             await asyncio.wait_for(self.manager._load_config(), timeout=30)
             await self.manager.start_cache_cleanup()
@@ -381,19 +382,17 @@ class BroadcastManager:
                     code.interval = code.original_interval
                 self.flood_wait_times = []
                 await self.save_config()
-
                 await self.client.send_message(
                     self.tg_id,
                     "🔄 12 часов без ошибок! Интервалы восстановлены до исходных",
                 )
             else:
                 for code_name, code in self.codes.items():
-                    new_min = max(
-                        code.original_interval[0], int(code.interval[0] * 0.85)
-                    )
-                    new_max = max(
-                        code.original_interval[1], int(code.interval[1] * 0.85)
-                    )
+
+                    new_min = max(1, int(code.interval[0] * 0.85))
+                    new_max = max(2, int(code.interval[1] * 0.85))
+
+                    new_max = max(new_max, new_min + 1)
 
                     if (new_min, new_max) != code.interval:
                         code.interval = (new_min, new_max)
@@ -413,7 +412,18 @@ class BroadcastManager:
             if cached:
                 logger.debug(f"Cache hit for {key}")
                 return cached
-                
+            # Сначала загружаем основное сообщение
+
+            message = await self.client.get_messages(
+                msg_data["chat_id"], ids=msg_data["message_id"]
+            )
+            if not message:
+                logger.error(f"Сообщение {msg_data} не найдено")
+                return None
+            # Кэшируем основное сообщение перед обработкой группы
+
+            await self._message_cache.set(key, message)
+
             if msg_data.get("grouped_ids"):
                 group_key = (
                     msg_data["chat_id"],
@@ -422,13 +432,15 @@ class BroadcastManager:
                 cached_group = await self._message_cache.get(group_key)
                 if cached_group:
                     logger.debug(f"[GROUP CACHE HIT] Найдена группа: {group_key}")
-                    return cached_group
-                grouped_messages = []
-                for msg_id in msg_data["grouped_ids"]:
+                    # Обновляем TTL для отдельных сообщений
 
+                    for msg in cached_group:
+                        await self._message_cache.set((msg.chat_id, msg.id), msg)
+                    return cached_group
+                grouped_messages = [message]  # Добавляем уже загруженное сообщение
+                for msg_id in msg_data["grouped_ids"]:
                     if msg_id == msg_data["message_id"]:
-                        grouped_messages.append(message)
-                        continue
+                        continue  # Уже добавлено
                     msg = await self.client.get_messages(
                         msg_data["chat_id"], ids=msg_id
                     )
@@ -851,6 +863,14 @@ class BroadcastManager:
 
         for msg_data in messages:
             try:
+                if (
+                    not isinstance(msg_data, dict)
+                    or "chat_id" not in msg_data
+                    or "message_id" not in msg_data
+                ):
+                    logger.error(f"Некорректная структура сообщения: {msg_data}")
+                    deleted_messages.append(msg_data)
+                    continue
                 message = await self._fetch_messages(msg_data)
                 if not message:
                     logger.error(f"Сообщение {msg_data} не найдено, удаление")
