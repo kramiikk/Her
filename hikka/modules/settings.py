@@ -109,10 +109,6 @@ class MessageEditor:
         self.state = 4
         await self.redraw()
 
-    def update_process(self, process):
-        pass
-
-
 class SudoMessageEditor(MessageEditor):
     # Let's just hope these are safe to parse
     PASS_REQ = "[sudo] password for"
