@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import random
-import sys
 import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
@@ -43,13 +42,6 @@ class RateLimiter:
                 now = time.time()
                 self.requests = [t for t in self.requests if now - t < self.time_window]
 
-    async def get_stats(self) -> float:
-        """Возвращает текущую статистику использования"""
-        async with self._lock:
-            now = time.time()
-            active_requests = [t for t in self.requests if now - t < self.time_window]
-            return round(len(active_requests) / self.max_requests * 100, 1)
-
 
 class SimpleCache:
     """Улучшенный кэш с более надежной очисткой"""
@@ -59,33 +51,7 @@ class SimpleCache:
         self.ttl = ttl
         self.max_size = max_size
         self._lock = asyncio.Lock()
-        self._last_cleanup = time.time()
         self._cleaning = False
-
-    def _estimate_memory_usage(self):
-        """Примерная оценка использования памяти"""
-        try:
-            return (
-                sum(
-                    sys.getsizeof(k) + sys.getsizeof(v[0]) + sys.getsizeof(v[1])
-                    for k, v in self.cache.items()
-                )
-                // 1024
-            )
-        except:
-            return "N/A"
-
-    def _cache_state_report(self):
-        """Генерирует подробный отчет о состоянии кэша"""
-        if not self.cache:
-            return "Кэш пуст"
-        current_time = time.time()
-        return "\n".join(
-            [
-                f"Ключ: {k} | Возраст: {current_time - v[0]:.1f}s | Тип: {type(v[1]).__name__}"
-                for k, v in self.cache.items()
-            ]
-        )
 
     async def clean_expired(self, force: bool = False):
         """Удаляет устаревшие записи из кэша"""
@@ -181,7 +147,9 @@ class BroadcastMod(loader.Module):
         try:
             await asyncio.wait_for(self.manager._load_config(), timeout=30)
             await self.manager.start_cache_cleanup()
-            self.manager.adaptive_interval_task = asyncio.create_task(self.manager.start_adaptive_interval_adjustment())
+            self.manager.adaptive_interval_task = asyncio.create_task(
+                self.manager.start_adaptive_interval_adjustment()
+            )
             self._initialized = True
         except Exception as e:
             logger.error(f"Initialization failed: {e}")
@@ -239,13 +207,7 @@ class Broadcast:
     batch_mode: bool = False
     _last_message_index: int = field(default=0, init=False)
     _active: bool = field(default=False, init=False)
-    original_interval: Tuple[int, int] = field(init=False)
-
-    def __post_init__(self):
-        if not hasattr(self, 'original_interval'):
-            self.original_interval = self.interval
-        elif self.original_interval[0] > self.interval[0] or self.original_interval[1] > self.interval[1]:
-            logger.warning("Original interval больше текущего!")
+    original_interval: Tuple[int, int] = (10, 13)
 
     def add_message(
         self, chat_id: int, message_id: int, grouped_ids: List[int] = None
@@ -267,19 +229,6 @@ class Broadcast:
                 return False
         self.messages.append(new_message)
         return True
-
-    @classmethod
-    def from_dict(cls, data: dict) -> "Broadcast":
-        instance = cls(
-            chats=set(data.get("chats", [])),
-            messages=[dict(msg) for msg in data.get("messages", [])],
-            interval=tuple(data["interval"]) if "interval" in data else (10, 13),
-            send_mode=data.get("send_mode", "auto"),
-            batch_mode=data.get("batch_mode", False),
-        )
-        instance._active = data.get("active", False)
-        instance.original_interval = tuple(data.get("original_interval", instance.interval))
-        return instance
 
     def get_next_message_index(self) -> int:
         """Возвращает индекс следующего сообщения для отправки"""
@@ -306,18 +255,6 @@ class Broadcast:
             if not (m["message_id"] == message_id and m["chat_id"] == chat_id)
         ]
         return len(self.messages) < initial_length
-
-    def to_dict(self) -> dict:
-        """Сериализует объект в словарь"""
-        return {
-            "chats": list(self.chats),
-            "messages": self.messages,
-            "interval": list(self.interval),
-            "send_mode": self.send_mode,
-            "batch_mode": self.batch_mode,
-            "active": self._active,
-            "original_interval": list(self.original_interval),
-        }
 
 
 class BroadcastManager:
@@ -351,7 +288,6 @@ class BroadcastManager:
         self.flood_wait_times = []
         self.adaptive_interval_task = None
 
-
     async def _broadcast_loop(self, code_name: str):
         """Main broadcast loop with enhanced debug logging"""
         async with self._semaphore:
@@ -366,7 +302,6 @@ class BroadcastManager:
 
                 if self.global_pause:
                     break
-
                 try:
                     if not self._active:
                         break
@@ -420,50 +355,40 @@ class BroadcastManager:
                     )
                     await asyncio.sleep(30)
 
-    async def _calculate_and_sleep(self, min_interval: int, max_interval: int):
-        """Вычисляет время сна и засыпает."""
-        sleep_time = random.uniform(min_interval * 60, max_interval * 60)
-        await asyncio.sleep(sleep_time - 15)
-
     async def _check_and_adjust_intervals(self):
         """Проверка условий для восстановления интервалов"""
         async with self._lock:
             if not self.flood_wait_times:
                 return
-
             time_since_last_flood = time.time() - self.last_flood_time
             reset_period = 43200
 
             if time_since_last_flood > reset_period:
                 for code in self.codes.values():
                     code.interval = code.original_interval
-
                 self.flood_wait_times = []
                 await self.save_config()
-                
+
                 await self.client.send_message(
                     self.tg_id,
-                    "🔄 12 часов без ошибок! Интервалы восстановлены до исходных"
+                    "🔄 12 часов без ошибок! Интервалы восстановлены до исходных",
                 )
             else:
                 for code_name, code in self.codes.items():
                     new_min = max(
-                        code.original_interval[0],
-                        int(code.interval[0] * 0.85)
+                        code.original_interval[0], int(code.interval[0] * 0.85)
                     )
                     new_max = max(
-                        code.original_interval[1],
-                        int(code.interval[1] * 0.85)
+                        code.original_interval[1], int(code.interval[1] * 0.85)
                     )
-                    
+
                     if (new_min, new_max) != code.interval:
                         code.interval = (new_min, new_max)
                         await self.client.send_message(
                             self.tg_id,
                             f"⏱ Автокоррекция интервалов для {code_name}: "
-                            f"{new_min}-{new_max} минут"
+                            f"{new_min}-{new_max} минут",
                         )
-                
                 await self.save_config()
 
     async def _fetch_messages(self, msg_data: dict):
@@ -545,30 +470,32 @@ class BroadcastManager:
             if self.global_pause:
                 return
             self.global_pause = True
-            avg_wait = sum(self.flood_wait_times[-3:])/len(self.flood_wait_times[-3:]) if self.flood_wait_times else 0
+            avg_wait = (
+                sum(self.flood_wait_times[-3:]) / len(self.flood_wait_times[-3:])
+                if self.flood_wait_times
+                else 0
+            )
             wait_time = max(e.seconds + 15, avg_wait * 1.5)
-            
+
             wait_time = min(wait_time, 3600)
-            
+
             self.global_pause = True
             self.last_flood_time = time.time()
             self.flood_wait_times.append(wait_time)
-            
+
             await self.client.send_message(
                 self.tg_id,
                 f"🚨 Обнаружен FloodWait {e.seconds}s! Все рассылки приостановлены на {wait_time}s",
             )
-            
+
             for task in self.broadcast_tasks.values():
                 if not task.done():
                     task.cancel()
-            
             await asyncio.sleep(wait_time)
-            
 
             self.global_pause = False
             await self._restart_all_broadcasts()
-            
+
             await self.client.send_message(
                 self.tg_id,
                 "✅ Глобальная пауза снята. Рассылки возобновлены",
@@ -577,9 +504,9 @@ class BroadcastManager:
             for code in self.codes.values():
                 code.interval = (
                     min(code.interval[0] * 2, 120),
-                    min(code.interval[1] * 2, 240)
+                    min(code.interval[1] * 2, 240),
                 )
-                if not hasattr(code, 'original_interval'):
+                if not hasattr(code, "original_interval"):
                     code.original_interval = code.interval
             await self.save_config()
 
@@ -892,28 +819,17 @@ class BroadcastManager:
         except Exception as e:
             logger.error(f"Ошибка обработки неудачных чатов для {code_name}: {e}")
 
-    async def _start_broadcast_task(self, code_name: str, code: Broadcast):
-        """Запускает или перезапускает задачу рассылки для кода."""
-        if (
-            code_name in self.broadcast_tasks
-            and not self.broadcast_tasks[code_name].done()
-        ):
-            self.broadcast_tasks[code_name].cancel()
-            try:
-                await self.broadcast_tasks[code_name]
-            except asyncio.CancelledError:
-                pass
-        self.broadcast_tasks[code_name] = asyncio.create_task(
-            self._broadcast_loop(code_name)
-        )
-
     async def _load_config(self):
         try:
             config = self.db.get("broadcast", "config", {})
-
             if not config or "codes" not in config:
                 return
             for code_name, code_data in config.get("codes", {}).items():
+                original_interval = tuple(
+                    code_data.get(
+                        "original_interval", code_data.get("interval", (10, 13))
+                    )
+                )
 
                 broadcast = Broadcast(
                     chats=set(code_data.get("chats", [])),
@@ -921,6 +837,7 @@ class BroadcastManager:
                     interval=tuple(code_data.get("interval", (10, 13))),
                     send_mode=code_data.get("send_mode", "auto"),
                     batch_mode=code_data.get("batch_mode", False),
+                    original_interval=original_interval,
                 )
                 broadcast._active = code_data.get("active", False)
 
@@ -929,7 +846,7 @@ class BroadcastManager:
                 if broadcast._active:
                     await self._start_broadcast_task(code_name, broadcast)
         except Exception as e:
-            logger.error(f"Ошибка загрузки конфигурации: {e}", exc_info=True)
+            logger.error(f"Ошибка загрузки: {e}", exc_info=True)
 
     async def _process_message_batch(self, code: Broadcast, messages: List[dict]):
         """Обработка пакета сообщений с принудительной перезагрузкой"""
@@ -961,6 +878,21 @@ class BroadcastManager:
                         self._broadcast_loop(code_name)
                     )
                     await asyncio.sleep(30)
+
+    async def _start_broadcast_task(self, code_name: str, code: Broadcast):
+        """Запускает или перезапускает задачу рассылки для кода."""
+        if (
+            code_name in self.broadcast_tasks
+            and not self.broadcast_tasks[code_name].done()
+        ):
+            self.broadcast_tasks[code_name].cancel()
+            try:
+                await self.broadcast_tasks[code_name]
+            except asyncio.CancelledError:
+                pass
+        self.broadcast_tasks[code_name] = asyncio.create_task(
+            self._broadcast_loop(code_name)
+        )
 
     async def _send_message(
         self,
@@ -1008,7 +940,6 @@ class BroadcastManager:
         except FloodWaitError as e:
             logger.error(f"Флуд-контроль: {e}")
             await self._handle_flood_wait(e, chat_id)
-            return False
         except (ChatWriteForbiddenError, UserBannedInChannelError) as e:
             logger.error(f"Доступ запрещен: {chat_id}")
             await self._handle_permanent_error(chat_id)
@@ -1112,7 +1043,6 @@ class BroadcastManager:
 
     async def save_config(self):
         try:
-
             config = {
                 "codes": {
                     name: {
@@ -1122,16 +1052,17 @@ class BroadcastManager:
                         "send_mode": code.send_mode,
                         "batch_mode": code.batch_mode,
                         "active": code._active,
+                        "original_interval": list(code.original_interval),
                     }
                     for name, code in self.codes.items()
                 },
-                "version": 2,
-                "timestamp": datetime.utcnow().timestamp(),
+                "version": 3,
+                "timestamp": datetime.now().timestamp(),
             }
 
             self.db.set("broadcast", "config", config)
         except Exception as e:
-            logger.error(f"КРИТИЧЕСКАЯ ОШИБКА СОХРАНЕНИЯ: {e}", exc_info=True)
+            logger.error(f"Ошибка сохранения: {e}", exc_info=True)
 
     async def start_adaptive_interval_adjustment(self):
         """Фоновая задача для адаптации интервалов"""
