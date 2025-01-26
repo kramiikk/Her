@@ -557,20 +557,17 @@ class CommandDispatcher:
     async def future_dispatcher(
         self,
         func: callable,
-        message: typing.Union[Message, events.Event],
+        message: Message,
         exception_handler: callable,
         *args,
     ):
-        user_id = None
-        if isinstance(message, Message):
-            user_id = message.sender_id
-        else:
-            user_id = getattr(message, "sender_id", None) or getattr(message, "user_id", None)
+        if not hasattr(message, "sender_id"):
+            logger.debug("Skipping message without sender_id")
+            return
 
-        if user_id is not None:
-            if not await self._handle_ratelimit_api(user_id):
-                logger.debug("Too many api requests, skipping")
-                return
+        if not await self._handle_ratelimit_api(message.sender_id):
+            logger.debug("Too many api requests, skipping")
+            return
 
         try:
             await func(message)
