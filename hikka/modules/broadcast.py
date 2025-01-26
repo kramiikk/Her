@@ -62,7 +62,8 @@ class SimpleCache:
                 return
             current_time = time.time()
             expired = [
-                k for k, (ts, _) in self.cache.items() if current_time - ts > self.ttl
+                k for k, (expire_time, _) in self.cache.items()
+                if current_time > expire_time
             ]
             for key in expired:
                 del self.cache[key]
@@ -73,17 +74,18 @@ class SimpleCache:
             if not entry:
                 logger.debug(f"[CACHE MISS] {key}")
                 return None
-            timestamp, value = entry
-            if time.time() - timestamp > self.ttl:
+            expire_time, value = entry
+            current_time = time.time()
+            if current_time > expire_time:
                 del self.cache[key]
                 return None
+            # Move to the end to mark as recently used
             del self.cache[key]
-            self.cache[key] = (timestamp, value)
-
+            self.cache[key] = (expire_time, value)
             logger.debug(f"[CACHE HIT] {key}")
             return value
 
-    async def set(self, key, value):
+    async def set(self, key, value, expire: Optional[int] = None):
         async with self._lock:
             if len(self.cache) >= self.max_size:
                 remove_count = max(5, len(self.cache) // 5)
@@ -91,7 +93,9 @@ class SimpleCache:
                     oldest_keys = list(self.cache.keys())[:remove_count]
                     for key_to_remove in oldest_keys:
                         del self.cache[key_to_remove]
-            self.cache[key] = (time.time(), value)
+            ttl = expire if expire is not None else self.ttl
+            expire_time = time.time() + ttl
+            self.cache[key] = (expire_time, value)
 
     async def start_auto_cleanup(self):
         """Запускает фоновую задачу для периодической очистки кэша"""
