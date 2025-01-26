@@ -557,7 +557,7 @@ class CommandDispatcher:
     async def future_dispatcher(
         self,
         func: callable,
-        message: typing.Union[Message, events.EventCommon],
+        message: typing.Union[Message, events.Event],
         exception_handler: callable,
         *args,
     ):
