@@ -18,7 +18,7 @@ from meval import meval
 from io import StringIO
 from hikkatl.tl.types import Message
 
-from .. import loader, main, utils
+from .. import loader, utils
 from .._internal import restart
 
 logger = logging.getLogger(__name__)
@@ -407,28 +407,6 @@ class CoreMod(loader.Module):
         del self.activecmds[hash_msg(message)]
 
     @loader.command()
-    async def terminatecmd(self, message):
-        if not message.is_reply:
-            await utils.answer(message, "<emoji document_id=5210952531676504517>🚫</emoji> <b>Reply to a terminal command to terminate it</b>")
-            return
-
-        if hash_msg(await message.get_reply_message()) in self.activecmds:
-            try:
-                if "-f" not in utils.get_args_raw(message):
-                    self.activecmds[
-                        hash_msg(await message.get_reply_message())
-                    ].terminate()
-                else:
-                    self.activecmds[hash_msg(await message.get_reply_message())].kill()
-            except Exception:
-                logger.exception("Killing process failed")
-                await utils.answer(message, "<emoji document_id=5210952531676504517>🚫</emoji> <b>Could not kill process</b>")
-            else:
-                await utils.answer(message, "<emoji document_id=5210952531676504517>🚫</emoji> <b>Killed</b>")
-        else:
-            await utils.answer(message, "<emoji document_id=5210952531676504517>🚫</emoji> <b>No command is running in that message</b>")
-
-    @loader.command()
     async def restart(self, message: Message):
         args = utils.get_args_raw(message)
         secure_boot = any(trigger in args for trigger in {"--secure-boot", "-sb"})
@@ -444,7 +422,7 @@ class CoreMod(loader.Module):
         handler.setLevel(logging.CRITICAL)
 
         current_client = message.client
-        await utils.answer(message, "☁️")
+        await utils.answer(message, "💎")
 
         for client in self.allclients:
             if client is not current_client:
