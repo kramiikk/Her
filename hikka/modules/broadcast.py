@@ -407,45 +407,33 @@ class BroadcastManager:
         try:
             is_group_message = msg_data.get("grouped_ids") and len(msg_data.get("grouped_ids", [])) > 0
 
+            # Обработка одиночных сообщений
             if not is_group_message:
                 key = (msg_data["chat_id"], msg_data["message_id"])
                 logger.debug(f"Fetching single message: {key}")
                 
+                # Проверка кэша
                 cached_message = await self._message_cache.get(key)
                 if cached_message:
                     logger.debug(f"Cache hit for single message {key}")
                     return cached_message
 
-                # Добавлены повторные попытки загрузки
-                max_retries = 3
-                retry_delay = 2
-                message = None
-                for attempt in range(max_retries):
-                    try:
-                        message = await self.client.get_messages(
-                            msg_data["chat_id"], 
-                            ids=msg_data["message_id"]
-                        )
-                        if message:
-                            logger.debug(f"Successfully fetched message on attempt {attempt+1}")
-                            break
-                        else:
-                            logger.warning(f"Attempt {attempt+1}: message not found")
-                    except Exception as e:
-                        logger.warning(f"Attempt {attempt+1} failed: {e}")
-                        if attempt < max_retries - 1:
-                            await asyncio.sleep(retry_delay)
+                # Однократная попытка загрузки
+                message = await self.client.get_messages(
+                    msg_data["chat_id"], 
+                    ids=msg_data["message_id"]
+                )
                 
                 if not message:
-                    logger.error(f"Одиночное сообщение не найдено после {max_retries} попыток: чат {msg_data['chat_id']}, ID {msg_data['message_id']}")
+                    logger.error(f"Message not found: {key}")
                     return None
 
                 await self._message_cache.set(key, message)
                 return message
             
+            # Обработка групповых сообщений
             else:
                 logger.debug(f"Fetching group messages: {msg_data}")
-                
                 all_message_ids = [msg_data["message_id"]] + msg_data.get("grouped_ids", [])
                 all_message_ids = list(set(all_message_ids))
                 
@@ -454,60 +442,46 @@ class BroadcastManager:
                     frozenset(sorted(all_message_ids))
                 )
                 
+                # Проверка кэша для группы
                 cached_group = await self._message_cache.get(group_cache_key)
                 if cached_group:
                     logger.debug(f"Cache hit for group {group_cache_key}")
                     return cached_group
 
+                # Загрузка всех сообщений группы
                 grouped_messages = []
                 for message_id in all_message_ids:
                     message_key = (msg_data["chat_id"], message_id)
                     
+                    # Проверка кэша для отдельного сообщения
                     cached_msg = await self._message_cache.get(message_key)
                     if cached_msg:
                         grouped_messages.append(cached_msg)
                         continue
-
-                    # Повторные попытки для групповых сообщений
-                    max_retries = 3
-                    retry_delay = 2
-                    message = None
-                    for attempt in range(max_retries):
-                        try:
-                            message = await self.client.get_messages(
-                                msg_data["chat_id"], 
-                                ids=message_id
-                            )
-                            if message:
-                                logger.debug(f"Successfully fetched group message {message_id} on attempt {attempt+1}")
-                                break
-                            else:
-                                logger.warning(f"Attempt {attempt+1}: group message {message_id} not found")
-                        except Exception as e:
-                            logger.warning(f"Attempt {attempt+1} failed for group message {message_id}: {e}")
-                            if attempt < max_retries - 1:
-                                await asyncio.sleep(retry_delay)
+                    
+                    # Однократная попытка загрузки
+                    message = await self.client.get_messages(
+                        msg_data["chat_id"], 
+                        ids=message_id
+                    )
                     
                     if not message:
-                        logger.error(f"Сообщение группы не найдено: чат {msg_data['chat_id']}, ID {message_id}")
-                        continue
-
+                        logger.error(f"Group message part not found: {message_key}")
+                        return None
+                    
                     await self._message_cache.set(message_key, message)
                     grouped_messages.append(message)
 
+                # Проверка целостности группы
                 if len(grouped_messages) != len(all_message_ids):
-                    logger.warning(f"Не все сообщения группы найдены. Найдено: {len(grouped_messages)}, Ожидалось: {len(all_message_ids)}")
+                    logger.error("Group integrity check failed")
                     return None
 
                 await self._message_cache.set(group_cache_key, grouped_messages)
-                
                 return grouped_messages
 
         except Exception as e:
-            logger.error(
-                f"Критическая ошибка получения сообщения/группы: {e}", 
-                exc_info=True
-            )
+            logger.error(f"Critical fetch error: {e}", exc_info=True)
             return None
 
     async def _get_chat_id(self, chat_identifier: str) -> Optional[int]:
