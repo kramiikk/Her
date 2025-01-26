@@ -39,7 +39,6 @@ from hikkatl.sessions import MemorySession, SQLiteSession
 from . import database, loader, utils, version
 from ._internal import restart
 from .dispatcher import CommandDispatcher
-from .secure import patcher
 from .tl_cache import CustomTelegramClient
 from .version import __version__
 
@@ -527,55 +526,56 @@ class Her:
         Reads session from disk and inits them
         :returns: `True` if at least one client started successfully
         """
-        for session in self.sessions.copy():
-            try:
-                client = CustomTelegramClient(
-                    session,
-                    self.api_token.ID,
-                    self.api_token.HASH,
-                    connection=self.conn,
-                    proxy=self.proxy,
-                    connection_retries=None,
-                    device_model=get_app_name(),
-                    system_version=generate_random_system_version(),
-                    app_version=".".join(map(str, __version__)) + " x64",
-                    lang_code="en",
-                    system_lang_code="en-US",
-                )
-                if session.server_address == "0.0.0.0":
-                    patcher.patch(client, session)
-                await client.connect()
-                client.phone = "Why do you need your own phone number?"
+        if not self.sessions:
+           return False
+        session = self.sessions[0]
+        try:
+             client = CustomTelegramClient(
+                        session,
+                        self.api_token.ID,
+                        self.api_token.HASH,
+                        connection=self.conn,
+                        proxy=self.proxy,
+                        connection_retries=None,
+                        device_model=get_app_name(),
+                        system_version=generate_random_system_version(),
+                        app_version=".".join(map(str, __version__)) + " x64",
+                        lang_code="en",
+                        system_lang_code="en-US",
+                    )
+             await client.connect()
+             client.phone = "Why do you need your own phone number?"
+             self.clients += [client]
+             return True
 
-                self.clients += [client]
-            except sqlite3.OperationalError:
-                logging.error(
-                    "Check that this is the only instance running. "
-                    "If that doesn't help, delete the file '%s'",
-                    session.filename,
-                )
-                continue
-            except (TypeError, AuthKeyDuplicatedError):
-                Path(session.filename).unlink(missing_ok=True)
-                self.sessions.remove(session)
-            except (ValueError, ApiIdInvalidError):
-                # Bad API hash/ID
-
-                run_config()
-                return False
-            except PhoneNumberInvalidError:
-                logging.error(
-                    "Phone number is incorrect. Use international format (+XX...) "
-                    "and don't put spaces in it."
-                )
-                self.sessions.remove(session)
-            except InteractiveAuthRequired:
-                logging.error(
-                    "Session %s was terminated and re-auth is required",
-                    session.filename,
-                )
-                self.sessions.remove(session)
-        return bool(self.sessions)
+        except sqlite3.OperationalError:
+             logging.error(
+                "Check that this is the only instance running. "
+                "If that doesn't help, delete the file '%s'",
+                session.filename,
+             )
+             return False
+        except (TypeError, AuthKeyDuplicatedError):
+              Path(session.filename).unlink(missing_ok=True)
+              self.sessions.remove(session)
+              return False
+        except (ValueError, ApiIdInvalidError):
+            run_config()
+            return False
+        except PhoneNumberInvalidError:
+            logging.error(
+                "Phone number is incorrect. Use international format (+XX...) "
+                "and don't put spaces in it."
+            )
+            self.sessions.remove(session)
+            return False
+        except InteractiveAuthRequired:
+            logging.error(
+                "Session %s was terminated and re-auth is required",
+                session.filename,
+            )
+            self.sessions.remove(session)
+            return False
 
     async def amain_wrapper(self, client: CustomTelegramClient):
         """Wrapper around amain"""

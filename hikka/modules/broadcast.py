@@ -79,7 +79,7 @@ class SimpleCache:
             if current_time > expire_time:
                 del self.cache[key]
                 return None
-            # Move to the end to mark as recently used
+
             del self.cache[key]
             self.cache[key] = (expire_time, value)
             logger.debug(f"[CACHE HIT] {key}")
