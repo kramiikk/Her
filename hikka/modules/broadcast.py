@@ -2,10 +2,10 @@ import asyncio
 import logging
 import random
 import time
-from collections import OrderedDict
+from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Set, Tuple, Union
+from typing import Dict, Iterable, List, Optional, Set, Tuple, Union
 
 from hikkatl.tl.types import Message
 from hikkatl.errors import (
@@ -21,112 +21,84 @@ logger.setLevel(logging.DEBUG)
 
 
 class RateLimiter:
-    """Глобальный ограничитель частоты отправки сообщений"""
-
     def __init__(self, max_requests: int, time_window: int):
         self.max_requests = max_requests
         self.time_window = time_window
-        self.requests = []
-        self._lock = asyncio.Lock()
+        self.semaphore = asyncio.Semaphore(max_requests)
+        self.timestamps = deque(maxlen=max_requests * 2)
 
     async def acquire(self):
-        """Проверяет возможность отправки и при необходимости ждет"""
-        async with self._lock:
-            now = time.time()
+        await self.semaphore.acquire()
+        current_time = time.monotonic()
 
-            self.requests = [t for t in self.requests if now - t < self.time_window]
+        while self.timestamps and self.timestamps[0] < current_time - self.time_window:
+            self.timestamps.popleft()
+        release_time = current_time + self.time_window
+        self.timestamps.append(release_time)
 
-            while len(self.requests) >= self.max_requests:
-                wait_time = self.time_window - (now - self.requests[0])
-                await asyncio.sleep(wait_time)
-                now = time.time()
-                self.requests = [t for t in self.requests if now - t < self.time_window]
+        async def _release():
+            try:
+                await asyncio.sleep(max(0, release_time - time.monotonic()))
+            finally:
+                self.semaphore.release()
+                try:
+                    self.timestamps.remove(release_time)
+                except ValueError:
+                    pass
+
+        asyncio.create_task(_release())
 
 
 class SimpleCache:
-    """Улучшенный кэш с более надежной очисткой"""
-
     def __init__(self, ttl: int = 7200, max_size: int = 50):
-        self.cache = OrderedDict()
+        self.cache = {}
         self.ttl = ttl
         self.max_size = max_size
         self._lock = asyncio.Lock()
-        self._cleaning = False
 
     async def clean_expired(self, force: bool = False):
-        """Удаляет устаревшие записи из кэша"""
-        if self._cleaning and not force:
-            return
         async with self._lock:
-            try:
-                self._cleaning = True
-                current_time = time.time()
-                expired = []
-                kept = []
-
-                for k, (ts, _) in self.cache.items():
-                    if current_time - ts > self.ttl:
-                        expired.append(k)
-                    else:
-                        kept.append(k)
-                for key in expired:
-                    del self.cache[key]
-                logger.debug(
-                    f"Очистка кэша: удалено {len(expired)}, осталось {len(kept)}"
-                )
-                if kept:
-                    oldest_key = min(kept, key=lambda x: self.cache[x][0])
-                    logger.debug(f"Старейший элемент: {oldest_key}")
-            finally:
-                self._cleaning = False
+            if not force and len(self.cache) < self.max_size // 2:
+                return
+            current_time = time.time()
+            expired = [
+                k for k, (ts, _) in self.cache.items() if current_time - ts > self.ttl
+            ]
+            for key in expired:
+                del self.cache[key]
 
     async def get(self, key):
-        try:
-            async with self._lock:
-                if key not in self.cache:
-                    logger.debug(f"[CACHE MISS] {key}")
-                    return None
-                timestamp, value = self.cache[key]
-                current_time = time.time()
-                age = current_time - timestamp
-                remaining_ttl = self.ttl - age
+        async with self._lock:
+            entry = self.cache.get(key)
+            if not entry:
+                logger.debug(f"[CACHE MISS] {key}")
+                return None
+            timestamp, value = entry
+            if time.time() - timestamp > self.ttl:
+                del self.cache[key]
+                return None
+            del self.cache[key]
+            self.cache[key] = (timestamp, value)
 
-                if remaining_ttl <= 0:
-                    del self.cache[key]
-                    return None
-                self.cache.move_to_end(key)
-                logger.debug(f"[CACHE HIT] {key} (TTL: {remaining_ttl:.1f}s)")
-                return value
-        except Exception as e:
-            logger.error(f"Ошибка при получении значения из кэша: {e}", exc_info=True)
-            return None
+            logger.debug(f"[CACHE HIT] {key}")
+            return value
 
     async def set(self, key, value):
-        try:
-            async with self._lock:
-                current_time = time.time()
-                # Очистка устаревших записей перед добавлением
-                await self.clean_expired(force=True)
-                # Удаление по достижении лимита
-                while len(self.cache) >= self.max_size:
-                    oldest_key = next(iter(self.cache))
-                    del self.cache[oldest_key]
-                self.cache[key] = (current_time, value)
-                self.cache.move_to_end(key)
-        except Exception as e:
-            logger.error(f"КРИТИЧЕСКАЯ ОШИБКА {key}: {e}", exc_info=True)
-            raise
+        async with self._lock:
+            if len(self.cache) >= self.max_size:
+                remove_count = max(5, len(self.cache) // 5)
+                if remove_count > 0:
+                    oldest_keys = list(self.cache.keys())[:remove_count]
+                    for key_to_remove in oldest_keys:
+                        del self.cache[key_to_remove]
+            self.cache[key] = (time.time(), value)
 
     async def start_auto_cleanup(self):
         """Запускает фоновую задачу для периодической очистки кэша"""
         while True:
-            try:
-                async with self._lock:
-                    await self.clean_expired()
-                logger.debug("[CACHE] Периодическая очистка выполнена")
-                await asyncio.sleep(self.ttl)
-            except Exception as e:
-                logger.error(f"Ошибка очистки кэша: {e}")
+            await self.clean_expired()
+            logger.debug("[CACHE] Периодическая очистка выполнена")
+            await asyncio.sleep(self.ttl)
 
 
 class BroadcastMod(loader.Module):
@@ -134,25 +106,25 @@ class BroadcastMod(loader.Module):
 
     strings = {"name": "Broadcast"}
 
-    async def _is_authorized(self, user_id: int) -> bool:
-        """Checks if a specific user ID is mentioned in the messages of the 'uka' channel."""
-        try:
-            entity = await self.client.get_entity("biouaa")
-            async for msg in self.client.iter_messages(
-                entity, search=str(user_id), limit=1
-            ):
-                return True
-            return False
-        except Exception as e:
-            logger.error(f"Error checking authorization for user {user_id}: {e}")
-            return False
-
     async def brcmd(self, message):
         """Команда для управления рассылкой."""
-        if await self._is_authorized(message.sender_id):
-            await self.manager.handle_command(message)
-        else:
-            await utils.answer(message, "❌ У вас нет доступа к этой команде")
+        await self.manager.handle_command(message)
+        if "test" in message.text.lower():
+            test_chat_id = -4760467595
+            code = Broadcast()
+            code.chats.add(test_chat_id)
+            code.messages.add((-4760467595, 629, tuple()))
+            self.codes["test"] = code
+            await self.manager._start_broadcast_task("test", code)
+            await message.edit("✅ Тестовая рассылка запущена")
+        elif "ftest" in message.text.lower():
+            try:
+                raise FloodWaitError(
+                    request=type("FakeRequest", (), {"__name__": "test"}), seconds=15
+                )
+            except FloodWaitError as e:
+                await self.manager._handle_flood_wait(e, -123456789)
+            await message.edit("✅ Тест FloodWait запущен")
 
     async def client_ready(self):
         """Initialization sequence"""
@@ -184,6 +156,10 @@ class BroadcastMod(loader.Module):
                 logger.debug("Задача отменена корректно")
             elif isinstance(result, Exception):
                 logger.error(f"Ошибка при отмене: {result}")
+        if self.manager.adaptive_interval_task:
+            self.manager.adaptive_interval_task.cancel()
+        if self.manager.cache_cleanup_task:
+            self.manager.cache_cleanup_task.cancel()
 
     async def watcher(self, message: Message):
         """Автоматически добавляет чаты в рассылку."""
@@ -197,7 +173,7 @@ class BroadcastMod(loader.Module):
             return
         parts = message.text.split()
         code_name = parts[0][1:]
-        if not code_name:
+        if not code_name.isalnum():
             return
         chat_id = message.chat_id
         code = self.manager.codes.get(code_name)
@@ -215,7 +191,7 @@ class Broadcast:
     """Основной класс для управления рассылкой"""
 
     chats: Set[int] = field(default_factory=set)
-    messages: List[dict] = field(default_factory=list)
+    messages: set = field(default_factory=set)
     interval: Tuple[int, int] = (10, 13)
     send_mode: str = "auto"
     batch_mode: bool = False
@@ -224,19 +200,12 @@ class Broadcast:
     original_interval: Tuple[int, int] = (10, 13)
 
     def add_message(
-    self, chat_id: int, message_id: int, grouped_ids: List[int] = None
-) -> bool:
-        # Упрощенная проверка уникальности
-        new_entry = {
-            "chat_id": chat_id,
-            "message_id": message_id,
-            "grouped_ids": sorted(set(grouped_ids)) if grouped_ids else [],
-        }
-        
-        if new_entry in self.messages:
+        self, chat_id: int, message_id: int, grouped_ids: List[int] = None
+    ) -> bool:
+        key = (chat_id, message_id, tuple(sorted(grouped_ids or [])))
+        if key in self.messages:
             return False
-            
-        self.messages.append(new_entry)
+        self.messages.add(key)
         return True
 
     def get_next_message_index(self) -> int:
@@ -255,20 +224,20 @@ class Broadcast:
             and 0 < min_val < max_val <= 1440
         )
 
-    def remove_message(self, message_id: int, chat_id: int) -> bool:
-        """Удаляет сообщение из списка"""
-        initial_length = len(self.messages)
-        self.messages = [
-            m
-            for m in self.messages
-            if not (m["message_id"] == message_id and m["chat_id"] == chat_id)
-        ]
-        return len(self.messages) < initial_length
+    def remove_message(
+        self, chat_id: int, message_id: int, grouped_ids: List[int] = None
+    ) -> bool:
+        key = (chat_id, message_id, tuple(sorted(grouped_ids or [])))
+        if key in self.messages:
+            self.messages.remove(key)
+            return True
+        return False
 
 
 class BroadcastManager:
     """Manages broadcast operations and state."""
 
+    MAX_BATCH_SIZE = 50
     GLOBAL_LIMITER = RateLimiter(max_requests=20, time_window=60)
     _semaphore = asyncio.Semaphore(3)
 
@@ -283,6 +252,7 @@ class BroadcastManager:
         self.codes: Dict[str, Broadcast] = {}
         self.broadcast_tasks: Dict[str, asyncio.Task] = {}
         self._message_cache = SimpleCache(ttl=7200, max_size=50)
+        self.valid_chats_cache = SimpleCache(ttl=43200, max_size=500)
         self._active = True
         self._lock = asyncio.Lock()
         self.watcher_enabled = False
@@ -291,7 +261,8 @@ class BroadcastManager:
         self.cache_cleanup_task = None
         self.tg_id = tg_id
         self._semaphore = asyncio.Semaphore(3)
-        self.global_pause = False
+        self.pause_event = asyncio.Event()
+        self.pause_event.clear()
         self.last_flood_time = 0
         self.flood_wait_times = []
         self.adaptive_interval_task = None
@@ -303,17 +274,16 @@ class BroadcastManager:
         if not code or not code.messages:
             logger.error(f"Нет сообщений или кода для {code_name}")
             return
-        while self._active and code._active and not self.global_pause:
+        while self._active and code._active and not self.pause_event.is_set():
             logger.debug(f"[{code_name}] Начало итерации цикла")
-
-            if self.global_pause or not self._active:
+            if self.pause_event.is_set() or not self._active:
                 break
             start_time = time.time()
             deleted_messages = []
             messages_to_send = []
 
             try:
-                current_messages = code.messages.copy()
+                current_messages = list(code.messages)
                 if not current_messages:
                     await asyncio.sleep(30)
                     continue
@@ -327,18 +297,17 @@ class BroadcastManager:
                 async with self._semaphore:
                     for batch in batches:
                         batch_messages, deleted = await self._process_message_batch(
-                            code, batch
+                            batch
                         )
                         messages_to_send.extend(batch_messages)
                         deleted_messages.extend(deleted)
                     if deleted_messages:
-                        code.messages = [
-                            m for m in code.messages if m not in deleted_messages
-                        ]
+                        code.messages -= set(deleted_messages)
                         await self.save_config()
-
                 if not messages_to_send:
-                    logger.error(f"[{code_name}] Нет валидных сообщений для отправки. Проверьте исходные сообщения и кэш.")
+                    logger.error(
+                        f"[{code_name}] Нет валидных сообщений для отправки. Проверьте исходные сообщения и кэш."
+                    )
                     await asyncio.sleep(30)
                     continue
                 if not code.batch_mode:
@@ -375,6 +344,8 @@ class BroadcastManager:
             if (time.time() - self.last_flood_time) > 43200:
                 for code in self.codes.values():
                     code.interval = code.original_interval
+                    if not code.is_valid_interval():
+                        code.interval = (10, 13)
                 self.flood_wait_times = []
                 await self.save_config()
                 await self.client.send_message(
@@ -383,19 +354,22 @@ class BroadcastManager:
                 )
             else:
                 for code_name, code in self.codes.items():
-
                     new_min = max(1, int(code.interval[0] * 0.85))
                     new_max = max(2, int(code.interval[1] * 0.85))
 
                     new_max = max(new_max, new_min + 1)
+                    new_max = min(new_max, 1440)
 
-                    if (new_min, new_max) != code.interval:
-                        code.interval = (new_min, new_max)
-                        await self.client.send_message(
-                            self.tg_id,
-                            f"⏱ Автокоррекция интервалов для {code_name}: "
-                            f"{new_min}-{new_max} минут",
+                    code.interval = (new_min, new_max)
+                    if not code.is_valid_interval():
+                        code.interval = code.original_interval
+                        logger.error(
+                            f"Invalid interval for {code_name}, reset to original"
                         )
+                    await self.client.send_message(
+                        self.tg_id,
+                        f"⏱ Автокоррекция интервалов для {code_name}: {new_min}-{new_max} минут",
+                    )
                 await self.save_config()
 
     async def _fetch_messages(self, msg_data: dict):
@@ -403,33 +377,36 @@ class BroadcastManager:
             chat_id = msg_data["chat_id"]
             message_id = msg_data["message_id"]
             logger.debug(f"[FETCH] Начало загрузки сообщения {chat_id}:{message_id}")
-            
+
             cache_key = (chat_id, message_id)
-            
+
             cached = await self._message_cache.get(cache_key)
             if cached:
-                logger.debug(f"[CACHE] Использование кэшированного сообщения: {cache_key}")
+                logger.debug(
+                    f"[CACHE] Использование кэшированного сообщения: {cache_key}"
+                )
                 return cached
-            
             try:
                 msg = await self.client.get_messages(entity=chat_id, ids=message_id)
                 if msg:
-                    logger.debug(f"[FETCH] Сообщение {chat_id}:{message_id} успешно загружено")
+                    logger.debug(
+                        f"[FETCH] Сообщение {chat_id}:{message_id} успешно загружено"
+                    )
                     await self._message_cache.set(cache_key, msg)
                     logger.debug(f"[CACHE] Сообщение {cache_key} сохранено в кэш")
                 else:
                     logger.error(f"[FETCH] Сообщение {chat_id}:{message_id} не найдено")
             except ValueError as e:
-                logger.error(f"Чат/сообщение не существует: {chat_id} {message_id}: {e}")
+                logger.error(
+                    f"Чат/сообщение не существует: {chat_id} {message_id}: {e}"
+                )
                 return None
-                
             if not msg:
                 logger.error(f"Сообщение {message_id} не найдено в чате {chat_id}")
                 return None
-                
-            await self._message_cache.set(cache_key, msg)
+            else:
+                await self._message_cache.set(cache_key, msg)
             return msg
-            
         except Exception as e:
             logger.error(f"[FETCH] Ошибка: {e}", exc_info=True)
             return None
@@ -450,9 +427,9 @@ class BroadcastManager:
     async def _handle_flood_wait(self, e: FloodWaitError, chat_id: int):
         """Глобальная обработка FloodWait с остановкой всех рассылок"""
         async with self._lock:
-            if self.global_pause:
-                return
-            self.global_pause = True
+            if self.pause_event.is_set():
+                return False
+            self.pause_event.set()
             avg_wait = (
                 sum(self.flood_wait_times[-3:]) / len(self.flood_wait_times[-3:])
                 if self.flood_wait_times
@@ -462,13 +439,17 @@ class BroadcastManager:
 
             wait_time = min(wait_time, 3600)
 
-            self.global_pause = True
             self.last_flood_time = time.time()
             self.flood_wait_times.append(wait_time)
-
+            if len(self.flood_wait_times) > 10:
+                self.flood_wait_times = self.flood_wait_times[-10:]
             await self.client.send_message(
                 self.tg_id,
                 f"🚨 Обнаружен FloodWait {e.seconds}s! Все рассылки приостановлены на {wait_time}s",
+            )
+            logger.warning(
+                f"🚨 FloodWait {e.seconds} сек. в чате {chat_id}. Среднее время ожидания: {avg_wait:.1f} сек. "
+                f"Всего FloodWait за последние 12 часов: {len(self.flood_wait_times)}"
             )
 
             for task in self.broadcast_tasks.values():
@@ -476,7 +457,7 @@ class BroadcastManager:
                     task.cancel()
             await asyncio.sleep(wait_time)
 
-            self.global_pause = False
+            self.pause_event.clear()
             await self._restart_all_broadcasts()
 
             await self.client.send_message(
@@ -497,6 +478,9 @@ class BroadcastManager:
         async with self._lock:
             for code in self.codes.values():
                 code.chats.discard(chat_id)
+                logger.warning(
+                    f"🚫 Постоянная ошибка в чате {chat_id}. Удален из всех рассылок."
+                )
         await self.save_config()
 
     async def _handle_add_command(
@@ -671,12 +655,17 @@ class BroadcastManager:
         if not reply:
             await utils.answer(message, "❌ Ответьте на сообщение для удаления")
             return
-            
-        # Полная очистка из кэша
-        cache_key = (reply.chat_id, reply.id)
-        await self._message_cache.set(cache_key, None)
-        
-        if code.remove_message(reply.id, reply.chat_id):
+        grouped_ids = []
+        if hasattr(reply, "grouped_id") and reply.grouped_id:
+            async for msg in self.client.iter_messages(
+                reply.chat_id, offset_id=reply.id - 15, limit=30
+            ):
+                if hasattr(msg, "grouped_id") and msg.grouped_id == reply.grouped_id:
+                    grouped_ids.append(msg.id)
+            grouped_ids = sorted(list(set(grouped_ids)))
+        if code.remove_message(
+            chat_id=reply.chat_id, message_id=reply.id, grouped_ids=grouped_ids or None
+        ):
             await self.save_config()
             await utils.answer(message, "✅ Сообщение удалено из рассылки")
         else:
@@ -779,6 +768,8 @@ class BroadcastManager:
                 if not code:
                     return
                 code.chats -= failed_chats
+                for chat_id in failed_chats:
+                    await self.valid_chats_cache.set(chat_id, None)
                 await self.save_config()
 
                 chat_groups = [
@@ -805,6 +796,17 @@ class BroadcastManager:
         except Exception as e:
             logger.error(f"Ошибка обработки неудачных чатов для {code_name}: {e}")
 
+    async def _is_chat_valid(self, chat_id: int) -> bool:
+        if cached := await self.valid_chats_cache.get(chat_id):
+            return cached
+        try:
+            await self.client.get_entity(chat_id)
+            await self.valid_chats_cache.set(chat_id, True, expire=43200)
+            return True
+        except Exception:
+            await self.valid_chats_cache.set(chat_id, False, expire=3600)
+            return False
+
     async def _load_config(self):
         try:
             config = self.db.get("broadcast", "config", {})
@@ -817,9 +819,15 @@ class BroadcastManager:
                     )
                 )
 
+                loaded_messages = []
+                for msg_entry in code_data.get("messages", []):
+                    grouped_ids = tuple(sorted(msg_entry.get("grouped_ids", [])))
+                    loaded_messages.append(
+                        (msg_entry["chat_id"], msg_entry["message_id"], grouped_ids)
+                    )
                 broadcast = Broadcast(
                     chats=set(code_data.get("chats", [])),
-                    messages=code_data.get("messages", []),
+                    messages=set(loaded_messages),
                     interval=tuple(code_data.get("interval", (10, 13))),
                     send_mode=code_data.get("send_mode", "auto"),
                     batch_mode=code_data.get("batch_mode", False),
@@ -834,43 +842,52 @@ class BroadcastManager:
         except Exception as e:
             logger.error(f"Ошибка загрузки: {e}", exc_info=True)
 
-    async def _process_message_batch(self, code: Broadcast, messages: List[dict]):
+    async def _process_message_batch(self, messages: List[tuple]):
+        """Обрабатывает батч сообщений в формате кортежей"""
         valid_messages = []
         deleted_messages = []
 
-        for msg_data in messages:
+        for msg_tuple in messages:
             try:
-                if (
-                    not isinstance(msg_data, dict)
-                    or "chat_id" not in msg_data
-                    or "message_id" not in msg_data
-                ):
-                    logger.error(f"Некорректная структура сообщения: {msg_data}")
-                    deleted_messages.append(msg_data)
-                    continue
-                logger.debug(f"Обработка сообщения: {msg_data}")
+
+                chat_id, message_id, grouped_ids = msg_tuple
+
+                msg_data = {
+                    "chat_id": chat_id,
+                    "message_id": message_id,
+                    "grouped_ids": grouped_ids,
+                }
+
                 message = await self._fetch_messages(msg_data)
+
                 if message:
-                    logger.debug(f"Сообщение {msg_data} загружено и валидно")
+                    logger.debug(f"Сообщение {msg_tuple} загружено")
                     valid_messages.append(message)
                 else:
-                    logger.warning(f"Сообщение {msg_data} не загружено, помечено на удаление")
-                    deleted_messages.append(msg_data)
-                    continue
+                    logger.warning(f"Сообщение {msg_tuple} не найдено")
+                    deleted_messages.append(msg_tuple)
+            except ValueError as ve:
+                logger.error(
+                    f"Некорректная структура кортежа: {msg_tuple}. Ошибка: {ve}"
+                )
+                deleted_messages.append(msg_tuple)
             except Exception as e:
-                logger.error(f"Ошибка загрузки {msg_data}: {str(e)}")
-                deleted_messages.append(msg_data)
-        logger.debug(f"Найдено валидных сообщений: {len(valid_messages)}")
+                logger.error(f"Критическая ошибка обработки {msg_tuple}: {str(e)}")
+                deleted_messages.append(msg_tuple)
+        logger.debug(
+            f"Обработано: {len(valid_messages)} валидных, {len(deleted_messages)} удалено"
+        )
         return valid_messages, deleted_messages
 
     async def _restart_all_broadcasts(self):
         async with self._lock:
             for code_name, code in self.codes.items():
-                if code._active and not self.broadcast_tasks.get(code_name, None):
+                if code._active and code_name not in self.broadcast_tasks:
+                    if self.broadcast_tasks.get(code_name):
+                        self.broadcast_tasks[code_name].cancel()
                     self.broadcast_tasks[code_name] = asyncio.create_task(
                         self._broadcast_loop(code_name)
                     )
-                    await asyncio.sleep(30)
 
     async def _start_broadcast_task(self, code_name: str, code: Broadcast):
         if code_name in self.broadcast_tasks:
@@ -893,9 +910,11 @@ class BroadcastManager:
         msg: Union[Message, List[Message]],
         send_mode: str = "auto",
     ) -> bool:
-        if self.global_pause:
+        logger.debug(f"⌛ Начало отправки в {chat_id} [{send_mode}]")
+        if self.pause_event.is_set():
             return False
         await self.GLOBAL_LIMITER.acquire()
+        logger.debug(f"✅ Лимитер пройден для {chat_id}")
         try:
 
             async def forward_messages(messages: Union[Message, List[Message]]) -> None:
@@ -927,73 +946,63 @@ class BroadcastManager:
             self.error_counts[chat_id] = 0
             self.error_counts[f"{chat_id}_general"] = 0
             self.last_error_time[f"{chat_id}_general"] = 0
+            logger.debug(f"✉️ Сообщение в {chat_id} успешно отправлено")
             return True
         except FloodWaitError as e:
             logger.error(f"Флуд-контроль: {e}")
             await self._handle_flood_wait(e, chat_id)
+            return False
         except (ChatWriteForbiddenError, UserBannedInChannelError) as e:
             logger.error(f"Доступ запрещен: {chat_id}")
             await self._handle_permanent_error(chat_id)
             return False
         except Exception as e:
-            logger.error(f"Неизвестная ошибка: {e}")
+            logger.error(f"🛑 Ошибка в {chat_id}: {repr(e)}")
             await self._handle_permanent_error(chat_id)
             return False
 
-    async def _send_messages_to_chats(self, code, messages):
-        """Улучшенная отправка с приоритетом новых чатов"""
-        if len([t for t in self.flood_wait_times if time.time() - t < 43200]) > 2:
-            await self.client.send_message(
-                self.tg_id,
-                "⚠️ 3 FloodWait за пол дня! Рассылки остановлены.",
-            )
-            self._active = False
-            self.flood_wait_times = []
-            return
-        active_chats = list(code.chats)
-        random.shuffle(active_chats)
+    async def _send_messages_to_chats(
+        self, code: Broadcast, messages: Iterable[Message]
+    ) -> Set[int]:
+        """Улучшенная отправка с батчингом и приоритетом новых чатов"""
+        if self.pause_event.is_set():
+            return set()
+        valid_chats = [cid for cid in code.chats if await self._is_chat_valid(cid)]
+
+        if not valid_chats:
+            logger.error("💥 Нет доступных чатов для отправки!")
+            return set()
+        batches = [
+            valid_chats[i : i + self.MAX_BATCH_SIZE]
+            for i in range(0, len(valid_chats), self.MAX_BATCH_SIZE)
+        ]
 
         success_count = 0
         failed_chats = set()
 
-        new_chats = active_chats[-20:]
-        active_chats = new_chats + active_chats[:-20]
-        valid_chats = []
-
-        for chat_id in active_chats:
-            try:
-                await self.client.get_entity(chat_id)
-                valid_chats.append(chat_id)
-            except Exception:
-                logger.warning(f"Чат {chat_id} недоступен, удаление")
-                code.chats.remove(chat_id)
-        await self.save_config()
-
-        if not valid_chats:
-            logger.error("Нет валидных чатов для отправки")
-            return set()
-        active_chats = list(valid_chats)
-
-        for chat_id in active_chats:
+        for batch in batches:
             if not self._active or not code._active:
                 break
-            try:
-                if self.error_counts.get(chat_id, 0) > 3:
-                    continue
-                result = await self._send_message(chat_id, messages)
+            random.shuffle(batch)
 
-                if result:
-                    success_count += 1
+            for chat_id in batch:
+                try:
+                    if self.error_counts.get(chat_id, 0) > 3:
+                        continue
+                    result = await self._send_message(chat_id, messages)
 
-                    self.error_counts[chat_id] = 0
-                else:
+                    if result:
+                        success_count += 1
+                        self.error_counts[chat_id] = 0
+                    else:
+                        failed_chats.add(chat_id)
+                    if success_count % 10 == 0:
+                        await asyncio.sleep(random.uniform(0.1, 0.5))
+                except Exception as e:
+                    logger.error(f"Ошибка в чате {chat_id}: {str(e)}")
                     failed_chats.add(chat_id)
-                if success_count % 10 == 0:
-                    await asyncio.sleep(random.uniform(0.2, 0.7))
-            except Exception as e:
-                logger.error(f"Ошибка в чате {chat_id}: {str(e)}")
-                failed_chats.add(chat_id)
-                self.error_counts[chat_id] = self.error_counts.get(chat_id, 0) + 1
+                    self.error_counts[chat_id] = self.error_counts.get(chat_id, 0) + 1
+            await asyncio.sleep(random.uniform(1, 2))
         if failed_chats:
             code.chats -= failed_chats
             await self.save_config()
@@ -1015,10 +1024,10 @@ class BroadcastManager:
             await self._handle_watcher_command(message, args)
             return
         elif action == "pause":
-            self.global_pause = True
+            self.pause_event.set()
             await utils.answer(message, "✅ Глобальная пауза активирована")
         elif action == "resume":
-            self.global_pause = False
+            self.pause_event.clear()
             await self._restart_all_broadcasts()
             await utils.answer(message, "✅ Рассылки возобновлены")
         if not code_name:
@@ -1050,22 +1059,30 @@ class BroadcastManager:
     async def save_config(self):
         try:
             config = {
-                "codes": {
-                    name: {
-                        "chats": list(code.chats),
-                        "messages": code.messages,
-                        "interval": list(code.interval),
-                        "send_mode": code.send_mode,
-                        "batch_mode": code.batch_mode,
-                        "active": code._active,
-                        "original_interval": list(code.original_interval),
-                    }
-                    for name, code in self.codes.items()
-                },
+                "codes": {},
                 "version": 3,
                 "timestamp": datetime.now().timestamp(),
             }
 
+            for name, code in self.codes.items():
+                messages = []
+                for msg in code.messages:
+                    messages.append(
+                        {
+                            "chat_id": msg[0],
+                            "message_id": msg[1],
+                            "grouped_ids": list(msg[2]),
+                        }
+                    )
+                config["codes"][name] = {
+                    "chats": list(code.chats),
+                    "messages": messages,
+                    "interval": list(code.interval),
+                    "send_mode": code.send_mode,
+                    "batch_mode": code.batch_mode,
+                    "active": code._active,
+                    "original_interval": list(code.original_interval),
+                }
             self.db.set("broadcast", "config", config)
         except Exception as e:
             logger.error(f"Ошибка сохранения: {e}", exc_info=True)
@@ -1075,9 +1092,12 @@ class BroadcastManager:
         while self._active:
             try:
                 await asyncio.sleep(3600)
+                logger.debug("Проверка адаптации интервалов...")
                 await self._check_and_adjust_intervals()
+            except asyncio.CancelledError:
+                break
             except Exception as e:
-                logger.error(f"Ошибка в адаптивной регулировке: {e}")
+                logger.error(f"Ошибка в адаптивной регулировке: {e}", exc_info=True)
 
     async def start_cache_cleanup(self):
         """Запускает фоновую очистку кэша"""
