@@ -227,24 +227,19 @@ class Broadcast:
     original_interval: Tuple[int, int] = (10, 13)
 
     def add_message(
-        self, chat_id: int, message_id: int, grouped_ids: List[int] = None
-    ) -> bool:
-        grouped_ids = sorted(list(set(grouped_ids))) if grouped_ids else []
-
-        new_message = {
+    self, chat_id: int, message_id: int, grouped_ids: List[int] = None
+) -> bool:
+        # Упрощенная проверка уникальности
+        new_entry = {
             "chat_id": chat_id,
             "message_id": message_id,
-            "grouped_ids": grouped_ids,
+            "grouped_ids": sorted(set(grouped_ids)) if grouped_ids else [],
         }
-
-        for existing in self.messages:
-            if (
-                existing["chat_id"] == new_message["chat_id"]
-                and existing["message_id"] == new_message["message_id"]
-                and sorted(existing["grouped_ids"]) == new_message["grouped_ids"]
-            ):
-                return False
-        self.messages.append(new_message)
+        
+        if new_entry in self.messages:
+            return False
+            
+        self.messages.append(new_entry)
         return True
 
     def get_next_message_index(self) -> int:
@@ -410,46 +405,31 @@ class BroadcastManager:
             message_id = msg_data["message_id"]
             logger.debug(f"[FETCH] Начало загрузки сообщения {chat_id}:{message_id}")
             
-            # Добавляем проверку существования чата
-            try:
-                await self.client.get_entity(chat_id)
-            except ValueError as e:
-                logger.error(f"Чат {chat_id} не существует или недоступен: {e}")
-                return None
-
-            # Усиленная проверка кэша
             cache_key = (chat_id, message_id)
+            
             cached = await self._message_cache.get(cache_key)
             if cached:
-                if cached == "invalid":
-                    logger.debug(f"[CACHE] Сообщение помечено как недействительное: {cache_key}")
-                    return None
                 logger.debug(f"[CACHE] Использование кэшированного сообщения: {cache_key}")
                 return cached
-
-            # Попытка загрузки с повторными попытками
-            for attempt in range(3):
-                try:
-                    msg = await self.client.get_messages(
-                        entity=chat_id,
-                        ids=message_id
-                    )
-                    if not msg:
-                        logger.error(f"[FETCH] Сообщение {message_id} не найдено в чате {chat_id}")
-                        await self._message_cache.set(cache_key, "invalid")
-                        return None
-                    
-                    logger.debug(f"[FETCH] Успешно загружено: {msg.id}")
-                    await self._message_cache.set(cache_key, msg)
-                    return msg
-                except Exception as e:
-                    logger.error(f"[FETCH] Ошибка загрузки (попытка {attempt+1}): {e}")
-                    await asyncio.sleep(2)
             
-            await self._message_cache.set(cache_key, "invalid")
-            return None
+            try:
+                msg = await self.client.get_messages(
+                    entity=chat_id,
+                    ids=message_id
+                )
+            except ValueError as e:
+                logger.error(f"Чат/сообщение не существует: {chat_id}:{message_id}")
+                return None
+                
+            if not msg:
+                logger.error(f"Сообщение {message_id} не найдено в чате {chat_id}")
+                return None
+                
+            await self._message_cache.set(cache_key, msg)
+            return msg
+            
         except Exception as e:
-            logger.error(f"[FETCH] Критическая ошибка: {e}", exc_info=True)
+            logger.error(f"[FETCH] Ошибка: {e}", exc_info=True)
             return None
 
     async def _get_chat_id(self, chat_identifier: str) -> Optional[int]:
@@ -687,16 +667,18 @@ class BroadcastManager:
         """Обработчик команды remove"""
         reply = await message.get_reply_message()
         if not reply:
-            await utils.answer(
-                message, "❌ Ответьте на сообщение, которое нужно удалить из рассылки"
-            )
+            await utils.answer(message, "❌ Ответьте на сообщение для удаления")
             return
+            
+        # Полная очистка из кэша
+        cache_key = (reply.chat_id, reply.id)
+        await self._message_cache.set(cache_key, None)
+        
         if code.remove_message(reply.id, reply.chat_id):
-            await self._message_cache.set((reply.chat_id, reply.id), None)
             await self.save_config()
             await utils.answer(message, "✅ Сообщение удалено из рассылки")
         else:
-            await utils.answer(message, "❌ Это сообщение не найдено в рассылке")
+            await utils.answer(message, "❌ Сообщение не найдено в рассылке")
 
     async def _handle_rmchat_command(
         self, message: Message, code: Broadcast, args: list
