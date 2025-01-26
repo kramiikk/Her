@@ -21,6 +21,7 @@ from hikkatl.tl.types import Message
 
 from . import main, security, utils
 from .database import Database
+from ._internal import fw_protect
 from .loader import Modules
 from .tl_cache import CustomTelegramClient
 
@@ -92,8 +93,11 @@ class CommandDispatcher:
 
         self._ratelimit_storage_user = collections.defaultdict(int)
         self._ratelimit_storage_chat = collections.defaultdict(int)
+        self._ratelimit_storage_api = collections.defaultdict(int)
         self._ratelimit_max_user = db.get(__name__, "ratelimit_max_user", 30)
         self._ratelimit_max_chat = db.get(__name__, "ratelimit_max_chat", 100)
+        self._ratelimit_max_api = db.get(__name__, "ratelimit_max_api", 20)
+        self._ratelimit_delay_api = db.get(__name__, "ratelimit_delay_api", 1)
 
         self.security = security.SecurityManager(client, db)
 
@@ -101,6 +105,22 @@ class CommandDispatcher:
         self._me = self._client.hikka_me.id
 
         self.raw_handlers = []
+    
+    async def _handle_ratelimit_api(self, user_id: int, fw_protection: bool = True) -> bool:
+        """Handles ratelimit and uses fw_protect"""
+        if not user_id:
+            return True
+
+        count = self._ratelimit_storage_api[user_id]
+        if count >= self._ratelimit_max_api:
+            if fw_protection: # Используем защиту от FloodWait
+                await fw_protect()
+            await asyncio.sleep(self._ratelimit_delay_api)
+            self._ratelimit_storage_api[user_id] = 0
+            return False
+
+        self._ratelimit_storage_api[user_id] += 1
+        return True
 
     async def _handle_ratelimit(self, message: Message, func: callable) -> bool:
         if await self.security.check(message, security.OWNER):
@@ -346,6 +366,10 @@ class CommandDispatcher:
 
         message, _, _, func = message
 
+        if not await self._handle_ratelimit_api(message.sender_id):
+            logger.debug("Too many api request, skipping")
+            return # Добавили return, чтобы не выполнялась команда
+
         asyncio.ensure_future(
             self.future_dispatcher(
                 func,
@@ -537,6 +561,9 @@ class CommandDispatcher:
         exception_handler: callable,
         *args,
     ):
+        if not await self._handle_ratelimit_api(message.sender_id):
+            logger.debug("Too many api request, skipping")
+            return
         # Will be used to determine, which client caused logging messages
         # parsed via inspect.stack()
         try:
