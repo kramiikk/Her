@@ -312,6 +312,7 @@ class BroadcastManager:
             logger.error(f"Нет сообщений или кода для {code_name}")
             return
         while self._active and code._active and not self.global_pause:
+            logger.debug(f"[{code_name}] Начало итерации цикла")
 
             if self.global_pause or not self._active:
                 break
@@ -405,83 +406,50 @@ class BroadcastManager:
 
     async def _fetch_messages(self, msg_data: dict):
         try:
-            is_group_message = msg_data.get("grouped_ids") and len(msg_data.get("grouped_ids", [])) > 0
-
-            # Обработка одиночных сообщений
-            if not is_group_message:
-                key = (msg_data["chat_id"], msg_data["message_id"])
-                logger.debug(f"Fetching single message: {key}")
-                
-                # Проверка кэша
-                cached_message = await self._message_cache.get(key)
-                if cached_message:
-                    logger.debug(f"Cache hit for single message {key}")
-                    return cached_message
-
-                # Однократная попытка загрузки
-                message = await self.client.get_messages(
-                    msg_data["chat_id"], 
-                    ids=msg_data["message_id"]
-                )
-                
-                if not message:
-                    logger.error(f"Message not found: {key}")
-                    return None
-
-                await self._message_cache.set(key, message)
-                return message
+            chat_id = msg_data["chat_id"]
+            message_id = msg_data["message_id"]
+            logger.debug(f"[FETCH] Начало загрузки сообщения {chat_id}:{message_id}")
             
-            # Обработка групповых сообщений
-            else:
-                logger.debug(f"Fetching group messages: {msg_data}")
-                all_message_ids = [msg_data["message_id"]] + msg_data.get("grouped_ids", [])
-                all_message_ids = list(set(all_message_ids))
-                
-                group_cache_key = (
-                    msg_data["chat_id"], 
-                    frozenset(sorted(all_message_ids))
-                )
-                
-                # Проверка кэша для группы
-                cached_group = await self._message_cache.get(group_cache_key)
-                if cached_group:
-                    logger.debug(f"Cache hit for group {group_cache_key}")
-                    return cached_group
+            # Добавляем проверку существования чата
+            try:
+                await self.client.get_entity(chat_id)
+            except ValueError as e:
+                logger.error(f"Чат {chat_id} не существует или недоступен: {e}")
+                return None
 
-                # Загрузка всех сообщений группы
-                grouped_messages = []
-                for message_id in all_message_ids:
-                    message_key = (msg_data["chat_id"], message_id)
-                    
-                    # Проверка кэша для отдельного сообщения
-                    cached_msg = await self._message_cache.get(message_key)
-                    if cached_msg:
-                        grouped_messages.append(cached_msg)
-                        continue
-                    
-                    # Однократная попытка загрузки
-                    message = await self.client.get_messages(
-                        msg_data["chat_id"], 
+            # Усиленная проверка кэша
+            cache_key = (chat_id, message_id)
+            cached = await self._message_cache.get(cache_key)
+            if cached:
+                if cached == "invalid":
+                    logger.debug(f"[CACHE] Сообщение помечено как недействительное: {cache_key}")
+                    return None
+                logger.debug(f"[CACHE] Использование кэшированного сообщения: {cache_key}")
+                return cached
+
+            # Попытка загрузки с повторными попытками
+            for attempt in range(3):
+                try:
+                    msg = await self.client.get_messages(
+                        entity=chat_id,
                         ids=message_id
                     )
-                    
-                    if not message:
-                        logger.error(f"Group message part not found: {message_key}")
+                    if not msg:
+                        logger.error(f"[FETCH] Сообщение {message_id} не найдено в чате {chat_id}")
+                        await self._message_cache.set(cache_key, "invalid")
                         return None
                     
-                    await self._message_cache.set(message_key, message)
-                    grouped_messages.append(message)
-
-                # Проверка целостности группы
-                if len(grouped_messages) != len(all_message_ids):
-                    logger.error("Group integrity check failed")
-                    return None
-
-                await self._message_cache.set(group_cache_key, grouped_messages)
-                return grouped_messages
-
+                    logger.debug(f"[FETCH] Успешно загружено: {msg.id}")
+                    await self._message_cache.set(cache_key, msg)
+                    return msg
+                except Exception as e:
+                    logger.error(f"[FETCH] Ошибка загрузки (попытка {attempt+1}): {e}")
+                    await asyncio.sleep(2)
+            
+            await self._message_cache.set(cache_key, "invalid")
+            return None
         except Exception as e:
-            logger.error(f"Critical fetch error: {e}", exc_info=True)
+            logger.error(f"[FETCH] Критическая ошибка: {e}", exc_info=True)
             return None
 
     async def _get_chat_id(self, chat_identifier: str) -> Optional[int]:
