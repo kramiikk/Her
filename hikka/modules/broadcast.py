@@ -102,19 +102,16 @@ class SimpleCache:
             return None
 
     async def set(self, key, value):
-        """Устанавливает значение в кэш с расширенной диагностикой"""
         try:
             async with self._lock:
-                logger.debug(f"[CACHE SET] {key}")
+                current_time = time.time()
+                # Очистка устаревших записей перед добавлением
                 await self.clean_expired(force=True)
-
+                # Удаление по достижении лимита
                 while len(self.cache) >= self.max_size:
                     oldest_key = next(iter(self.cache))
-                    logger.warning(
-                        f"Достигнут лимит кэша! Удаление ключа: {oldest_key}"
-                    )
                     del self.cache[oldest_key]
-                self.cache[key] = (time.time(), value)
+                self.cache[key] = (current_time, value)
                 self.cache.move_to_end(key)
         except Exception as e:
             logger.error(f"КРИТИЧЕСКАЯ ОШИБКА {key}: {e}", exc_info=True)
@@ -339,8 +336,10 @@ class BroadcastManager:
                             m for m in code.messages if m not in deleted_messages
                         ]
                         await self.save_config()
+
                 if not messages_to_send:
-                    logger.warning(f"[{code_name}] Нет сообщений для отправки")
+                    logger.error(f"[{code_name}] Нет валидных сообщений для отправки. Проверьте исходные сообщения и кэш.")
+                    await asyncio.sleep(30)
                     continue
                 if not code.batch_mode:
                     next_index = code.get_next_message_index()
@@ -413,12 +412,15 @@ class BroadcastManager:
                 return cached
             
             try:
-                msg = await self.client.get_messages(
-                    entity=chat_id,
-                    ids=message_id
-                )
+                msg = await self.client.get_messages(entity=chat_id, ids=message_id)
+                if msg:
+                    logger.debug(f"[FETCH] Сообщение {chat_id}:{message_id} успешно загружено")
+                    await self._message_cache.set(cache_key, msg)
+                    logger.debug(f"[CACHE] Сообщение {cache_key} сохранено в кэш")
+                else:
+                    logger.error(f"[FETCH] Сообщение {chat_id}:{message_id} не найдено")
             except ValueError as e:
-                logger.error(f"Чат/сообщение не существует: {chat_id}:{message_id}")
+                logger.error(f"Чат/сообщение не существует: {chat_id} {message_id}: {e}")
                 return None
                 
             if not msg:
@@ -846,12 +848,15 @@ class BroadcastManager:
                     logger.error(f"Некорректная структура сообщения: {msg_data}")
                     deleted_messages.append(msg_data)
                     continue
+                logger.debug(f"Обработка сообщения: {msg_data}")
                 message = await self._fetch_messages(msg_data)
-                if not message:
-                    logger.error(f"Сообщение {msg_data} не найдено, удаление")
+                if message:
+                    logger.debug(f"Сообщение {msg_data} загружено и валидно")
+                    valid_messages.append(message)
+                else:
+                    logger.warning(f"Сообщение {msg_data} не загружено, помечено на удаление")
                     deleted_messages.append(msg_data)
                     continue
-                valid_messages.append(message)
             except Exception as e:
                 logger.error(f"Ошибка загрузки {msg_data}: {str(e)}")
                 deleted_messages.append(msg_data)
