@@ -405,11 +405,9 @@ class BroadcastManager:
 
     async def _fetch_messages(self, msg_data: dict):
         try:
-            # Проверяем наличие групповых ID
             is_group_message = msg_data.get("grouped_ids") and len(msg_data.get("grouped_ids", [])) > 0
-    
+
             if not is_group_message:
-                # Логика для одиночного сообщения
                 key = (msg_data["chat_id"], msg_data["message_id"])
                 logger.debug(f"Fetching single message: {key}")
                 
@@ -417,74 +415,94 @@ class BroadcastManager:
                 if cached_message:
                     logger.debug(f"Cache hit for single message {key}")
                     return cached_message
-    
-                message = await self.client.get_messages(
-                    msg_data["chat_id"], 
-                    ids=msg_data["message_id"]
-                )
+
+                # Добавлены повторные попытки загрузки
+                max_retries = 3
+                retry_delay = 2
+                message = None
+                for attempt in range(max_retries):
+                    try:
+                        message = await self.client.get_messages(
+                            msg_data["chat_id"], 
+                            ids=msg_data["message_id"]
+                        )
+                        if message:
+                            logger.debug(f"Successfully fetched message on attempt {attempt+1}")
+                            break
+                        else:
+                            logger.warning(f"Attempt {attempt+1}: message not found")
+                    except Exception as e:
+                        logger.warning(f"Attempt {attempt+1} failed: {e}")
+                        if attempt < max_retries - 1:
+                            await asyncio.sleep(retry_delay)
                 
                 if not message:
-                    logger.error(f"Одиночное сообщение не найдено: чат {msg_data['chat_id']}, ID {msg_data['message_id']}")
+                    logger.error(f"Одиночное сообщение не найдено после {max_retries} попыток: чат {msg_data['chat_id']}, ID {msg_data['message_id']}")
                     return None
-    
+
                 await self._message_cache.set(key, message)
                 return message
             
             else:
-                # Логика для групповых сообщений
                 logger.debug(f"Fetching group messages: {msg_data}")
                 
-                # Включаем текущее сообщение в список для загрузки
                 all_message_ids = [msg_data["message_id"]] + msg_data.get("grouped_ids", [])
                 all_message_ids = list(set(all_message_ids))
                 
-                # Кэш для группы
                 group_cache_key = (
                     msg_data["chat_id"], 
                     frozenset(sorted(all_message_ids))
                 )
                 
-                # Проверяем кэш группы
                 cached_group = await self._message_cache.get(group_cache_key)
                 if cached_group:
                     logger.debug(f"Cache hit for group {group_cache_key}")
                     return cached_group
-    
-                # Загружаем все сообщения группы
+
                 grouped_messages = []
                 for message_id in all_message_ids:
                     message_key = (msg_data["chat_id"], message_id)
                     
-                    # Проверяем кэш каждого сообщения
                     cached_msg = await self._message_cache.get(message_key)
                     if cached_msg:
                         grouped_messages.append(cached_msg)
                         continue
-    
-                    # Загружаем сообщение
-                    message = await self.client.get_messages(
-                        msg_data["chat_id"], 
-                        ids=message_id
-                    )
+
+                    # Повторные попытки для групповых сообщений
+                    max_retries = 3
+                    retry_delay = 2
+                    message = None
+                    for attempt in range(max_retries):
+                        try:
+                            message = await self.client.get_messages(
+                                msg_data["chat_id"], 
+                                ids=message_id
+                            )
+                            if message:
+                                logger.debug(f"Successfully fetched group message {message_id} on attempt {attempt+1}")
+                                break
+                            else:
+                                logger.warning(f"Attempt {attempt+1}: group message {message_id} not found")
+                        except Exception as e:
+                            logger.warning(f"Attempt {attempt+1} failed for group message {message_id}: {e}")
+                            if attempt < max_retries - 1:
+                                await asyncio.sleep(retry_delay)
                     
                     if not message:
                         logger.error(f"Сообщение группы не найдено: чат {msg_data['chat_id']}, ID {message_id}")
                         continue
-    
-                    # Кэшируем каждое сообщение
+
                     await self._message_cache.set(message_key, message)
                     grouped_messages.append(message)
-    
-                # Если не все сообщения группы найдены
+
                 if len(grouped_messages) != len(all_message_ids):
                     logger.warning(f"Не все сообщения группы найдены. Найдено: {len(grouped_messages)}, Ожидалось: {len(all_message_ids)}")
                     return None
-    
-                # Кэшируем группу
+
                 await self._message_cache.set(group_cache_key, grouped_messages)
                 
                 return grouped_messages
-    
+
         except Exception as e:
             logger.error(
                 f"Критическая ошибка получения сообщения/группы: {e}", 
@@ -1074,9 +1092,6 @@ class BroadcastManager:
             self.global_pause = False
             await self._restart_all_broadcasts()
             await utils.answer(message, "✅ Рассылки возобновлены")
-        elif action == "status":
-            status = "активна" if self.global_pause else "не активна"
-            await utils.answer(message, f"Глобальная пауза: {status}")
         if not code_name:
             await utils.answer(message, "❌ Укажите код рассылки")
             return
