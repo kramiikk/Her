@@ -114,7 +114,7 @@ class BroadcastMod(loader.Module):
             code = Broadcast()
             code.chats.add(test_chat_id)
             code.messages.add((-4760467595, 629, tuple()))
-            self.codes["test"] = code
+            self.manager.codes["test"] = code
             await self.manager._start_broadcast_task("test", code)
             await message.edit("✅ Тестовая рассылка запущена")
         elif "ftest" in message.text.lower():
