@@ -7,8 +7,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Dict, Iterable, List, Optional, Set, Tuple, Union
 
-from hikkatl.tl.types import Message
-from hikkatl.errors import (
+from telethon.tl.types import Message
+from telethon.errors import (
     ChatWriteForbiddenError,
     UserBannedInChannelError,
     FloodWaitError,
@@ -22,31 +22,31 @@ logger.setLevel(logging.DEBUG)
 
 class RateLimiter:
     def __init__(self, max_requests: int, time_window: int):
+        self._lock = asyncio.Lock()
         self.max_requests = max_requests
         self.time_window = time_window
         self.semaphore = asyncio.Semaphore(max_requests)
         self.timestamps = deque(maxlen=max_requests * 2)
 
     async def acquire(self):
-        await self.semaphore.acquire()
-        current_time = time.monotonic()
+        async with self._lock:
+            current_time = time.monotonic()
 
-        while self.timestamps and self.timestamps[0] < current_time - self.time_window:
-            self.timestamps.popleft()
-        release_time = current_time + self.time_window
-        self.timestamps.append(release_time)
-
-        async def _release():
-            try:
-                await asyncio.sleep(max(0, release_time - time.monotonic()))
-            finally:
-                self.semaphore.release()
-                try:
-                    self.timestamps.remove(release_time)
-                except ValueError:
-                    pass
-
-        asyncio.create_task(_release())
+            while (
+                self.timestamps
+                and self.timestamps[0] <= current_time - self.time_window
+            ):
+                self.timestamps.popleft()
+            if len(self.timestamps) >= self.max_requests:
+                wait_time = self.timestamps[0] + self.time_window - current_time
+                await asyncio.sleep(wait_time)
+                current_time = time.monotonic()
+                while (
+                    self.timestamps
+                    and self.timestamps[0] <= current_time - self.time_window
+                ):
+                    self.timestamps.popleft()
+            self.timestamps.append(current_time)
 
 
 class SimpleCache:
@@ -62,7 +62,8 @@ class SimpleCache:
                 return
             current_time = time.time()
             expired = [
-                k for k, (expire_time, _) in self.cache.items()
+                k
+                for k, (expire_time, _) in self.cache.items()
                 if current_time > expire_time
             ]
             for key in expired:
@@ -79,7 +80,6 @@ class SimpleCache:
             if current_time > expire_time:
                 del self.cache[key]
                 return None
-
             del self.cache[key]
             self.cache[key] = (expire_time, value)
             logger.debug(f"[CACHE HIT] {key}")
@@ -87,12 +87,11 @@ class SimpleCache:
 
     async def set(self, key, value, expire: Optional[int] = None):
         async with self._lock:
-            if len(self.cache) >= self.max_size:
-                remove_count = max(5, len(self.cache) // 5)
-                if remove_count > 0:
-                    oldest_keys = list(self.cache.keys())[:remove_count]
-                    for key_to_remove in oldest_keys:
-                        del self.cache[key_to_remove]
+            while len(self.cache) >= self.max_size:
+                await self.clean_expired(force=True)
+                if len(self.cache) >= self.max_size:
+                    oldest_key = next(iter(self.cache))
+                    del self.cache[oldest_key]
             ttl = expire if expire is not None else self.ttl
             expire_time = time.time() + ttl
             self.cache[key] = (expire_time, value)
@@ -112,16 +111,7 @@ class BroadcastMod(loader.Module):
 
     async def brcmd(self, message):
         """Команда для управления рассылкой."""
-        await self.manager.handle_command(message)
-        if "test" in message.text.lower():
-            test_chat_id = -4760467595
-            code = Broadcast()
-            code.chats.add(test_chat_id)
-            code.messages.add((-4760467595, 629, tuple()))
-            self.manager.codes["test"] = code
-            await self.manager._start_broadcast_task("test", code)
-            await message.edit("✅ Тестовая рассылка запущена")
-        elif "ftest" in message.text.lower():
+        if "ftest" in message.text.lower():
             try:
                 raise FloodWaitError(
                     request=type("FakeRequest", (), {"__name__": "test"}), seconds=15
@@ -129,6 +119,8 @@ class BroadcastMod(loader.Module):
             except FloodWaitError as e:
                 await self.manager._handle_flood_wait(e, -123456789)
             await message.edit("✅ Тест FloodWait запущен")
+            return
+        await self.manager.handle_command(message)
 
     async def client_ready(self):
         """Initialization sequence"""
@@ -212,10 +204,9 @@ class Broadcast:
         self.messages.add(key)
         return True
 
-    def get_next_message_index(self) -> int:
-        """Возвращает индекс следующего сообщения для отправки"""
+    def get_next_message_index(self):
         if not self.messages:
-            raise ValueError("No messages in broadcast")
+            raise ValueError("No messages")
         self._last_message_index = (self._last_message_index + 1) % len(self.messages)
         return self._last_message_index
 
@@ -241,9 +232,8 @@ class Broadcast:
 class BroadcastManager:
     """Manages broadcast operations and state."""
 
-    MAX_BATCH_SIZE = 50
+    MAX_BATCH_SIZE = 25
     GLOBAL_LIMITER = RateLimiter(max_requests=20, time_window=60)
-    _semaphore = asyncio.Semaphore(3)
 
     class MediaPermissions:
         NONE = 0
@@ -326,7 +316,7 @@ class BroadcastManager:
                 if failed_chats:
                     await self._handle_failed_chats(code_name, failed_chats)
                 elapsed = time.time() - start_time
-                min_interval = max(1, code.interval[0] * 60 - elapsed)
+                min_interval = max(0, code.interval[0] * 60 - elapsed)
                 max_interval = max(2, code.interval[1] * 60 - elapsed)
 
                 await asyncio.sleep(random.uniform(min_interval, max_interval))
@@ -456,9 +446,10 @@ class BroadcastManager:
                 f"Всего FloodWait за последние 12 часов: {len(self.flood_wait_times)}"
             )
 
-            for task in self.broadcast_tasks.values():
-                if not task.done():
-                    task.cancel()
+            tasks = list(self.broadcast_tasks.values())
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
             await asyncio.sleep(wait_time)
 
             self.pause_event.clear()
@@ -805,10 +796,10 @@ class BroadcastManager:
             return cached
         try:
             await self.client.get_entity(chat_id)
-            await self.valid_chats_cache.set(chat_id, True, expire=43200)
+            await self.valid_chats_cache.set(chat_id, True, expire=3600)
             return True
         except Exception:
-            await self.valid_chats_cache.set(chat_id, False, expire=3600)
+            await self.valid_chats_cache.set(chat_id, False, expire=600)
             return False
 
     async def _load_config(self):
@@ -968,49 +959,50 @@ class BroadcastManager:
     async def _send_messages_to_chats(
         self, code: Broadcast, messages: Iterable[Message]
     ) -> Set[int]:
-        """Улучшенная отправка с батчингом и приоритетом новых чатов"""
+        """Улучшенная отправка с батчингом и лимитом параллелизма"""
         if self.pause_event.is_set():
             return set()
         valid_chats = [cid for cid in code.chats if await self._is_chat_valid(cid)]
-
         if not valid_chats:
             logger.error("💥 Нет доступных чатов для отправки!")
             return set()
+        failed_chats = set()
         batches = [
             valid_chats[i : i + self.MAX_BATCH_SIZE]
             for i in range(0, len(valid_chats), self.MAX_BATCH_SIZE)
         ]
 
-        success_count = 0
-        failed_chats = set()
-
         for batch in batches:
             if not self._active or not code._active:
                 break
-            random.shuffle(batch)
+            results = await self._send_batch(batch, messages)
 
-            for chat_id in batch:
-                try:
-                    if self.error_counts.get(chat_id, 0) > 3:
-                        continue
-                    result = await self._send_message(chat_id, messages)
-
-                    if result:
-                        success_count += 1
-                        self.error_counts[chat_id] = 0
-                    else:
-                        failed_chats.add(chat_id)
-                    if success_count % 10 == 0:
-                        await asyncio.sleep(random.uniform(0.1, 0.5))
-                except Exception as e:
-                    logger.error(f"Ошибка в чате {chat_id}: {str(e)}")
+            for chat_id, success in zip(batch, results):
+                if not success:
                     failed_chats.add(chat_id)
-                    self.error_counts[chat_id] = self.error_counts.get(chat_id, 0) + 1
-            await asyncio.sleep(random.uniform(1, 2))
         if failed_chats:
             code.chats -= failed_chats
             await self.save_config()
         return failed_chats
+
+    async def _send_batch(
+        self, chat_ids: List[int], messages: Iterable[Message]
+    ) -> List[bool]:
+        """Отправка батча с ограничением параллелизма"""
+        sem = asyncio.Semaphore(10)
+
+        async def send_one(chat_id: int) -> bool:
+            async with sem:
+                try:
+                    return await self._send_message(chat_id, messages)
+                except asyncio.CancelledError:
+                    logger.warning(f"Задача для чата {chat_id} была отменена")
+                    raise
+                except Exception as e:
+                    logger.error(f"Ошибка в чате {chat_id}: {str(e)}")
+                    return False
+
+        return await asyncio.gather(*[send_one(cid) for cid in chat_ids])
 
     async def handle_command(self, message: Message):
         """Обработчик команд для управления рассылкой"""

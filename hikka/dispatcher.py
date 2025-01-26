@@ -557,15 +557,21 @@ class CommandDispatcher:
     async def future_dispatcher(
         self,
         func: callable,
-        message: Message,
+        message: typing.Union[Message, events.EventCommon],
         exception_handler: callable,
         *args,
     ):
-        if not await self._handle_ratelimit_api(message.sender_id):
-            logger.debug("Too many api request, skipping")
-            return
-        # Will be used to determine, which client caused logging messages
-        # parsed via inspect.stack()
+        user_id = None
+        if isinstance(message, Message):
+            user_id = message.sender_id
+        else:
+            user_id = getattr(message, "sender_id", None) or getattr(message, "user_id", None)
+
+        if user_id is not None:
+            if not await self._handle_ratelimit_api(user_id):
+                logger.debug("Too many api requests, skipping")
+                return
+
         try:
             await func(message)
         except Exception as e:
