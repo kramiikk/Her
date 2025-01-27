@@ -424,9 +424,5 @@ class CoreMod(loader.Module):
         current_client = message.client
         await utils.answer(message, "💎")
 
-        for client in self.allclients:
-            if client is not current_client:
-                await client.disconnect()
-
         await current_client.disconnect()
         restart()
