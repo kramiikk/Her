@@ -497,59 +497,61 @@ class Her:
         return await self._phone_login(client)
 
     async def _init_clients(self) -> bool:
-        """
-        Reads session from disk and inits them
-        :returns: `True` if at least one client started successfully
-        """
+        """Reads sessions from disk and initializes them as clients."""
         if not self.sessions:
-           return False
-        session = self.sessions[0]
-        try:
-             client = CustomTelegramClient(
-                        session,
-                        self.api_token.ID,
-                        self.api_token.HASH,
-                        connection=self.conn,
-                        proxy=self.proxy,
-                        connection_retries=None,
-                        device_model=get_app_name(),
-                        system_version=generate_random_system_version(),
-                        app_version=".".join(map(str, __version__)) + " x64",
-                        lang_code="en",
-                        system_lang_code="en-US",
-                    )
-             await client.connect()
-             client.phone = "Why do you need your own phone number?"
-             return True
+            return False
 
-        except sqlite3.OperationalError:
-             logging.error(
-                "Check that this is the only instance running. "
-                "If that doesn't help, delete the file '%s'",
-                session.filename,
-             )
-             return False
-        except (TypeError, AuthKeyDuplicatedError):
-              Path(session.filename).unlink(missing_ok=True)
-              self.sessions.remove(session)
-              return False
-        except (ValueError, ApiIdInvalidError):
-            run_config()
-            return False
-        except PhoneNumberInvalidError:
-            logging.error(
-                "Phone number is incorrect. Use international format (+XX...) "
-                "and don't put spaces in it."
-            )
-            self.sessions.remove(session)
-            return False
-        except InteractiveAuthRequired:
-            logging.error(
-                "Session %s was terminated and re-auth is required",
-                session.filename,
-            )
-            self.sessions.remove(session)
-            return False
+        clients = []
+        for session in list(self.sessions):  # Use a copy to allow modification
+            try:
+                client = CustomTelegramClient(
+                    session,
+                    self.api_token.ID,
+                    self.api_token.HASH,
+                    connection=self.conn,
+                    proxy=self.proxy,
+                    connection_retries=None,
+                    device_model=get_app_name(),
+                    system_version=generate_random_system_version(),
+                    app_version=".".join(map(str, __version__)) + " x64",
+                    lang_code="en",
+                    system_lang_code="en-US",
+                )
+                await client.connect()
+                client.phone = "Why do you need your own phone number?"
+                clients.append(client)
+            except sqlite3.OperationalError:
+                logging.error(
+                    "Check that this is the only instance running. "
+                    "If that doesn't help, delete the file '%s'",
+                    session.filename,
+                )
+                self.sessions.remove(session)
+            except (TypeError, AuthKeyDuplicatedError):
+                Path(session.filename).unlink(missing_ok=True)
+                self.sessions.remove(session)
+            except (ValueError, ApiIdInvalidError):
+                run_config()
+                return False  # API errors affect all clients, abort further processing
+            except PhoneNumberInvalidError:
+                logging.error(
+                    "Phone number is incorrect. Use international format (+XX...) "
+                    "and don't put spaces in it."
+                )
+                self.sessions.remove(session)
+            except InteractiveAuthRequired:
+                logging.error(
+                    "Session %s requires re-authentication.",
+                    session.filename,
+                )
+                self.sessions.remove(session)
+            except Exception as e:
+                logging.error(f"Unexpected error initializing client: {e}")
+                self.sessions.remove(session)
+
+        # Replace sessions with successfully initialized clients
+        self.sessions = clients
+        return len(self.sessions) > 0
 
     async def amain_wrapper(self, client: CustomTelegramClient):
         """Wrapper around amain"""
