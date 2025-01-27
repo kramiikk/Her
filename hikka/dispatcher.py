@@ -13,7 +13,7 @@ import time
 from typing import Optional, Union, Dict, List, Callable
 
 from hikkatl import events
-from hikkatl.errors import FloodWaitError, RPCError
+from hikkatl.errors import FloodWaitError, RPCError, ChatAdminRequiredError
 from hikkatl.tl.types import Message
 
 from . import main, security, utils
@@ -156,19 +156,42 @@ class CommandDispatcher:
 
     async def safe_api_call(self, coro):
         """Обёртка для безопасного вызова API"""
-        await self._api_call_guard()
         try:
-            return await coro
-        except FloodWaitError as e:
-            wait_time = e.seconds + 300
-            logger.warning(f"FloodWait detected. Sleeping for {wait_time} seconds")
-            await asyncio.sleep(wait_time)
-            return await coro
+            await self._api_call_guard()
+            
+            for _ in range(3): # Пробуем 3 раза
+                try:
+                    return await coro
+                except FloodWaitError as e:
+                    wait_time = e.seconds + 5
+                    logger.warning(f"FloodWait detected. Sleeping for {wait_time} seconds")
+                    await asyncio.sleep(wait_time)
+                except ChatAdminRequiredError:
+                    logger.error("Missing admin rights for operation")
+                    raise
+                except RPCError as e:
+                    if "CHAT_WRITE_FORBIDDEN" in str(e):
+                        logger.error("Can't write to this chat") 
+                        raise
+                    logger.error("RPC error: %s", e)
+                    await asyncio.sleep(1)
+                    continue
+                    
+            raise RuntimeError("Failed after 3 retries")
+            
+        except Exception as e:
+            logger.exception("Error in safe_api_call: %s", e)
+            raise
 
     async def _handle_command(self, event, watcher=False) -> Union[bool, tuple]:
         if not hasattr(event, "message") or not hasattr(event.message, "message"):
             return False
         message = utils.censor(event.message)
+        if not hasattr(message, 'sender_id'):
+            if hasattr(message, 'from_id'):
+                message.sender_id = message.from_id.user_id
+            else:
+                return False
         if not await self.security.check(message, security.OWNER):
             return False
         prefix = self._db.get(main.__name__, "command_prefix", False) or "."
@@ -367,6 +390,11 @@ class CommandDispatcher:
     ) -> None:
         """Handle all incoming messages"""
         message = utils.censor(getattr(event, "message", event))
+        if not hasattr(message, 'sender_id'):
+            if hasattr(message, 'from_id'):
+                message.sender_id = message.from_id.user_id
+            else:
+                return
         if not await self.security.check(message, security.OWNER):
             return
         if isinstance(message, Message):
