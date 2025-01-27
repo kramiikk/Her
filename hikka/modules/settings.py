@@ -16,10 +16,8 @@ import traceback
 import hikkatl
 from meval import meval
 from io import StringIO
-from hikkatl.tl.types import Message
 
 from .. import loader, utils
-from .._internal import restart
 
 logger = logging.getLogger(__name__)
 
@@ -405,24 +403,3 @@ class CoreMod(loader.Module):
 
         await editor.cmd_ended(await sproc.wait())
         del self.activecmds[hash_msg(message)]
-
-    @loader.command()
-    async def restart(self, message: Message):
-        args = utils.get_args_raw(message)
-        secure_boot = any(trigger in args for trigger in {"--secure-boot", "-sb"})
-
-        if secure_boot:
-            self._db.set(loader.__name__, "secure_boot", True)
-
-        self.set("restart_ts", time.time())
-
-        await self._db.remote_force_save()
-
-        handler = logging.getLogger().handlers[0]
-        handler.setLevel(logging.CRITICAL)
-
-        current_client = message.client
-        await utils.answer(message, "💎")
-
-        await current_client.disconnect()
-        restart()
