@@ -71,6 +71,7 @@ with contextlib.suppress(Exception):
         IS_WSL = True
 # fmt: off
 
+
 LATIN_MOCK = [
     "iPhone", "Android", "Chrome", "macOS", "Galaxy", "Windows",
     "Firefox", "iPad", "Ubuntu", "Edge", "Pixel", "iOS",
@@ -363,19 +364,12 @@ class Her:
         self.proxy, self.conn = None, ConnectionTcpFull
 
     def _read_sessions(self):
-        """Gets sessions from environment and data directory"""
-        self.sessions += [
-            SQLiteSession(
-                os.path.join(
-                    BASE_DIR,
-                    session.rsplit(".session", maxsplit=1)[0],
-                )
-            )
-            for session in filter(
-                lambda f: f.startswith("hikka-") and f.endswith(".session"),
-                os.listdir(BASE_DIR),
-            )
-        ]
+        """Загружаем только одну сессию"""
+        session_path = os.path.join(BASE_DIR, "hikka.session")
+        if os.path.exists(session_path):
+            self.sessions = [SQLiteSession(session_path)]
+        else:
+            self.sessions = []
 
     def _get_api_token(self):
         """Get API Token from disk or environment"""
@@ -424,21 +418,9 @@ class Her:
         *,
         delay_restart: bool = False,
     ):
-        if hasattr(client, "tg_id"):
-            telegram_id = client.tg_id
-        else:
-            if not (me := await client.get_me()):
-                raise RuntimeError("Attempted to save non-inited session")
-            telegram_id = me.id
-            client._tg_id = telegram_id
-            client.tg_id = telegram_id
-            client.hikka_me = me
         session = SQLiteSession(
-            os.path.join(
-                BASE_DIR,
-                f"hikka-{telegram_id}",
-            )
-        )
+            os.path.join(BASE_DIR, "hikka.session")
+        )  # Фиксированное имя
 
         session.set_dc(
             client.session.dc_id,
@@ -447,7 +429,6 @@ class Her:
         )
 
         session.auth_key = client.session.auth_key
-
         session.save()
 
         if not delay_restart:
@@ -476,9 +457,6 @@ class Her:
         return True
 
     async def _initial_setup(self) -> bool:
-        """Responsible for first start"""
-        if self.arguments.no_auth:
-            return False
         client = CustomTelegramClient(
             MemorySession(),
             self.api_token.ID,
@@ -494,64 +472,67 @@ class Her:
         )
         await client.connect()
 
-        return await self._phone_login(client)
+        if await self._phone_login(client):
+            self.sessions = [client]  # Сохраняем единственный клиент
+            return True
+        return False
 
     async def _init_clients(self) -> bool:
         """Reads sessions from disk and initializes them as clients."""
         if not self.sessions:
             return False
+        session = self.sessions[0]
+        client = None  # Важно инициализировать переменную
 
-        clients = []
-        for session in list(self.sessions):  # Use a copy to allow modification
-            try:
-                client = CustomTelegramClient(
-                    session,
-                    self.api_token.ID,
-                    self.api_token.HASH,
-                    connection=self.conn,
-                    proxy=self.proxy,
-                    connection_retries=None,
-                    device_model=get_app_name(),
-                    system_version=generate_random_system_version(),
-                    app_version=".".join(map(str, __version__)) + " x64",
-                    lang_code="en",
-                    system_lang_code="en-US",
-                )
-                await client.connect()
-                client.phone = "Why do you need your own phone number?"
-                clients.append(client)
-            except sqlite3.OperationalError:
-                logging.error(
-                    "Check that this is the only instance running. "
-                    "If that doesn't help, delete the file '%s'",
-                    session.filename,
-                )
-                self.sessions.remove(session)
-            except (TypeError, AuthKeyDuplicatedError):
+        try:
+            client = CustomTelegramClient(
+                session,
+                self.api_token.ID,
+                self.api_token.HASH,
+                connection=self.conn,
+                proxy=self.proxy,
+                connection_retries=None,
+                device_model=get_app_name(),
+                system_version=generate_random_system_version(),
+                app_version=".".join(map(str, __version__)) + " x64",
+                lang_code="en",
+                system_lang_code="en-US",
+            )
+            await client.connect()
+            client.phone = "Why do you need your own phone number?"
+        except (sqlite3.OperationalError, TypeError, AuthKeyDuplicatedError) as e:
+            logging.error("Session error: %s", e)
+            if hasattr(session, "filename") and session.filename:
                 Path(session.filename).unlink(missing_ok=True)
-                self.sessions.remove(session)
-            except (ValueError, ApiIdInvalidError):
-                run_config()
-                return False  # API errors affect all clients, abort further processing
-            except PhoneNumberInvalidError:
-                logging.error(
-                    "Phone number is incorrect. Use international format (+XX...) "
-                    "and don't put spaces in it."
-                )
-                self.sessions.remove(session)
-            except InteractiveAuthRequired:
-                logging.error(
-                    "Session %s requires re-authentication.",
-                    session.filename,
-                )
-                self.sessions.remove(session)
-            except Exception as e:
-                logging.error(f"Unexpected error initializing client: {e}")
-                self.sessions.remove(session)
+            self.sessions.clear()
+            return False
+        except (ValueError, ApiIdInvalidError):
+            run_config()
+            return False
+        except PhoneNumberInvalidError:
+            logging.error(
+                "Phone number is incorrect. Use international format (+XX...) "
+                "and don't put spaces in it."
+            )
+            self.sessions.clear()
+            return False
+        except InteractiveAuthRequired:
+            logging.error(
+                "Session %s requires re-authentication.",
+                session.filename,
+            )
+            self.sessions.clear()
+            return False
+        except Exception as e:
+            logging.error(f"Unexpected error initializing client: {e}")
+            self.sessions.clear()
+            return False
+        finally:
+            # Добавляем клиент только если не было ошибок
 
-        # Replace sessions with successfully initialized clients
-        self.sessions = clients
-        return len(self.sessions) > 0
+            if client:
+                self.sessions = [client]
+        return bool(self.sessions)
 
     async def amain_wrapper(self, client: CustomTelegramClient):
         """Wrapper around amain"""
@@ -629,7 +610,7 @@ class Her:
         client.hikka_db = db
         await db.init()
 
-        modules = loader.Modules(client, db, self.sessions)
+        modules = loader.Modules(client, db, self.sessions[0])
         client.loader = modules
 
         await self._add_dispatcher(client, modules, db)
@@ -659,7 +640,7 @@ class Her:
             )
         )
 
-        await asyncio.gather(*[self.amain_wrapper(client) for client in self.sessions])
+        await self.amain_wrapper(self.sessions[0])
 
     def _shutdown_handler(self):
         """Shutdown handler"""
