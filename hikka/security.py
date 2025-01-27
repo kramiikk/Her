@@ -22,14 +22,14 @@ class SecurityManager:
         self._client = client
         self._db = db
 
-        self._owner = self.owner = db.pointer(__name__, "owner", [])
+        self.owner = db.pointer(__name__, "owner", [])
 
         self._reload_rights()
 
     def _reload_rights(self):
         """Internal method to ensure that account owner is always in the owner list"""
-        if self._client.tg_id not in self._owner:
-            self._owner.append(self._client.tg_id)
+        if self._client.tg_id not in self.owner:
+            self.owner.append(self._client.tg_id)
 
     async def check(
         self,
@@ -42,6 +42,6 @@ class SecurityManager:
             return True
         if not user_id and message:
             user_id = message.sender_id
-        return user_id in self._owner
+        return user_id in self.owner
 
     _check = check  # Legacy

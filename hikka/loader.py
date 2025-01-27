@@ -67,41 +67,12 @@ __all__ = [
     "ConfigValue",
     "ModuleConfig",
     "owner",
-    "group_owner",
-    "group_admin_add_admins",
-    "group_admin_change_info",
-    "group_admin_ban_users",
-    "group_admin_delete_messages",
-    "group_admin_pin_messages",
-    "group_admin_invite_users",
-    "group_admin",
-    "group_member",
-    "pm",
-    "unrestricted",
     "loop",
 ]
 
 logger = logging.getLogger(__name__)
 
 owner = security.owner
-
-# deprecated
-sudo = security.sudo
-support = security.support
-# /deprecated
-
-group_owner = security.group_owner
-group_admin_add_admins = security.group_admin_add_admins
-group_admin_change_info = security.group_admin_change_info
-group_admin_ban_users = security.group_admin_ban_users
-group_admin_delete_messages = security.group_admin_delete_messages
-group_admin_pin_messages = security.group_admin_pin_messages
-group_admin_invite_users = security.group_admin_invite_users
-group_admin = security.group_admin
-group_member = security.group_member
-pm = security.pm
-unrestricted = security.unrestricted
-
 
 async def stop_placeholder() -> bool:
     return True
