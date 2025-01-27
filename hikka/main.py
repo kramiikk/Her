@@ -645,14 +645,17 @@ class Her:
     def _shutdown_handler(self):
         """Shutdown handler"""
         logging.info("Bye")
-        for client in self.sessions:
-            client.disconnect()
+        if self.sessions:
+            self.sessions[0].disconnect()
         sys.exit(0)
 
     def main(self):
         """Main entrypoint"""
         signal.signal(signal.SIGINT, self._shutdown_handler)
-        self.loop.run_until_complete(self._main())
+        try:
+            self.loop.run_until_complete(self._main())
+        except KeyboardInterrupt:
+            self._shutdown_handler()
         self.loop.close()
 
 
