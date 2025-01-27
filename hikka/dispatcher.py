@@ -10,13 +10,14 @@ import contextlib
 import logging
 import re
 import time
+import typing
 from typing import Optional, Union, Dict, List, Callable
 
 from hikkatl import events
 from hikkatl.errors import FloodWaitError, RPCError, ChatAdminRequiredError
 from hikkatl.tl.types import Message
 
-from . import main, security, utils
+from . import main, utils
 from .database import Database
 from .loader import Modules
 from .tl_cache import CustomTelegramClient
@@ -126,8 +127,7 @@ class CommandDispatcher:
         self._client = client
         self._db = db
 
-        self.security = security.SecurityManager(client, db)
-        self.check_security = self.security.check
+        self.owner = db.pointer(__name__, "owner", [])
         self._me = self._client.hikka_me.id
 
         self.raw_handlers = []
@@ -138,6 +138,12 @@ class CommandDispatcher:
         self._flood_delay = 3
         self._last_reset = 0.0
         self._reset_interval = 30.0
+        self._reload_rights()
+    
+    def _reload_rights(self):
+        """Internal method to ensure that account owner is always in the owner list"""
+        if self._client.tg_id not in self.owner:
+            self.owner.append(self._client.tg_id)
 
     async def _api_call_guard(self):
         """Контролирует частоту запросов к API с периодическим сбросом"""
@@ -192,7 +198,7 @@ class CommandDispatcher:
                 message.sender_id = message.from_id.user_id
             else:
                 return False
-        if not await self.security.check(message, security.OWNER):
+        if message.sender_id not in self.owner:
             return False
         prefix = self._db.get(main.__name__, "command_prefix", False) or "."
 
@@ -395,7 +401,7 @@ class CommandDispatcher:
                 message.sender_id = message.from_id.user_id
             else:
                 return
-        if not await self.security.check(message, security.OWNER):
+        if message.sender_id not in self.owner:
             return
         if isinstance(message, Message):
             for attr in {"text", "raw_text", "out"}:

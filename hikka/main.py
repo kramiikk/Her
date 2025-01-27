@@ -618,7 +618,6 @@ class Her:
         """Inits and adds dispatcher instance to client"""
         dispatcher = CommandDispatcher(modules, client, db)
         client.dispatcher = dispatcher
-        modules.check_security = dispatcher.check_security
 
         client.add_event_handler(
             dispatcher.handle_incoming,
