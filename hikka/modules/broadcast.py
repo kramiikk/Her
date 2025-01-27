@@ -109,15 +109,6 @@ class BroadcastMod(loader.Module):
 
     async def brcmd(self, message):
         """Команда для управления рассылкой."""
-        if "ftest" in message.text.lower():
-            try:
-                raise FloodWaitError(
-                    request=type("FakeRequest", (), {"__name__": "test"}), seconds=15
-                )
-            except FloodWaitError as e:
-                await self.manager._handle_flood_wait(e, -123456789)
-            await message.edit("✅ Тест FloodWait запущен")
-            return
         await self.manager.handle_command(message)
 
     async def client_ready(self):
