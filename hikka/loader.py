@@ -24,7 +24,7 @@ from uuid import uuid4
 
 from hikkatl.tl.tlobject import TLObject
 
-from . import security, utils, validators
+from . import utils, validators
 from .database import Database
 from .types import (
     Command,
@@ -66,13 +66,10 @@ __all__ = [
     "Database",
     "ConfigValue",
     "ModuleConfig",
-    "owner",
     "loop",
 ]
 
 logger = logging.getLogger(__name__)
-
-owner = security.owner
 
 async def stop_placeholder() -> bool:
     return True
