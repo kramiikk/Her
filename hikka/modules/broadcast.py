@@ -73,7 +73,6 @@ class SimpleCache:
         async with self._lock:
             entry = self.cache.get(key)
             if not entry:
-                logger.debug(f"[CACHE MISS] {key}")
                 return None
             expire_time, value = entry
             current_time = time.time()
@@ -82,7 +81,6 @@ class SimpleCache:
                 return None
             del self.cache[key]
             self.cache[key] = (expire_time, value)
-            logger.debug(f"[CACHE HIT] {key}")
             return value
 
     async def set(self, key, value, expire: Optional[int] = None):
@@ -147,11 +145,6 @@ class BroadcastMod(loader.Module):
             *self.manager.broadcast_tasks.values(), return_exceptions=True
         )
 
-        for result in results:
-            if isinstance(result, asyncio.CancelledError):
-                logger.debug("Задача отменена корректно")
-            elif isinstance(result, Exception):
-                logger.error(f"Ошибка при отмене: {result}")
         if self.manager.adaptive_interval_task:
             self.manager.adaptive_interval_task.cancel()
         if self.manager.cache_cleanup_task:
@@ -263,13 +256,11 @@ class BroadcastManager:
 
     async def _broadcast_loop(self, code_name: str):
         """Main broadcast loop with enhanced debug logging"""
-        logger.info(f"Старт цикла рассылки для {code_name}")
         code = self.codes.get(code_name)
         if not code or not code.messages:
             logger.error(f"Нет сообщений или кода для {code_name}")
             return
         while self._active and code._active and not self.pause_event.is_set():
-            logger.debug(f"[{code_name}] Начало итерации цикла")
             if self.pause_event.is_set() or not self._active:
                 break
             start_time = time.time()
@@ -370,22 +361,15 @@ class BroadcastManager:
         try:
             chat_id = msg_data["chat_id"]
             message_id = msg_data["message_id"]
-            logger.debug(f"[FETCH] Начало загрузки сообщения {chat_id}:{message_id}")
 
             cache_key = (chat_id, message_id)
 
             cached = await self._message_cache.get(cache_key)
             if cached:
-                logger.debug(
-                    f"[CACHE] Использование кэшированного сообщения: {cache_key}"
-                )
                 return cached
             try:
                 msg = await self.client.get_messages(entity=chat_id, ids=message_id)
                 if msg:
-                    logger.debug(
-                        f"[FETCH] Сообщение {chat_id}:{message_id} успешно загружено"
-                    )
                     await self._message_cache.set(cache_key, msg)
                     logger.debug(f"[CACHE] Сообщение {cache_key} сохранено в кэш")
                 else:
@@ -856,7 +840,6 @@ class BroadcastManager:
                 message = await self._fetch_messages(msg_data)
 
                 if message:
-                    logger.debug(f"Сообщение {msg_tuple} загружено")
                     valid_messages.append(message)
                 else:
                     logger.warning(f"Сообщение {msg_tuple} не найдено")
@@ -869,9 +852,6 @@ class BroadcastManager:
             except Exception as e:
                 logger.error(f"Критическая ошибка обработки {msg_tuple}: {str(e)}")
                 deleted_messages.append(msg_tuple)
-        logger.debug(
-            f"Обработано: {len(valid_messages)} валидных, {len(deleted_messages)} удалено"
-        )
         return valid_messages, deleted_messages
 
     async def _restart_all_broadcasts(self):
@@ -905,11 +885,9 @@ class BroadcastManager:
         msg: Union[Message, List[Message]],
         send_mode: str = "auto",
     ) -> bool:
-        logger.debug(f"⌛ Начало отправки в {chat_id} [{send_mode}]")
         if self.pause_event.is_set():
             return False
         await self.GLOBAL_LIMITER.acquire()
-        logger.debug(f"✅ Лимитер пройден для {chat_id}")
         try:
 
             async def forward_messages(messages: Union[Message, List[Message]]) -> None:
@@ -941,7 +919,6 @@ class BroadcastManager:
             self.error_counts[chat_id] = 0
             self.error_counts[f"{chat_id}_general"] = 0
             self.last_error_time[f"{chat_id}_general"] = 0
-            logger.debug(f"✉️ Сообщение в {chat_id} успешно отправлено")
             return True
         except FloodWaitError as e:
             logger.error(f"Флуд-контроль: {e}")
@@ -1088,7 +1065,6 @@ class BroadcastManager:
         while self._active:
             try:
                 await asyncio.sleep(3600)
-                logger.debug("Проверка адаптации интервалов...")
                 await self._check_and_adjust_intervals()
             except asyncio.CancelledError:
                 break
