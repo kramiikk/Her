@@ -260,6 +260,9 @@ class BroadcastManager:
         if not code or not code.messages:
             logger.error(f"Нет сообщений или кода для {code_name}")
             return
+        await asyncio.sleep(
+            random.uniform(code.interval[0] * 60, code.interval[1] * 60)
+        )
         while self._active and code._active and not self.pause_event.is_set():
             if self.pause_event.is_set() or not self._active:
                 break
