@@ -302,7 +302,6 @@ class Modules:
         self._log_handlers = []
         self._core_commands = []
         self.__approve = []
-        self.allclients = allclients
         self.client = client
         self._db = db
         self.db = db
@@ -587,17 +586,7 @@ class Modules:
         self,
         mod: Module,
         no_self_unload: bool = False,
-        from_dlmod: bool = False,
     ):
-        if from_dlmod:
-            try:
-                if len(inspect.signature(mod.on_dlmod).parameters) == 2:
-                    await mod.on_dlmod(self.client, self._db)
-                else:
-                    await mod.on_dlmod()
-            except Exception:
-                logger.info("Can't process `on_dlmod` hook", exc_info=True)
-
         try:
             if len(inspect.signature(mod.client_ready).parameters) == 2:
                 await mod.client_ready(self.client, self._db)

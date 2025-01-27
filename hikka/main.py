@@ -314,29 +314,6 @@ def parse_arguments() -> dict:
     return arguments
 
 
-class SuperList(list):
-    """
-    Makes able: await self.allclients.send_message("foo", "bar")
-    """
-
-    def __getattribute__(self, attr: str) -> typing.Any:
-        if hasattr(list, attr):
-            return list.__getattribute__(self, attr)
-        for obj in self:
-            attribute = getattr(obj, attr)
-            if callable(attribute):
-                if asyncio.iscoroutinefunction(attribute):
-
-                    async def foobar(*args, **kwargs):
-                        return [await getattr(_, attr)(*args, **kwargs) for _ in self]
-
-                    return foobar
-                return lambda *args, **kwargs: [
-                    getattr(_, attr)(*args, **kwargs) for _ in self
-                ]
-            return [getattr(x, attr) for x in self]
-
-
 class InteractiveAuthRequired(Exception):
     """Is being rased by Telethon, if phone is required"""
 
@@ -358,8 +335,8 @@ class Her:
             CONFIG_PATH = BASE_PATH / "config.json"
         self.loop = asyncio.get_event_loop()
 
-        self.clients = SuperList()
         self.ready = asyncio.Event()
+        self.sessions = []
         self._read_sessions()
         self._get_api_token()
         self._get_proxy()
@@ -387,7 +364,6 @@ class Her:
 
     def _read_sessions(self):
         """Gets sessions from environment and data directory"""
-        self.sessions = []
         self.sessions += [
             SQLiteSession(
                 os.path.join(
@@ -497,7 +473,6 @@ class Her:
         await client.start(phone)
 
         await self.save_client_session(client)
-        self.clients += [client]
         return True
 
     async def _initial_setup(self) -> bool:
@@ -545,7 +520,6 @@ class Her:
                     )
              await client.connect()
              client.phone = "Why do you need your own phone number?"
-             self.clients += [client]
              return True
 
         except sqlite3.OperationalError:
@@ -653,7 +627,7 @@ class Her:
         client.hikka_db = db
         await db.init()
 
-        modules = loader.Modules(client, db, self.clients)
+        modules = loader.Modules(client, db, self.sessions)
         client.loader = modules
 
         await self._add_dispatcher(client, modules, db)
@@ -672,7 +646,7 @@ class Her:
         await self._get_token()
 
         if (
-            not self.clients and not self.sessions or not await self._init_clients()
+            not self.sessions or not await self._init_clients()
         ) and not await self._initial_setup():
             return
         self.loop.set_exception_handler(
@@ -683,12 +657,12 @@ class Her:
             )
         )
 
-        await asyncio.gather(*[self.amain_wrapper(client) for client in self.clients])
+        await asyncio.gather(*[self.amain_wrapper(client) for client in self.sessions])
 
     def _shutdown_handler(self):
         """Shutdown handler"""
         logging.info("Bye")
-        for client in self.clients:
+        for client in self.sessions:
             client.disconnect()
         sys.exit(0)
 

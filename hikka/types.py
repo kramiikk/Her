@@ -98,25 +98,11 @@ class Module:
         self._client = self.allmodules.client
         self.lookup = self.allmodules.lookup
         self.get_prefix = self.allmodules.get_prefix
-        self.allclients = self.allmodules.allclients
         self.tg_id = self._client.tg_id
         self._tg_id = self._client.tg_id
 
     async def on_unload(self):
         """Called after unloading / reloading module"""
-
-    async def on_dlmod(self):
-        """
-        Called after the module is first time loaded with .dlmod or .loadmod
-
-        Possible use-cases:
-        - Send reaction to author's channel message
-        - Create asset folder
-        - ...
-
-        ⚠️ Note, that any error there will not interrupt module load, and will just
-        send a message to logs with verbosity INFO and exception traceback
-        """
 
     async def invoke(
         self,
@@ -464,7 +450,6 @@ class Library:
         self._tg_id = self._client.tg_id
         self.lookup = self.allmodules.lookup
         self.get_prefix = self.allmodules.get_prefix
-        self.allclients = self.allmodules.allclients
 
     def _lib_get(
         self,
