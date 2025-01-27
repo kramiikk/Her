@@ -10,7 +10,6 @@ import contextlib
 import logging
 import re
 import time
-import typing
 from typing import Optional, Union, Dict, List, Callable
 
 from hikkatl import events

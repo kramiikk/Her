@@ -494,36 +494,6 @@ class LoadError(Exception):
         return self._error
 
 
-class CoreOverwriteError(LoadError):
-    """Is being raised when core module or command is overwritten"""
-
-    def __init__(
-        self,
-        module: typing.Optional[str] = None,
-        command: typing.Optional[str] = None,
-    ):
-        self.type = "module" if module else "command"
-        self.target = module or command
-        super().__init__(str(self))
-
-    def __str__(self) -> str:
-        return (
-            f"{'Module' if self.type == 'module' else 'command'} {self.target} will not"
-            " be overwritten, because it's core"
-        )
-
-
-class CoreUnloadError(Exception):
-    """Is being raised when user tries to unload core module"""
-
-    def __init__(self, module: str):
-        self.module = module
-        super().__init__()
-
-    def __str__(self) -> str:
-        return f"Module {self.module} will not be unloaded, because it's core"
-
-
 class SelfUnload(Exception):
     """Silently unloads module, if raised in `client_ready`"""
 

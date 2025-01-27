@@ -130,7 +130,6 @@ class CustomTelegramClient(TelegramClient):
 
             for entity_id, state in self.session.get_update_states():
                 if entity_id == 0:
-                    # TODO current session doesn't store self-user info but adding that is breaking on downstream session impls
                     ss = SessionState(
                         0,
                         0,

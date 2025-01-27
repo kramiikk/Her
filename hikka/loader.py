@@ -29,8 +29,6 @@ from .database import Database
 from .types import (
     Command,
     ConfigValue,
-    CoreOverwriteError,
-    CoreUnloadError,
     JSONSerializable,
     Library,
     LibraryConfig,
@@ -39,7 +37,6 @@ from .types import (
     ModuleConfig,
     SelfSuspend,
     SelfUnload,
-    StopLoop,
     StringLoader,
     get_callback_handlers,
     get_commands,
@@ -49,8 +46,6 @@ __all__ = [
     "Modules",
     "InfiniteLoop",
     "Command",
-    "CoreOverwriteError",
-    "CoreUnloadError",
     "JSONSerializable",
     "Library",
     "LibraryConfig",
@@ -464,15 +459,6 @@ class Modules:
             )
 
         for _command, cmd in instance.hikka_commands.items():
-            if (
-                _command.lower() in self._core_commands
-                and not instance.__origin__.startswith("<core")
-            ):
-                with contextlib.suppress(Exception):
-                    self.modules.remove(instance)
-
-                raise CoreOverwriteError(command=_command)
-
             self.commands.update({_command.lower(): cmd})
 
     def register_watchers(self, instance: Module):
@@ -521,16 +507,6 @@ class Modules:
 
         for module in self.modules:
             if module.__class__.__name__ == instance.__class__.__name__:
-                if module.__origin__.startswith(
-                    "<core"
-                ):
-                    raise CoreOverwriteError(
-                        module=(
-                            module.__class__.__name__[:-3]
-                            if module.__class__.__name__.endswith("Mod")
-                            else module.__class__.__name__
-                        )
-                    )
 
                 await module.on_unload()
 
@@ -673,7 +649,7 @@ class Modules:
         )
 
     def unregister_loops(self, instance: Module):
-        for name, method in utils.iter_attrs(instance):
+        for _, method in utils.iter_attrs(instance):
             if isinstance(method, InfiniteLoop):
                 method.stop()
 
