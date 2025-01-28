@@ -2,7 +2,7 @@ import asyncio
 import logging
 import random
 import time
-from collections import deque
+from collections import deque, OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Dict, Iterable, List, Optional, Set, Tuple, Union
@@ -14,7 +14,7 @@ from telethon.errors import (
     FloodWaitError,
 )
 
-from .. import loader, utils
+from .. import loader, utils, _internal
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -51,7 +51,7 @@ class RateLimiter:
 
 class SimpleCache:
     def __init__(self, ttl: int = 7200, max_size: int = 50):
-        self.cache = {}
+        self.cache = OrderedDict()
         self.ttl = ttl
         self.max_size = max_size
         self._lock = asyncio.Lock()
@@ -75,24 +75,23 @@ class SimpleCache:
             if not entry:
                 return None
             expire_time, value = entry
-            current_time = time.time()
-            if current_time > expire_time:
+            if time.time() > expire_time:
                 del self.cache[key]
                 return None
-            del self.cache[key]
-            self.cache[key] = (expire_time, value)
+            self.cache.move_to_end(key)
             return value
 
     async def set(self, key, value, expire: Optional[int] = None):
         async with self._lock:
-            while len(self.cache) >= self.max_size:
-                await self.clean_expired(force=True)
-                if len(self.cache) >= self.max_size:
-                    oldest_key = next(iter(self.cache))
-                    del self.cache[oldest_key]
+            if expire is not None and expire <= 0:
+                return
             ttl = expire if expire is not None else self.ttl
             expire_time = time.time() + ttl
+            if key in self.cache:
+                del self.cache[key]
             self.cache[key] = (expire_time, value)
+            while len(self.cache) > self.max_size:
+                self.cache.popitem(last=False)
 
     async def start_auto_cleanup(self):
         """Запускает фоновую задачу для периодической очистки кэша"""
@@ -230,7 +229,7 @@ class BroadcastManager:
         self.codes: Dict[str, Broadcast] = {}
         self.broadcast_tasks: Dict[str, asyncio.Task] = {}
         self._message_cache = SimpleCache(ttl=7200, max_size=50)
-        self.valid_chats_cache = SimpleCache(ttl=43200, max_size=500)
+        self.valid_chats_cache = SimpleCache(ttl=7200, max_size=500)
         self._active = True
         self._lock = asyncio.Lock()
         self.watcher_enabled = False
@@ -249,6 +248,7 @@ class BroadcastManager:
         if not code or not code.messages:
             logger.error(f"Нет сообщений или кода для {code_name}")
             return
+        await _internal.fw_protect()
         await asyncio.sleep(
             random.uniform(code.interval[0] * 60, code.interval[1] * 60)
         )
@@ -302,6 +302,7 @@ class BroadcastManager:
                 min_interval = max(0, code.interval[0] * 60 - elapsed)
                 max_interval = max(2, code.interval[1] * 60 - elapsed)
 
+                await _internal.fw_protect()
                 await asyncio.sleep(random.uniform(min_interval, max_interval))
             except asyncio.CancelledError:
                 break
@@ -426,6 +427,7 @@ class BroadcastManager:
             for task in tasks:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
+            await _internal.fw_protect()
             await asyncio.sleep(wait_time)
 
             self.pause_event.clear()
@@ -763,7 +765,7 @@ class BroadcastManager:
                         base_message + group,
                         schedule=datetime.now() + timedelta(seconds=60),
                     )
-                    await asyncio.sleep(3)
+                    await _internal.fw_protect()
         except Exception as e:
             logger.error(f"Ошибка обработки неудачных чатов для {code_name}: {e}")
 
@@ -896,15 +898,12 @@ class BroadcastManager:
                         from_peer=messages.chat_id,
                     )
 
-            await asyncio.sleep(random.uniform(1, 3))
+            await _internal.fw_protect()
 
             is_auto_mode = send_mode == "auto"
             has_media = isinstance(msg, Message) and msg.media is not None
-            is_group = isinstance(msg, list) or (
-                hasattr(msg, "grouped_id") and msg.grouped_id
-            )
 
-            if (is_auto_mode and (has_media or is_group)) or (send_mode == "forward"):
+            if send_mode == "forward" or has_media:
                 await forward_messages(msg)
             else:
                 text = msg.text if isinstance(msg, Message) else str(msg)
