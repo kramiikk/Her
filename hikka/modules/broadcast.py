@@ -890,22 +890,11 @@ class BroadcastManager:
                 )
 
             await _internal.fw_protect()
-            is_message_list = isinstance(msg, list)
 
-            has_media = (
-                any(getattr(m, "media", None) for m in msg)
-                if is_message_list
-                else getattr(msg, "media", None)
-            )
-
-            if send_mode == "forward" or has_media:
-                if is_message_list:
-                    await forward_messages(msg)
-                else:
-                    await forward_messages([msg])
-                return True
-            await self.client.send_message(chat_id, msg.text)
-
+            if isinstance(msg, list):
+                await forward_messages(msg)
+            else:
+                await forward_messages([msg])
             return True
         except FloodWaitError as e:
             logger.error(f"Флуд-контроль: {e}")
@@ -1051,7 +1040,7 @@ class BroadcastManager:
         """Фоновая задача для адаптации интервалов"""
         while self._active:
             try:
-                await asyncio.sleep(3600)
+                await asyncio.sleep(1800)
                 await self._check_and_adjust_intervals()
             except asyncio.CancelledError:
                 break
