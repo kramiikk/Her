@@ -875,35 +875,26 @@ class BroadcastManager:
         self,
         chat_id: int,
         msg: Union[Message, List[Message]],
-        send_mode: str = "auto"
+        send_mode: str = "auto",
     ) -> bool:
         if self.pause_event.is_set():
             return False
         await self.GLOBAL_LIMITER.acquire()
         try:
-            async def should_forward(message: Message) -> bool:
-                if send_mode == "forward":
-                    return True
-                if send_mode == "auto":
-                    return message.grouped_id is not None
-            for single_msg in msg:
-                if single_msg.media and not await should_forward(single_msg):
-                    await self.client.send_file(
-                        entity=chat_id,
-                        file=single_msg.media,
-                        caption=single_msg.text,
-                    )
-                elif await should_forward(single_msg):
-                    await self.client.forward_messages(
-                        entity=chat_id,
-                        messages=[single_msg],
-                        from_peer=single_msg.chat_id,
-                    )
-                else:
-                    await self.client.send_message(
-                        entity=chat_id,
-                        message=single_msg.text,
-                    )
+
+            async def forward_messages(messages: List[Message]) -> None:
+                await self.client.forward_messages(
+                    entity=chat_id,
+                    messages=messages,
+                    from_peer=messages[0].chat_id,
+                )
+
+            await _internal.fw_protect()
+
+            if isinstance(msg, list):
+                await forward_messages(msg)
+            else:
+                await forward_messages([msg])
             return True
         except FloodWaitError as e:
             logger.error(f"Флуд-контроль: {e}")
