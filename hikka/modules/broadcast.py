@@ -872,21 +872,19 @@ class BroadcastManager:
         logger.info(f"Задача для {code_name} перезапущена")
 
     async def _send_message(
-        self,
-        chat_id: int,
-        msg: Union[Message, List[Message]], 
-        send_mode: str = "auto"
+        self, chat_id: int, msg: Union[Message, List[Message]], send_mode: str = "auto"
     ) -> bool:
         if self.pause_event.is_set():
             return False
         await self.GLOBAL_LIMITER.acquire()
         try:
+
             async def should_forward(message: Message) -> bool:
                 if send_mode == "forward":
                     return True
                 if send_mode == "auto":
                     return message.grouped_id is not None
-                
+
             if msg.media and not await should_forward(msg):
                 await self.client.send_file(
                     entity=chat_id,
@@ -904,7 +902,6 @@ class BroadcastManager:
                     entity=chat_id,
                     message=msg.text,
                 )
-                
             return True
         except FloodWaitError as e:
             logger.error(f"Флуд-контроль: {e}")
@@ -951,13 +948,14 @@ class BroadcastManager:
     async def _send_batch(
         self, chat_ids: List[int], messages: Iterable[Message]
     ) -> List[bool]:
-        """Отправка батча с ограничением параллелизма"""
+        """Отправка батча с ограничением параллелизма (поддержка альбомов)"""
         sem = asyncio.Semaphore(10)
+        send_results = []
 
-        async def send_one(chat_id: int) -> bool:
+        async def send_to_chat(chat_id: int, msgs_to_send: Iterable[Message]) -> bool:
             async with sem:
                 try:
-                    return await self._send_message(chat_id, messages)
+                    return await self._send_message(chat_id, list(msgs_to_send))
                 except asyncio.CancelledError:
                     logger.warning(f"Задача для чата {chat_id} была отменена")
                     raise
@@ -965,7 +963,10 @@ class BroadcastManager:
                     logger.error(f"Ошибка в чате {chat_id}: {str(e)}")
                     return False
 
-        return await asyncio.gather(*[send_one(cid) for cid in chat_ids])
+        for chat_id in chat_ids:
+            send_results.append(asyncio.create_task(send_to_chat(chat_id, messages)))
+        results = await asyncio.gather(*send_results)
+        return results
 
     async def handle_command(self, message: Message):
         """Обработчик команд для управления рассылкой"""
