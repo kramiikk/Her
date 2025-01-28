@@ -234,8 +234,6 @@ class BroadcastManager:
         self._active = True
         self._lock = asyncio.Lock()
         self.watcher_enabled = False
-        self.error_counts = {}
-        self.last_error_time = {}
         self.cache_cleanup_task = None
         self.tg_id = tg_id
         self._semaphore = asyncio.Semaphore(3)
@@ -901,18 +899,16 @@ class BroadcastManager:
             await asyncio.sleep(random.uniform(1, 3))
 
             is_auto_mode = send_mode == "auto"
-            is_forwardable = isinstance(msg, list) or (
-                hasattr(msg, "media") and msg.media
+            has_media = isinstance(msg, Message) and msg.media is not None
+            is_group = isinstance(msg, list) or (
+                hasattr(msg, "grouped_id") and msg.grouped_id
             )
-            if not is_auto_mode or is_forwardable:
+
+            if (is_auto_mode and (has_media or is_group)) or (send_mode == "forward"):
                 await forward_messages(msg)
             else:
-                await self.client.send_message(
-                    entity=chat_id, message=msg.text if msg.text else msg
-                )
-            self.error_counts[chat_id] = 0
-            self.error_counts[f"{chat_id}_general"] = 0
-            self.last_error_time[f"{chat_id}_general"] = 0
+                text = msg.text if isinstance(msg, Message) else str(msg)
+                await self.client.send_message(entity=chat_id, message=text)
             return True
         except FloodWaitError as e:
             logger.error(f"Флуд-контроль: {e}")
@@ -1070,12 +1066,3 @@ class BroadcastManager:
         self.cache_cleanup_task = asyncio.create_task(
             self._message_cache.start_auto_cleanup()
         )
-
-    async def stop_cache_cleanup(self):
-        """Останавливает фоновую очистку кэша"""
-        if self.cache_cleanup_task:
-            self.cache_cleanup_task.cancel()
-            try:
-                await self.cache_cleanup_task
-            except asyncio.CancelledError:
-                pass
