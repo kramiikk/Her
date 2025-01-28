@@ -900,7 +900,6 @@ class BroadcastManager:
 
             await _internal.fw_protect()
 
-            is_auto_mode = send_mode == "auto"
             has_media = isinstance(msg, Message) and msg.media is not None
 
             if send_mode == "forward" or has_media:
