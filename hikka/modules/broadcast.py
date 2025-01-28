@@ -883,9 +883,10 @@ class BroadcastManager:
         try:
 
             async def should_forward(message: Message) -> bool:
-                return send_mode == "forward" or (
-                    send_mode == "auto" and message.grouped_id
-                )
+                if send_mode == "forward":
+                    return True
+                if send_mode == "auto":
+                    return message.grouped_id is not None
 
             async def send_messages(messages: Union[Message, List[Message]]) -> None:
                 if isinstance(messages, list):
