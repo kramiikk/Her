@@ -172,7 +172,6 @@ class Broadcast:
     chats: Set[int] = field(default_factory=set)
     messages: set = field(default_factory=set)
     interval: Tuple[int, int] = (10, 13)
-    send_mode: str = "auto"
     batch_mode: bool = False
     _last_message_index: int = field(default=0, init=False)
     _active: bool = field(default=False, init=False)
@@ -602,23 +601,9 @@ class BroadcastManager:
                 f"  ├ Чатов: {len(code.chats)} (активных)\n"
                 f"  ├ Сообщений: {len(code.messages)}\n"
                 f"  ├ Интервал: {code.interval[0]}-{code.interval[1]} мин\n"
-                f"  ├ Режим: {code.send_mode}\n"
                 f"  └ Все сообщения разом: {'да' if code.batch_mode else 'нет'}\n\n"
             )
         await utils.answer(message, response)
-
-    async def _handle_mode_command(self, message: Message, code: Broadcast, args: list):
-        """Обработчик команды mode"""
-        if len(args) < 3:
-            await utils.answer(message, "❌ Укажите режим отправки (auto/forward)")
-            return
-        mode = args[2].lower()
-        if mode not in ["auto", "forward"]:
-            await utils.answer(message, "❌ Неверный режим.")
-            return
-        code.send_mode = mode
-        await self.save_config()
-        await utils.answer(message, f"✅ Установлен режим отправки: {mode}")
 
     async def _handle_remove_command(self, message: Message, code: Broadcast):
         """Обработчик команды remove"""
@@ -800,7 +785,6 @@ class BroadcastManager:
                     chats=set(code_data.get("chats", [])),
                     messages=set(loaded_messages),
                     interval=tuple(code_data.get("interval", (10, 13))),
-                    send_mode=code_data.get("send_mode", "auto"),
                     batch_mode=code_data.get("batch_mode", False),
                     original_interval=original_interval,
                 )
@@ -875,7 +859,6 @@ class BroadcastManager:
         self,
         chat_id: int,
         msg: Union[Message, List[Message]],
-        send_mode: str = "auto",
     ) -> bool:
         if self.pause_event.is_set():
             return False
@@ -993,7 +976,6 @@ class BroadcastManager:
             "addchat": lambda: self._handle_addchat_command(message, code, args),
             "rmchat": lambda: self._handle_rmchat_command(message, code, args),
             "int": lambda: self._handle_interval_command(message, code, args),
-            "mode": lambda: self._handle_mode_command(message, code, args),
             "allmsgs": lambda: self._handle_allmsgs_command(message, code, args),
             "start": lambda: self._handle_start_command(message, code, code_name),
             "stop": lambda: self._handle_stop_command(message, code, code_name),
@@ -1027,7 +1009,6 @@ class BroadcastManager:
                     "chats": list(code.chats),
                     "messages": messages,
                     "interval": list(code.interval),
-                    "send_mode": code.send_mode,
                     "batch_mode": code.batch_mode,
                     "active": code._active,
                     "original_interval": list(code.original_interval),
