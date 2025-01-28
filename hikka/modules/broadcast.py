@@ -893,7 +893,7 @@ class BroadcastManager:
             return False
 
     async def _send_messages_to_chats(
-        self, code: Broadcast, messages: Iterable[Message]
+        self, code: Broadcast, messages: Iterable[Message], code_name: str
     ) -> Set[int]:
         """Улучшенная отправка с батчингом и лимитом параллелизма"""
         if self.pause_event.is_set():
@@ -901,6 +901,13 @@ class BroadcastManager:
         valid_chats = [cid for cid in code.chats if await self._is_chat_valid(cid)]
         if not valid_chats:
             logger.error("💥 Нет доступных чатов для отправки!")
+            code._active = False
+            if code_name in self.broadcast_tasks and not self.broadcast_tasks[code_name].done():
+                self.broadcast_tasks[code_name].cancel()
+                try:
+                    await self.broadcast_tasks[code_name]
+                except asyncio.CancelledError:
+                    pass
             return set()
         failed_chats = set()
         batches = [
