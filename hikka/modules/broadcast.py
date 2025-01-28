@@ -904,8 +904,7 @@ class BroadcastManager:
                 else:
                     await forward_messages([msg])
                 return True
-            text = msg.text if isinstance(msg, Message) else str(msg)
-            await self.client.send_message(chat_id, text)
+            await self.client.send_message(chat_id, msg.text)
 
             return True
         except FloodWaitError as e:
