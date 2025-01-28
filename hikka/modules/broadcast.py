@@ -451,9 +451,7 @@ class BroadcastManager:
         async with self._lock:
             for code in self.codes.values():
                 code.chats.discard(chat_id)
-                logger.warning(
-                    f"🚫 Постоянная ошибка в чате {chat_id}. Удален из всех рассылок."
-                )
+                logger.warning(f"🚫 Ошибка в чате {chat_id}. Удален из всех рассылок.")
         await self.save_config()
 
     async def _handle_add_command(
@@ -884,29 +882,31 @@ class BroadcastManager:
         await self.GLOBAL_LIMITER.acquire()
         try:
 
-            async def forward_messages(messages: Union[Message, List[Message]]) -> None:
-                if isinstance(messages, list):
-                    await self.client.forward_messages(
-                        entity=chat_id,
-                        messages=messages,
-                        from_peer=messages[0].chat_id,
-                    )
-                else:
-                    await self.client.forward_messages(
-                        entity=chat_id,
-                        messages=[messages],
-                        from_peer=messages.chat_id,
-                    )
+            async def forward_messages(messages: List[Message]) -> None:
+                await self.client.forward_messages(
+                    entity=chat_id,
+                    messages=messages,
+                    from_peer=messages[0].chat_id,
+                )
 
             await _internal.fw_protect()
+            is_message_list = isinstance(msg, list)
 
-            has_media = isinstance(msg, Message) and msg.media is not None
+            has_media = (
+                any(getattr(m, "media", None) for m in msg)
+                if is_message_list
+                else getattr(msg, "media", None)
+            )
 
             if send_mode == "forward" or has_media:
-                await forward_messages(msg)
-            else:
-                text = msg.text if isinstance(msg, Message) else str(msg)
-                await self.client.send_message(entity=chat_id, message=text)
+                if is_message_list:
+                    await forward_messages(msg)
+                else:
+                    await forward_messages([msg])
+                return True
+            text = msg.text if isinstance(msg, Message) else str(msg)
+            await self.client.send_message(chat_id, text)
+
             return True
         except FloodWaitError as e:
             logger.error(f"Флуд-контроль: {e}")
