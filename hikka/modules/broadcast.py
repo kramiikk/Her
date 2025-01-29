@@ -58,36 +58,47 @@ class SimpleCache:
 
     async def get(self, key: tuple) -> Optional[Any]:
         """
-        Get a value from cache using a tuple key with improved type checking
+        Get a value from cache using a tuple key
         """
         if not isinstance(key, tuple):
             raise ValueError("Cache key must be a tuple")
+        
         async with self._lock:
             entry = self.cache.get(key)
             if not entry:
                 return None
+                
             expire_time, value = entry
             if time.time() > expire_time:
                 del self.cache[key]
                 return None
+
             self.cache.move_to_end(key)
             return value
 
     async def set(self, key: tuple, value: Any, expire: Optional[int] = None) -> None:
         """
-        Set a value in cache using a tuple key with improved validation
+        Set a value in cache using a tuple key
         """
         if not isinstance(key, tuple):
             raise ValueError("Cache key must be a tuple")
+            
         async with self._lock:
             if expire is not None and expire <= 0:
                 return
+                
             ttl = expire if expire is not None else self.ttl
             expire_time = time.time() + ttl
 
+            if hasattr(value, 'to_dict'):
+                cached_value = value.to_dict()
+            else:
+                cached_value = value
+
             if key in self.cache:
                 del self.cache[key]
-            self.cache[key] = (expire_time, value)
+                
+            self.cache[key] = (expire_time, cached_value)
 
             while len(self.cache) > self.max_size:
                 self.cache.popitem(last=False)
