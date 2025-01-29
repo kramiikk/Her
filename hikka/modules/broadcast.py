@@ -473,11 +473,16 @@ class BroadcastManager:
                 grouped_ids = []
                 if hasattr(reply, "grouped_id") and reply.grouped_id:
                     try:
-                        album_messages = await self.client.get_messages(
+                        album_messages = []
+                        async for msg in self.client.iter_messages(
                             reply.chat_id,
                             limit=10,
-                            group=reply.grouped_id
-                        )
+                            offset_id=reply.id - 10
+                        ):
+                            if getattr(msg, "grouped_id", None) == reply.grouped_id:
+                                album_messages.append(msg)
+                            if len(album_messages) >= 10:
+                                break
                         grouped_ids = [
                             msg.id 
                             for msg in album_messages 
@@ -671,7 +676,7 @@ class BroadcastManager:
         grouped_ids = []
         if hasattr(reply, "grouped_id") and reply.grouped_id:
             async for msg in self.client.iter_messages(
-                reply.chat_id, offset_id=reply.id - 15, limit=30
+                reply.chat_id, offset_id=reply.id - 10, limit=10
             ):
                 if hasattr(msg, "grouped_id") and msg.grouped_id == reply.grouped_id:
                     grouped_ids.append(msg.id)
