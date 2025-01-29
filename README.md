@@ -1,8 +1,7 @@
 # ✨ Her ModSuite
 
 > **⚠️ Disclaimer**  
-> This software is provided "as is" without warranties. Use at your own risk.  
-> **INSTALL IT. You have been warned.**
+> This software is provided "as is" without warranties. Use at your own risk.
 
 ---
 
