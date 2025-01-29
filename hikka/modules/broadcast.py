@@ -56,48 +56,69 @@ class SimpleCache:
         self.max_size = max_size
         self._lock = asyncio.Lock()
 
-    async def clean_expired(self, force: bool = False):
-        async with self._lock:
-            if not force and len(self.cache) < self.max_size // 2:
-                return
-            current_time = time.time()
-            expired = [
-                k
-                for k, (expire_time, _) in self.cache.items()
-                if current_time > expire_time
-            ]
-            for key in expired:
-                del self.cache[key]
-
-    async def get(self, key: tuple):
+    async def get(self, key: tuple) -> Optional[Any]:
         """
-        Get a value from cache using a tuple key
+        Get a value from cache using a tuple key with improved type checking
         """
+        if not isinstance(key, tuple):
+            raise ValueError("Cache key must be a tuple")
+            
         async with self._lock:
             entry = self.cache.get(key)
             if not entry:
                 return None
+                
             expire_time, value = entry
             if time.time() > expire_time:
                 del self.cache[key]
                 return None
+                
+            # Move to end (LRU behavior)
             self.cache.move_to_end(key)
             return value
 
-    async def set(self, key: tuple, value, expire: Optional[int] = None):
+    async def set(self, key: tuple, value: Any, expire: Optional[int] = None) -> None:
         """
-        Set a value in cache using a tuple key
+        Set a value in cache using a tuple key with improved validation
         """
+        if not isinstance(key, tuple):
+            raise ValueError("Cache key must be a tuple")
+            
         async with self._lock:
             if expire is not None and expire <= 0:
                 return
+                
             ttl = expire if expire is not None else self.ttl
             expire_time = time.time() + ttl
+            
+            # Remove existing entry if present
             if key in self.cache:
                 del self.cache[key]
+                
+            # Add new entry
             self.cache[key] = (expire_time, value)
+            
+            # Maintain size limit (LRU eviction)
             while len(self.cache) > self.max_size:
                 self.cache.popitem(last=False)
+
+    async def clean_expired(self, force: bool = False) -> None:
+        """Clean expired entries with improved efficiency"""
+        async with self._lock:
+            if not force and len(self.cache) < self.max_size // 2:
+                return
+                
+            current_time = time.time()
+            expired_keys = [
+                k for k, (expire_time, _) in self.cache.items()
+                if current_time > expire_time
+            ]
+            
+            for key in expired_keys:
+                del self.cache[key]
+                
+            if expired_keys:
+                logger.debug(f"Cleaned {len(expired_keys)} expired entries from cache")
 
     async def start_auto_cleanup(self):
         """Запускает фоновую задачу для периодической очистки кэша"""
@@ -381,35 +402,37 @@ class BroadcastManager:
 
     async def _fetch_messages(self, msg_data: dict) -> Optional[Message]:
         """
-        Fetch a message from cache or Telegram
+        Fetch a message from cache or Telegram with improved error handling and caching
         """
         try:
             chat_id = msg_data["chat_id"]
             message_id = msg_data["message_id"]
-
+            
             # Use tuple as cache key
             cache_key = (chat_id, message_id)
+            
+            # Try to get from cache first
+            cached_msg = await self._message_cache.get(cache_key)
+            if cached_msg is not None:
+                return cached_msg
 
-            cached = await self._message_cache.get(cache_key)
-            if cached:
-                return cached
-
+            # If not in cache, fetch from Telegram
             try:
                 msg = await self.client.get_messages(entity=chat_id, ids=message_id)
                 if msg:
-                    # Cache using tuple key
+                    # Store in cache using tuple key
                     await self._message_cache.set(cache_key, msg)
-                    logger.debug(f"Сообщение {chat_id}:{message_id} сохранено в кэш")
+                    logger.debug(f"Message {chat_id}:{message_id} cached successfully")
                     return msg
                 else:
-                    logger.error(f"Сообщение {chat_id}:{message_id} не найдено")
+                    logger.error(f"Message {chat_id}:{message_id} not found")
                     return None
             except ValueError as e:
-                logger.error(f"Чат/сообщение не существует: {chat_id} {message_id}: {e}")
+                logger.error(f"Chat/message does not exist: {chat_id} {message_id}: {e}")
                 return None
 
         except Exception as e:
-            logger.error(f"Ошибка: {e}", exc_info=True)
+            logger.error(f"Error in _fetch_messages: {e}", exc_info=True)
             return None
 
     async def _get_chat_id(self, chat_identifier: str) -> Optional[int]:
