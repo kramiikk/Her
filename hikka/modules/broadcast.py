@@ -112,8 +112,9 @@ class BroadcastMod(loader.Module):
     """Модуль для массовой рассылки."""
 
     strings = {"name": "Broadcast"}
-
-    async def brcmd(self, message):
+    
+    @loader.command()
+    async def bcmd(self, message):
         """Команда для управления рассылкой."""
         await self.manager.handle_command(message)
 

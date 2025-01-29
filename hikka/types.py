@@ -506,10 +506,6 @@ class SelfSuspend(Exception):
         return self._error
 
 
-class StopLoop(Exception):
-    """Stops the loop, in which is raised"""
-
-
 class ModuleConfig(dict):
     """Stores config for modules and apparently libraries"""
 

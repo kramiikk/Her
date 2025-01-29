@@ -53,7 +53,6 @@ __all__ = [
     "Module",
     "SelfSuspend",
     "SelfUnload",
-    "StopLoop",
     "StringLoader",
     "get_commands",
     "get_callback_handlers",
@@ -155,8 +154,6 @@ class InfiniteLoop:
 
             try:
                 await self.func(self.module_instance, *args, **kwargs)
-            except StopLoop:
-                break
             except Exception:
                 logger.exception("Error running loop!")
 

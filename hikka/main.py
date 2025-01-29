@@ -37,7 +37,7 @@ from hikkatl.sessions import MemorySession, SQLiteSession
 
 
 from . import configurator, database, loader, utils, version
-from ._internal import restart
+from ._internal import restart, fw_protect
 from .dispatcher import CommandDispatcher
 from .tl_cache import CustomTelegramClient
 from .version import __version__
@@ -530,6 +530,7 @@ class Her:
         """Wrapper around amain"""
         async with client:
             first = True
+            await fw_protect()
             me = await client.get_me()
             client._tg_id = me.id
             client.tg_id = me.id
