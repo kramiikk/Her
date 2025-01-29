@@ -474,23 +474,34 @@ class BroadcastManager:
                 if hasattr(reply, "grouped_id") and reply.grouped_id:
                     try:
                         album_messages = []
-                        async for msg in self.client.iter_messages(
-                            reply.chat_id,
-                            limit=10,
-                            offset_id=reply.id - 10
-                        ):
-                            if getattr(msg, "grouped_id", None) == reply.grouped_id:
-                                album_messages.append(msg)
-                            if len(album_messages) >= 10:
-                                break
+                        processed_ids = set()
+                        reply_grouped_id = getattr(reply, "grouped_id", None)
+
+                        fetched_messages = await self.client.get_messages(
+                            reply.chat_id, ids=list(range(max(1, reply.id - 9), (reply.id + 9) + 1))
+                        )
+
+                        if not fetched_messages:
+                            fetched_messages = []
+
+                        for msg in fetched_messages:
+                            if msg and getattr(msg, "grouped_id", None) == reply_grouped_id:
+                                if msg.id not in processed_ids:
+                                    album_messages.append(msg)
+                                    processed_ids.add(msg.id)
+
                         grouped_ids = [
-                            msg.id 
-                            for msg in album_messages 
-                            if getattr(msg, "grouped_id", None) == reply.grouped_id
+                            msg.id
+                            for msg in album_messages
                         ]
                         if reply.id not in grouped_ids:
-                            grouped_ids.append(reply.id)
-                        
+                            if getattr(reply, "grouped_id", None) == reply_grouped_id:
+                                album_messages.append(reply)
+                                grouped_ids.append(reply.id)
+
+
+                        grouped_ids = sorted(list(set(grouped_ids)))
+
                         for msg in album_messages:
                             cache_key = (msg.chat_id, msg.id)
                             await self._message_cache.set(cache_key, msg)
