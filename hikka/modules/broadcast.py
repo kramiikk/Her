@@ -69,7 +69,10 @@ class SimpleCache:
             for key in expired:
                 del self.cache[key]
 
-    async def get(self, key):
+    async def get(self, key: tuple):
+        """
+        Get a value from cache using a tuple key
+        """
         async with self._lock:
             entry = self.cache.get(key)
             if not entry:
@@ -81,7 +84,10 @@ class SimpleCache:
             self.cache.move_to_end(key)
             return value
 
-    async def set(self, key, value, expire: Optional[int] = None):
+    async def set(self, key: tuple, value, expire: Optional[int] = None):
+        """
+        Set a value in cache using a tuple key
+        """
         async with self._lock:
             if expire is not None and expire <= 0:
                 return
@@ -97,7 +103,7 @@ class SimpleCache:
         """Запускает фоновую задачу для периодической очистки кэша"""
         while True:
             await self.clean_expired()
-            logger.debug("[CACHE] Периодическая очистка выполнена")
+            logger.debug("Периодическая очистка выполнена")
             await asyncio.sleep(self.ttl)
 
 
@@ -373,36 +379,37 @@ class BroadcastManager:
                     )
                 await self.save_config()
 
-    async def _fetch_messages(self, msg_data: dict):
+    async def _fetch_messages(self, msg_data: dict) -> Optional[Message]:
+        """
+        Fetch a message from cache or Telegram
+        """
         try:
             chat_id = msg_data["chat_id"]
             message_id = msg_data["message_id"]
 
+            # Use tuple as cache key
             cache_key = (chat_id, message_id)
 
             cached = await self._message_cache.get(cache_key)
             if cached:
                 return cached
+
             try:
                 msg = await self.client.get_messages(entity=chat_id, ids=message_id)
                 if msg:
+                    # Cache using tuple key
                     await self._message_cache.set(cache_key, msg)
-                    logger.debug(f"[CACHE] Сообщение {cache_key} сохранено в кэш")
+                    logger.debug(f"Сообщение {chat_id}:{message_id} сохранено в кэш")
+                    return msg
                 else:
-                    logger.error(f"[FETCH] Сообщение {chat_id}:{message_id} не найдено")
+                    logger.error(f"Сообщение {chat_id}:{message_id} не найдено")
+                    return None
             except ValueError as e:
-                logger.error(
-                    f"Чат/сообщение не существует: {chat_id} {message_id}: {e}"
-                )
+                logger.error(f"Чат/сообщение не существует: {chat_id} {message_id}: {e}")
                 return None
-            if not msg:
-                logger.error(f"Сообщение {message_id} не найдено в чате {chat_id}")
-                return None
-            else:
-                await self._message_cache.set(cache_key, msg)
-            return msg
+
         except Exception as e:
-            logger.error(f"[FETCH] Ошибка: {e}", exc_info=True)
+            logger.error(f"Ошибка: {e}", exc_info=True)
             return None
 
     async def _get_chat_id(self, chat_identifier: str) -> Optional[int]:
@@ -477,9 +484,7 @@ class BroadcastManager:
                 logger.warning(f"🚫 Ошибка в чате {chat_id}. Удален из всех рассылок.")
         await self.save_config()
 
-    async def _handle_add_command(
-        self, message: Message, code: Optional[Broadcast], code_name: str
-    ):
+    async def _handle_add_command(self, message: Message, code: Optional[Broadcast], code_name: str):
         async with self._lock:
             reply = await message.get_reply_message()
             if not reply:
@@ -490,33 +495,32 @@ class BroadcastManager:
                 if is_new:
                     code = Broadcast()
                     self.codes[code_name] = code
+                    
                 grouped_ids = []
                 if hasattr(reply, "grouped_id") and reply.grouped_id:
                     try:
-                        album_messages = []
-                        processed_ids = set()
                         reply_grouped_id = reply.grouped_id
-
-                        fetched_messages = await self.client.get_messages(
-                            reply.chat_id, ids=list(range(max(1, reply.id - 9), (reply.id + 9) + 1))
+                        album_messages = []
+                        
+                        # Get messages around the reply
+                        messages = await self.client.get_messages(
+                            reply.chat_id, 
+                            limit=20,  # Увеличиваем лимит для надежности
+                            max_id=reply.id + 10,
+                            min_id=reply.id - 10
                         )
-
-                        if not fetched_messages:
-                            fetched_messages = []
-
-                        for msg in fetched_messages:
+                        
+                        # Filter messages with the same grouped_id
+                        for msg in messages:
                             if msg and getattr(msg, "grouped_id", None) == reply_grouped_id:
-                                if msg.id not in processed_ids:
-                                    album_messages.append(msg)
-                                    processed_ids.add(msg.id)
-
-                        grouped_ids = sorted(list(set([msg.id for msg in album_messages])))
-
-                        for msg in album_messages:
-                            cache_key = (msg.chat_id, msg.id)
-                            await self._message_cache.set(cache_key, msg)
-
+                                album_messages.append(msg)
+                                # Cache each album message
+                                cache_key = (msg.chat_id, msg.id)
+                                await self._message_cache.set(cache_key, msg)
+                        
+                        grouped_ids = sorted([msg.id for msg in album_messages])
                         logger.debug(f"Найдено сообщений в альбоме: {len(grouped_ids)}")
+                        
                     except Exception as e:
                         logger.error(f"Ошибка получения альбома: {e}")
                         grouped_ids = []
@@ -524,12 +528,17 @@ class BroadcastManager:
                 success = code.add_message(
                     chat_id=reply.chat_id,
                     message_id=reply.id,
-                    grouped_ids=grouped_ids or None,
+                    grouped_ids=grouped_ids if grouped_ids else None
                 )
 
                 if not success:
                     await utils.answer(message, "❌ Сообщение уже существует")
                     return
+                
+                # Cache the main message
+                cache_key = (reply.chat_id, reply.id)
+                await self._message_cache.set(cache_key, reply)
+                
                 await self.save_config()
 
                 if code_name in self.codes and len(self.codes[code_name].messages) > 0:
@@ -541,6 +550,7 @@ class BroadcastManager:
                     )
                 else:
                     await utils.answer(message, "⚠️ Ошибка сохранения конфигурации!")
+
             except Exception as e:
                 if is_new and code_name in self.codes:
                     del self.codes[code_name]
