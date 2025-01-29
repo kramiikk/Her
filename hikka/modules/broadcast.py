@@ -583,26 +583,68 @@ class BroadcastManager:
         await utils.answer(message, f"✅ Установлен интервал {min_val}-{max_val} минут")
 
     async def _handle_list_command(self, message: Message):
-        """Обработчик команды list"""
+        """Enhanced handler for list command with detailed stats"""
         if not self.codes:
             await utils.answer(message, "❌ Нет активных рассылок")
             return
-        response = "📝 Список рассылок:\n\n"
-        current_time = time.time()
 
+        stats = []
+        
         for name, code in self.codes.items():
             is_running = (
-                name in self.broadcast_tasks and not self.broadcast_tasks[name].done()
+                name in self.broadcast_tasks 
+                and not self.broadcast_tasks[name].done()
             )
-            status = "✅ Активна" if code._active and is_running else "❌ Не запущена"
-
-            response += (
-                f"• {name}: {status}\n"
-                f"  ├ Чатов: {len(code.chats)} (активных)\n"
-                f"  ├ Сообщений: {len(code.messages)}\n"
-                f"  ├ Интервал: {code.interval[0]}-{code.interval[1]} мин\n"
-                f"  └ Все сообщения разом: {'да' if code.batch_mode else 'нет'}\n\n"
+            
+            total_messages = len(code.messages)
+            grouped_messages = sum(
+                1 for msg in code.messages if msg[2]
             )
+            
+            interval_modified = (
+                code.interval != code.original_interval 
+                if hasattr(code, 'original_interval') 
+                else False
+            )
+            
+            status_emoji = "✅" if code._active and is_running else "❌"
+            pause_emoji = "⏸️" if self.pause_event.is_set() else ""
+            flood_emoji = "🌊" if interval_modified else ""
+            
+            current_interval = f"{code.interval[0]}-{code.interval[1]}"
+            original_interval = (
+                f" (изн. {code.original_interval[0]}-{code.original_interval[1]})"
+                if interval_modified
+                else ""
+            )
+            
+            stats.append(
+                f"📊 {name}: {status_emoji}{pause_emoji}{flood_emoji}\n"
+                f"├ Чатов: {len(code.chats)}\n"
+                f"├ Сообщений: {total_messages} (альбомы: {grouped_messages})\n"
+                f"├ Интервал: {current_interval} мин{original_interval}\n"
+                f"└ Режим: {'все сразу' if code.batch_mode else 'поочерёдно'}"
+            )
+        
+        global_status = []
+        if self.pause_event.is_set():
+            global_status.append("🚫 Глобальная пауза активна")
+        if self.flood_wait_times:
+            latest_flood = time.time() - self.last_flood_time
+            if latest_flood < 43200:
+                hours = latest_flood // 3600
+                minutes = (latest_flood % 3600) // 60
+                global_status.append(
+                    f"⚠️ Последний флуд: {int(hours)}ч {int(minutes)}м назад"
+                )
+        
+        response = (
+            "📬 Состояние рассылок:\n"
+            + ("\n" + "\n".join(global_status) + "\n" if global_status else "")
+            + "\n"
+            + "\n\n".join(stats)
+        )
+        
         await utils.answer(message, response)
 
     async def _handle_remove_command(self, message: Message, code: Broadcast):
