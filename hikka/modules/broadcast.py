@@ -879,35 +879,65 @@ class BroadcastManager:
             logger.error(f"Ошибка загрузки: {e}", exc_info=True)
 
     async def _process_message_batch(self, messages: List[tuple]):
-        """Обрабатывает батч сообщений в формате кортежей"""
+        """Обрабатывает батч сообщений для проверки их валидности"""
         valid_messages = []
         deleted_messages = []
 
         for msg_tuple in messages:
             try:
+                if not isinstance(msg_tuple, tuple) or len(msg_tuple) != 3:
+                    logger.error(f"Некорректный формат кортежа: {msg_tuple}")
+                    deleted_messages.append(msg_tuple)
+                    continue
+
                 chat_id, message_id, grouped_ids = msg_tuple
                 
-                full_album = [
-                    await self._fetch_messages({
-                        "chat_id": chat_id,
-                        "message_id": msg_id,
-                    })
-                    for msg_id in ([message_id] + list(grouped_ids))
-                ]
-                
-                if None in full_album:
-                    logger.warning(f"Неполный альбом: {msg_tuple}")
+                # Проверяем базовые типы данных
+                if not isinstance(chat_id, int) or not isinstance(message_id, int):
+                    logger.error(f"Некорректные типы ID: chat_id={chat_id}, message_id={message_id}")
                     deleted_messages.append(msg_tuple)
-                else:
-                    valid_messages.extend(full_album)
-            except ValueError as ve:
-                logger.error(
-                    f"Некорректная структура кортежа: {msg_tuple}. Ошибка: {ve}"
-                )
-                deleted_messages.append(msg_tuple)
+                    continue
+                    
+                # Проверяем grouped_ids
+                if grouped_ids and not isinstance(grouped_ids, (tuple, list)):
+                    logger.error(f"Некорректный формат grouped_ids: {grouped_ids}")
+                    deleted_messages.append(msg_tuple)
+                    continue
+
+                # Проверяем наличие сообщения в кэше или возможность его получить
+                msg = await self._fetch_messages({
+                    "chat_id": chat_id,
+                    "message_id": message_id
+                })
+                
+                if msg is None:
+                    logger.error(f"Сообщение недоступно: chat_id={chat_id}, message_id={message_id}")
+                    deleted_messages.append(msg_tuple)
+                    continue
+
+                # Если есть grouped_ids, проверяем каждое сообщение альбома
+                if grouped_ids:
+                    all_msgs_valid = True
+                    for album_msg_id in grouped_ids:
+                        album_msg = await self._fetch_messages({
+                            "chat_id": chat_id,
+                            "message_id": album_msg_id
+                        })
+                        if album_msg is None:
+                            logger.error(f"Сообщение альбома недоступно: chat_id={chat_id}, message_id={album_msg_id}")
+                            all_msgs_valid = False
+                            break
+                    
+                    if not all_msgs_valid:
+                        deleted_messages.append(msg_tuple)
+                        continue
+
+                valid_messages.append(msg_tuple)
+
             except Exception as e:
-                logger.error(f"Критическая ошибка обработки {msg_tuple}: {str(e)}")
+                logger.error(f"Ошибка обработки сообщения {msg_tuple}: {str(e)}", exc_info=True)
                 deleted_messages.append(msg_tuple)
+
         return valid_messages, deleted_messages
 
     async def _restart_all_broadcasts(self):
@@ -993,9 +1023,11 @@ class BroadcastManager:
 
         all_messages_to_send = []
         
-        for msg_tuple in messages:
+        # Fix: Iterate over message tuples instead of Message objects
+        for msg_tuple in code.messages:  # Use original message tuples from Broadcast
             chat_id, main_msg_id, grouped_ids = msg_tuple
 
+            # Rest of the processing remains the same
             all_msg_ids = [main_msg_id]
             if grouped_ids:
                 all_msg_ids.extend(grouped_ids)
@@ -1016,6 +1048,7 @@ class BroadcastManager:
                     "grouped_ids": grouped_ids if grouped_ids else None
                 })
 
+        # Rest of the method remains unchanged
         valid_chats = [cid for cid in code.chats if await self._is_chat_valid(cid)]
         if not valid_chats:
             logger.error("💥 Нет доступных чатов для отправки!")
