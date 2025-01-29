@@ -10,7 +10,7 @@
 <code>git clone https://github.com/kramiikk/Her && cd Her && python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt && python3 -m hikka</code>
 
 <b>Termux:</b>
-<code>termux-wake-lock && pkg install tur-repo && pkg install python3.10 && pkg i wget ncurses-utils python3.10 -y && pkg install openssl -y && pkg install git && clear && . <(wget -qO- https://raw.githubusercontent.com/kramiikk/Her/refs/heads/main/termux.sh)</code>
+<code>termux-wake-lock && . <(wget -qO- https://raw.githubusercontent.com/kramiikk/Her/main/install.sh)</code>
 
 <hr>
 <h2 border="none"><img src="https://github.com/hikariatama/assets/raw/master/1312-micro-sd-card-flat.webp" height="54" align="middle"> Requirements</h2>

@@ -1,49 +1,53 @@
 #!/bin/bash
 
-echo -e "\033[2J\033[3;1f"
+# Helpers
+c(){ printf "\033[0;96m%s\033[0m\n" "$1"; }
+s(){ printf "\033[0;32m%s\033[0m\n" "$1"; }
 
-printf "\n\n\033[1;35mHer is being installed... ✨\033[0m"
+# Welcome screen
+clear && printf '\033[3;1f\n\n\033[1;35m✨ Installing Her...\033[0m\n\n'
 
-echo -e "\n\n\033[0;96mInstalling base packages...\033[0m"
+# System setup
+c "⚙️  Setting up environment..."
+{
+    pkg update -y
+    pkg install tur-repo python3.10 wget ncurses-utils openssl git python libjpeg-turbo -y
+} &>/dev/null
+s "✓ Environment ready"
 
-eval "pkg i git python libjpeg-turbo openssl -y"
+# Pillow setup
+c "📦 Installing Pillow..."
+{
+    export LDFLAGS="-L/system/lib$(getconf LONG_BIT | grep 64 >/dev/null && echo '64')/"
+    export CFLAGS="-I/data/data/com.termux/files/usr/include/"
+    pip install Pillow -U --no-cache-dir
+} &>/dev/null
+s "✓ Pillow ready"
 
-printf "\r\033[K\033[0;32mPackages ready!\e[0m\n"
-echo -e "\033[0;96mInstalling Pillow...\033[0m"
+# Her installation
+c "📥 Downloading Her..."
+{
+    cd && rm -rf Her
+    git clone https://github.com/kramiikk/Her --depth=1
+    cd Her
+} &>/dev/null
+s "✓ Her downloaded"
 
-if eval "lscpu | grep Architecture" | grep -qE 'aarch64'; then
-    eval 'export LDFLAGS="-L/system/lib64/"'
-else
-    eval 'export LDFLAGS="-L/system/lib/"'
-fi
+# Dependencies
+c "🔧 Installing requirements..."
+pip install -r requirements.txt --no-cache-dir --no-warn-script-location \
+    --disable-pip-version-check --upgrade &>/dev/null
+s "✓ Requirements ready"
 
-eval 'export CFLAGS="-I/data/data/com.termux/files/usr/include/" && pip install Pillow -U --no-cache-dir'
+# Autostart
+c "🚀 Configuring startup..."
+{
+    : > ~/../usr/etc/motd
+    echo 'clear && cd ~/Her && python3 -m hikka' > ~/.bash_profile
+    rm -rf $PREFIX/tmp/* ~/.cache/pip/*
+} &>/dev/null
+s "✓ Startup configured"
 
-printf "\r\033[K\033[0;32mPillow installed!\e[0m\n"
-echo -e "\033[0;96mDownloading source code...\033[0m"
-
-eval "rm -rf ~/Her 2>/dev/null"
-eval "cd && git clone https://github.com/kramiikk/Her && cd Her"
-
-echo -e "\033[0;96mSource code downloaded!...\033[0m\n"
-printf "\r\033[0;34mInstalling requirements...\e[0m"
-
-eval "pip install -r requirements.txt --no-cache-dir --no-warn-script-location --disable-pip-version-check --upgrade"
-
-printf "\r\033[K\033[0;32mRequirements installed!\e[0m\n"
-
-if [[ -z "${NO_AUTOSTART}" ]]; then
-    printf "\n\r\033[0;34mConfiguring autostart...\e[0m"
-
-    eval "echo '' > ~/../usr/etc/motd &&
-    echo 'clear && cd ~/Her && python3 -m hikka' > ~/.bash_profile"
-
-    printf "\r\033[K\033[0;32mAutostart enabled!\e[0m\n"
-fi
-
-echo -e "\033[0;96mStarting Her...\033[0m"
-echo -e "\033[2J\033[3;1f"
-
-printf "\033[1;32mHer is starting...\033[0m\n"
-
-eval "python3 -m hikka"
+# Launch
+clear && printf '\033[3;1f\033[1;32m🌟 Starting Her...\033[0m\n'
+exec python3 -m hikka
