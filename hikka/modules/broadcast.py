@@ -180,7 +180,11 @@ class Broadcast:
     def add_message(
         self, chat_id: int, message_id: int, grouped_ids: List[int] = None
     ) -> bool:
-        key = (chat_id, message_id, tuple(sorted(grouped_ids or [])))
+        if grouped_ids:
+            grouped_ids = sorted(list(set(grouped_ids)))
+            if len(grouped_ids) == 1:
+                grouped_ids = None
+        key = (chat_id, message_id, tuple(grouped_ids) if grouped_ids else ())
         if key in self.messages:
             return False
         self.messages.add(key)
@@ -462,24 +466,35 @@ class BroadcastManager:
                 await utils.answer(message, "❌ Ответьте на сообщение для добавления")
                 return
             try:
-
                 is_new = code is None
                 if is_new:
                     code = Broadcast()
                     self.codes[code_name] = code
                 grouped_ids = []
                 if hasattr(reply, "grouped_id") and reply.grouped_id:
-                    async for msg in self.client.iter_messages(
-                        reply.chat_id, offset_id=reply.id - 15, limit=30
-                    ):
-                        if (
-                            hasattr(msg, "grouped_id")
-                            and msg.grouped_id == reply.grouped_id
-                        ):
-                            grouped_ids.append(msg.id)
-                            await self._message_cache.set((msg.chat_id, msg.id), msg)
-                    grouped_ids = sorted(list(set(grouped_ids)))
-                    logger.debug(f"Найдено групповых сообщений: {len(grouped_ids)}")
+                    try:
+                        album_messages = await self.client.get_messages(
+                            reply.chat_id,
+                            limit=10,
+                            group=reply.grouped_id
+                        )
+                        grouped_ids = [
+                            msg.id 
+                            for msg in album_messages 
+                            if getattr(msg, "grouped_id", None) == reply.grouped_id
+                        ]
+                        if reply.id not in grouped_ids:
+                            grouped_ids.append(reply.id)
+                        
+                        for msg in album_messages:
+                            cache_key = (msg.chat_id, msg.id)
+                            await self._message_cache.set(cache_key, msg)
+                        
+                        logger.debug(f"Найдено сообщений в альбоме: {len(grouped_ids)}")
+                    except Exception as e:
+                        logger.error(f"Ошибка получения альбома: {e}")
+                        grouped_ids = []
+                
                 success = code.add_message(
                     chat_id=reply.chat_id,
                     message_id=reply.id,
@@ -1007,10 +1022,12 @@ class BroadcastManager:
         elif action == "pause":
             self.pause_event.set()
             await utils.answer(message, "✅ Глобальная пауза активирована")
+            return
         elif action == "resume":
             self.pause_event.clear()
             await self._restart_all_broadcasts()
             await utils.answer(message, "✅ Рассылки возобновлены")
+            return
         if not code_name:
             await utils.answer(message, "❌ Укажите код рассылки")
             return
