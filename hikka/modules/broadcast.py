@@ -57,23 +57,23 @@ class SimpleCache:
         self._lock = asyncio.Lock()
 
     async def get(self, key: tuple) -> Optional[Any]:
-        """
-        Get a value from cache using a tuple key
-        """
-        if not isinstance(key, tuple):
-            raise ValueError("Cache key must be a tuple")
-        
         async with self._lock:
             entry = self.cache.get(key)
+            
             if not entry:
                 return None
-                
+
+            if not isinstance(entry, tuple) or len(entry) != 2:
+                logger.warning(f"Поврежденная запись в кэше: {key} -> {entry}")
+                del self.cache[key]
+                return None
+
             expire_time, value = entry
+
             if time.time() > expire_time:
                 del self.cache[key]
                 return None
 
-            self.cache.move_to_end(key)
             return value
 
     async def set(self, key: tuple, value: Any, expire: Optional[int] = None) -> None:
@@ -207,15 +207,26 @@ class Broadcast:
     original_interval: Tuple[int, int] = (10, 13)
 
     def add_message(
-        self, chat_id: int, message_id: int, grouped_ids: List[int] = None
+        self,
+        chat_id: int,
+        message_id: int,
+        grouped_ids: List[int] = None
     ) -> bool:
+        # Расширенная проверка входных данных
+        if not all(isinstance(x, int) for x in (chat_id, message_id)):
+            raise TypeError("ID чата и сообщения должны быть целыми числами")
+
         if grouped_ids:
-            grouped_ids = sorted(list(set(grouped_ids)))
-            if len(grouped_ids) == 1:
-                grouped_ids = None
-        key = (chat_id, message_id, tuple(grouped_ids) if grouped_ids else ())
+            if not isinstance(grouped_ids, list) or not all(isinstance(x, int) for x in grouped_ids):
+                raise TypeError("Grouped IDs должны быть списком целых чисел")
+            grouped_ids = tuple(sorted(set(grouped_ids)))  # Уникальные ID + сортировка
+
+        key = (chat_id, message_id, grouped_ids) if grouped_ids else (chat_id, message_id, ())
+        
+        # Защита от дубликатов
         if key in self.messages:
             return False
+            
         self.messages.add(key)
         return True
 
@@ -397,34 +408,37 @@ class BroadcastManager:
                 await self.save_config()
 
     async def _fetch_messages(self, msg_data: dict) -> Optional[Message]:
-        """
-        Fetch a message with consistent cache key format
-        """
         try:
-            chat_id = msg_data["chat_id"]
-            message_id = msg_data["message_id"]
+            # Валидация и приведение типов
+            chat_id = int(msg_data["chat_id"])
+            message_id = int(msg_data["message_id"])
+        except (KeyError, ValueError, TypeError) as e:
+            logger.error(f"Некорректные данные: {msg_data} | Ошибка: {e}")
+            return None
 
-            cache_key = ("message", chat_id, message_id)
-
-            cached_msg = await self._message_cache.get(cache_key)
-            if cached_msg is not None:
-                return cached_msg
-            try:
-                msg = await self.client.get_messages(entity=chat_id, ids=message_id)
-                if msg:
-                    await self._message_cache.set(cache_key, msg)
-                    logger.debug(f"Message {chat_id}:{message_id} cached successfully")
-                    return msg
-                else:
-                    logger.error(f"Message {chat_id}:{message_id} not found")
-                    return None
-            except ValueError as e:
-                logger.error(
-                    f"Chat/message does not exist: {chat_id} {message_id}: {e}"
-                )
-                return None
+        cache_key = ("message", chat_id, message_id)
+        
+        # Проверка кэша с обработкой исключений
+        try:
+            cached = await self._message_cache.get(cache_key)
+            if cached:
+                return cached
         except Exception as e:
-            logger.error(f"Error in _fetch_messages: {e}", exc_info=True)
+            logger.error(f"Ошибка доступа к кэшу: {e}")
+            await self._message_cache.set(cache_key, None)  # Инвалидация битой записи
+
+        # Запрос к API с проверкой результата
+        try:
+            msg = await self.client.get_messages(chat_id, ids=message_id)
+            if not msg:
+                logger.debug(f"Сообщение {chat_id}:{message_id} не найдено")
+                return None
+                
+            await self._message_cache.set(cache_key, msg)
+            return msg
+        except Exception as e:
+            logger.error(f"Ошибка получения сообщения: {e}")
+            await self._message_cache.set(cache_key, None, expire=60)
             return None
 
     async def _get_chat_id(self, chat_identifier: str) -> Optional[int]:
