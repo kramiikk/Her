@@ -206,13 +206,33 @@ class Broadcast:
         )
 
     def remove_message(
-        self, chat_id: int, message_id: int, grouped_ids: List[int] = None
+        self, 
+        chat_id: int, 
+        message_id: int, 
+        grouped_ids: Optional[int] = None
     ) -> bool:
-        key = (chat_id, message_id, tuple(sorted(grouped_ids or [])))
-        if key in self.messages:
-            self.messages.remove(key)
-            return True
-        return False
+        removed_count = 0
+        keys_to_remove = []
+
+        for key in list(self.messages):
+            msg_chat_id, msg_message_id, msg_grouped_ids = key
+
+            if msg_chat_id != chat_id or msg_message_id != message_id:
+                continue
+
+            if grouped_ids:
+                if msg_grouped_ids and msg_grouped_ids[0] == grouped_ids:
+                    keys_to_remove.append(key)
+            else:
+                if not msg_grouped_ids:
+                    keys_to_remove.append(key)
+
+        if keys_to_remove:
+            for key in keys_to_remove:
+                self.messages.remove(key)
+                removed_count += 1
+
+        return removed_count > 0
 
 
 class BroadcastManager:
@@ -475,7 +495,7 @@ class BroadcastManager:
                     try:
                         album_messages = []
                         processed_ids = set()
-                        reply_grouped_id = getattr(reply, "grouped_id", None)
+                        reply_grouped_id = reply.grouped_id
 
                         fetched_messages = await self.client.get_messages(
                             reply.chat_id, ids=list(range(max(1, reply.id - 9), (reply.id + 9) + 1))
@@ -490,27 +510,17 @@ class BroadcastManager:
                                     album_messages.append(msg)
                                     processed_ids.add(msg.id)
 
-                        grouped_ids = [
-                            msg.id
-                            for msg in album_messages
-                        ]
-                        if reply.id not in grouped_ids:
-                            if getattr(reply, "grouped_id", None) == reply_grouped_id:
-                                album_messages.append(reply)
-                                grouped_ids.append(reply.id)
-
-
-                        grouped_ids = sorted(list(set(grouped_ids)))
+                        grouped_ids = [reply_grouped_id] + sorted(list(set([msg.id for msg in album_messages])))
 
                         for msg in album_messages:
                             cache_key = (msg.chat_id, msg.id)
                             await self._message_cache.set(cache_key, msg)
-                        
+
                         logger.debug(f"Найдено сообщений в альбоме: {len(grouped_ids)}")
                     except Exception as e:
                         logger.error(f"Ошибка получения альбома: {e}")
                         grouped_ids = []
-                
+
                 success = code.add_message(
                     chat_id=reply.chat_id,
                     message_id=reply.id,
@@ -620,35 +630,35 @@ class BroadcastManager:
             return
 
         stats = []
-        
+
         for name, code in self.codes.items():
             is_running = (
-                name in self.broadcast_tasks 
+                name in self.broadcast_tasks
                 and not self.broadcast_tasks[name].done()
             )
-            
+
             total_messages = len(code.messages)
             grouped_messages = sum(
                 1 for msg in code.messages if msg[2]
             )
-            
+
             interval_modified = (
-                code.interval != code.original_interval 
-                if hasattr(code, 'original_interval') 
+                code.interval != code.original_interval
+                if hasattr(code, 'original_interval')
                 else False
             )
-            
+
             status_emoji = "✅" if code._active and is_running else "❌"
             pause_emoji = "⏸️" if self.pause_event.is_set() else ""
             flood_emoji = "🌊" if interval_modified else ""
-            
+
             current_interval = f"{code.interval[0]}-{code.interval[1]}"
             original_interval = (
                 f" (изн. {code.original_interval[0]}-{code.original_interval[1]})"
                 if interval_modified
                 else ""
             )
-            
+
             stats.append(
                 f"📊 {name}: {status_emoji}{pause_emoji}{flood_emoji}\n"
                 f"├ Чатов: {len(code.chats)}\n"
@@ -656,7 +666,7 @@ class BroadcastManager:
                 f"├ Интервал: {current_interval} мин{original_interval}\n"
                 f"└ Режим: {'все сразу' if code.batch_mode else 'поочерёдно'}"
             )
-        
+
         global_status = []
         if self.pause_event.is_set():
             global_status.append("🚫 Глобальная пауза активна")
@@ -668,37 +678,35 @@ class BroadcastManager:
                 global_status.append(
                     f"⚠️ Последний флуд: {int(hours)}ч {int(minutes)}м назад"
                 )
-        
+
         response = (
             "📬 Состояние рассылок:\n"
             + ("\n" + "\n".join(global_status) + "\n" if global_status else "")
             + "\n"
             + "\n\n".join(stats)
         )
-        
+
         await utils.answer(message, response)
 
-    async def _handle_remove_command(self, message: Message, code: Broadcast):
-        """Обработчик команды remove"""
-        reply = await message.get_reply_message()
-        if not reply:
-            await utils.answer(message, "❌ Ответьте на сообщение для удаления")
-            return
-        grouped_ids = []
-        if hasattr(reply, "grouped_id") and reply.grouped_id:
-            async for msg in self.client.iter_messages(
-                reply.chat_id, offset_id=reply.id - 10, limit=10
-            ):
-                if hasattr(msg, "grouped_id") and msg.grouped_id == reply.grouped_id:
-                    grouped_ids.append(msg.id)
-            grouped_ids = sorted(list(set(grouped_ids)))
-        if code.remove_message(
-            chat_id=reply.chat_id, message_id=reply.id, grouped_ids=grouped_ids or None
-        ):
-            await self.save_config()
-            await utils.answer(message, "✅ Сообщение удалено из рассылки")
-        else:
-            await utils.answer(message, "❌ Сообщение не найдено в рассылке")
+        async def _handle_remove_command(self, message: Message, code: Broadcast):
+            """Обработчик команды remove"""
+            reply = await message.get_reply_message()
+            if not reply:
+                await utils.answer(message, "❌ Ответьте на сообщение для удаления")
+                return
+            grouped_id_for_removal = None
+            if hasattr(reply, "grouped_id") and reply.grouped_id:
+                grouped_id_for_removal = reply.grouped_id
+
+            removed_album = code.remove_message(
+                chat_id=reply.chat_id, message_id=reply.id, grouped_ids=grouped_id_for_removal
+            )
+
+            if removed_album:
+                await self.save_config()
+                await utils.answer(message, f"✅ {'Альбом' if grouped_id_for_removal else 'Сообщение'} удалено из рассылки")
+            else:
+                await utils.answer(message, "❌ Сообщение не найдено в рассылке")
 
     async def _handle_rmchat_command(
         self, message: Message, code: Broadcast, args: list
