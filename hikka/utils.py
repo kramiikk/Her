@@ -668,9 +668,6 @@ def get_named_platform() -> str:
     if main.IS_DOCKER:
         return "🐳 Docker"
 
-    if main.IS_TERMUX:
-        return "🕶 Termux"
-
     if main.IS_CODESPACES:
         return "🐈‍⬛ Codespaces"
 
@@ -710,9 +707,6 @@ def get_platform_emoji() -> str:
 
     if main.IS_CODESPACES:
         return BASE.format(5350807743554937610)
-
-    if main.IS_TERMUX:
-        return BASE.format(5350588498359377932)
 
     if main.IS_RAILWAY:
         return BASE.format(5352539534498224966)

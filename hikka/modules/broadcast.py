@@ -885,22 +885,21 @@ class BroadcastManager:
 
         for msg_tuple in messages:
             try:
-
                 chat_id, message_id, grouped_ids = msg_tuple
-
-                msg_data = {
-                    "chat_id": chat_id,
-                    "message_id": message_id,
-                    "grouped_ids": grouped_ids,
-                }
-
-                message = await self._fetch_messages(msg_data)
-
-                if message:
-                    valid_messages.append(message)
-                else:
-                    logger.warning(f"Сообщение {msg_tuple} не найдено")
+                
+                full_album = [
+                    await self._fetch_messages({
+                        "chat_id": chat_id,
+                        "message_id": msg_id,
+                    })
+                    for msg_id in ([message_id] + list(grouped_ids))
+                ]
+                
+                if None in full_album:
+                    logger.warning(f"Неполный альбом: {msg_tuple}")
                     deleted_messages.append(msg_tuple)
+                else:
+                    valid_messages.extend(full_album)
             except ValueError as ve:
                 logger.error(
                     f"Некорректная структура кортежа: {msg_tuple}. Ошибка: {ve}"
@@ -940,23 +939,35 @@ class BroadcastManager:
         self,
         chat_id: int,
         msg: Union[Message, List[Message]],
+        grouped_ids: Optional[List[int]] = None
     ) -> bool:
         if self.pause_event.is_set():
             return False
         await self.GLOBAL_LIMITER.acquire()
         try:
-
             async def forward_messages(messages: List[Message]) -> None:
                 await self.client.forward_messages(
                     entity=chat_id,
-                    messages=messages,
+                    messages=[m.id for m in messages],
                     from_peer=messages[0].chat_id,
                 )
 
             await _internal.fw_protect()
 
-            if isinstance(msg, list):
-                await forward_messages(msg)
+            if isinstance(msg, list) or grouped_ids:
+                if grouped_ids:
+                    messages = []
+                    for msg_id in grouped_ids:
+                        msg = await self._fetch_messages({
+                            "chat_id": msg[0],
+                            "message_id": msg_id,
+                        })
+                        if msg:
+                            messages.append(msg)
+                    if messages:
+                        await forward_messages(messages)
+                else:
+                    await forward_messages(msg)
             else:
                 await forward_messages([msg])
             return True
@@ -976,37 +987,63 @@ class BroadcastManager:
     async def _send_messages_to_chats(
         self, code: Broadcast, messages: Iterable[Message], code_name: str
     ) -> Set[int]:
-        """Улучшенная отправка с батчингом и лимитом параллелизма"""
+        """Улучшенная отправка с обработкой альбомов"""
         if self.pause_event.is_set():
             return set()
+
+        all_messages_to_send = []
+        
+        for msg_tuple in messages:
+            chat_id, main_msg_id, grouped_ids = msg_tuple
+
+            all_msg_ids = [main_msg_id]
+            if grouped_ids:
+                all_msg_ids.extend(grouped_ids)
+            
+            album_messages = []
+            for msg_id in all_msg_ids:
+                msg = await self._fetch_messages({
+                    "chat_id": chat_id,
+                    "message_id": msg_id
+                })
+                if msg:
+                    album_messages.append(msg)
+            
+            if album_messages:
+                all_messages_to_send.append({
+                    "chat_id": chat_id,
+                    "messages": album_messages,
+                    "grouped_ids": grouped_ids if grouped_ids else None
+                })
+
         valid_chats = [cid for cid in code.chats if await self._is_chat_valid(cid)]
         if not valid_chats:
             logger.error("💥 Нет доступных чатов для отправки!")
             code._active = False
-            if code_name in self.broadcast_tasks and not self.broadcast_tasks[code_name].done():
-                self.broadcast_tasks[code_name].cancel()
-                try:
-                    await self.broadcast_tasks[code_name]
-                except asyncio.CancelledError:
-                    pass
             return set()
+
         failed_chats = set()
-        batches = [
-            valid_chats[i : i + self.MAX_BATCH_SIZE]
-            for i in range(0, len(valid_chats), self.MAX_BATCH_SIZE)
-        ]
 
-        for batch in batches:
-            if not self._active or not code._active:
-                break
-            results = await self._send_batch(batch, messages)
+        for chat_id in valid_chats:
+            success = True
+            for album in all_messages_to_send:
+                result = await self._send_message(
+                    chat_id=chat_id,
+                    msg=album["messages"],
+                    grouped_ids=album["grouped_ids"]
+                )
+                
+                if not result:
+                    success = False
+                    break
+            
+            if not success:
+                failed_chats.add(chat_id)
 
-            for chat_id, success in zip(batch, results):
-                if not success:
-                    failed_chats.add(chat_id)
         if failed_chats:
             code.chats -= failed_chats
             await self.save_config()
+
         return failed_chats
 
     async def _send_batch(
@@ -1088,13 +1125,13 @@ class BroadcastManager:
             for name, code in self.codes.items():
                 messages = []
                 for msg in code.messages:
-                    messages.append(
-                        {
-                            "chat_id": msg[0],
-                            "message_id": msg[1],
-                            "grouped_ids": list(msg[2]),
-                        }
-                    )
+                    serialized_group = list(msg[2]) if msg[2] else []
+                    
+                    messages.append({
+                        "chat_id": msg[0],
+                        "message_id": msg[1],
+                        "grouped_ids": serialized_group,
+                    })
                 config["codes"][name] = {
                     "chats": list(code.chats),
                     "messages": messages,

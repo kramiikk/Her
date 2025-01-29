@@ -36,7 +36,7 @@ from hikkatl.network.connection import (
 from hikkatl.sessions import MemorySession, SQLiteSession
 
 
-from . import database, loader, utils, version
+from . import configurator, database, loader, utils, version
 from ._internal import restart
 from .dispatcher import CommandDispatcher
 from .tl_cache import CustomTelegramClient
@@ -53,7 +53,6 @@ BASE_DIR = (
 BASE_PATH = Path(BASE_DIR)
 CONFIG_PATH = BASE_PATH / "config.json"
 
-IS_TERMUX = "com.termux" in os.environ.get("PREFIX", "")
 IS_CODESPACES = "CODESPACES" in os.environ
 IS_DOCKER = "DOCKER" in os.environ
 IS_RAILWAY = "RAILWAY" in os.environ
@@ -171,13 +170,6 @@ try:
     uvloop.install()
 except Exception:
     pass
-
-
-def run_config():
-    """Load configurator.py"""
-    from . import configurator
-
-    return configurator.api_config(IS_TERMUX or None)
 
 
 def get_config_key(key: str) -> typing.Union[str, bool]:
@@ -408,7 +400,7 @@ class Her:
         while self.api_token is None:
             if self.arguments.no_auth:
                 return
-            run_config()
+            configurator.api_config()
             importlib.invalidate_caches()
             self._get_api_token()
 
@@ -447,7 +439,7 @@ class Her:
     async def _phone_login(self, client: CustomTelegramClient) -> bool:
         phone = input(
             "\033[0;96mEnter phone: \033[0m"
-            if IS_TERMUX or self.arguments.tty
+            if self.arguments.tty
             else "Enter phone: "
         )
 
@@ -507,7 +499,7 @@ class Her:
             self.sessions.clear()
             return False
         except (ValueError, ApiIdInvalidError):
-            run_config()
+            configurator.api_config()
             return False
         except PhoneNumberInvalidError:
             logging.error(
