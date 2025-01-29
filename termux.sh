@@ -7,24 +7,42 @@ s(){ printf "\033[0;32m%s\033[0m\n" "$1"; }
 # Welcome screen
 clear && printf '\033[3;1f\n\n\033[1;35m✨ Installing Her...\033[0m\n\n'
 
-# System setup
-c "⚙️  Setting up environment..."
+# Проверка и установка Python + OpenSSL
+c "⚙️  Checking system dependencies..."
 {
-    pkg update -y
-    pkg install tur-repo ncurses-utils openssl libjpeg-turbo -y
-} &>/dev/null
-s "✓ Environment ready"
+    if ! command -v python &>/dev/null; then
+        pkg install python -y
+    fi
 
-# Pillow setup
+    if ! command -v openssl &>/dev/null; then
+        pkg install openssl -y
+    fi
+
+    # Проверка работоспособности SSL
+    if ! python -c "import ssl" &>/dev/null; then
+        c "⚠️ OpenSSL не работает! Исправляем..."
+        pkg reinstall python openssl -y
+        python -m ensurepip
+        pip install --upgrade pip
+    fi
+} &>/dev/null
+s "✓ System ready"
+
+# Установка необходимых пакетов
+c "📦 Installing required packages..."
+{
+    pkg install tur-repo ncurses-utils libjpeg-turbo -y
+} &>/dev/null
+s "✓ Packages installed"
+
+# Установка Pillow
 c "📦 Installing Pillow..."
 {
-    export LDFLAGS="-L/system/lib$(getconf LONG_BIT | grep 64 >/dev/null && echo '64')/"
-    export CFLAGS="-I/data/data/com.termux/files/usr/include/"
     pip install Pillow -U --no-cache-dir
 } &>/dev/null
-s "✓ Pillow ready"
+s "✓ Pillow installed"
 
-# Her installation
+# Клонирование репозитория
 c "📥 Downloading Her..."
 {
     cd && rm -rf Her
@@ -33,13 +51,12 @@ c "📥 Downloading Her..."
 } &>/dev/null
 s "✓ Her downloaded"
 
-# Dependencies
+# Установка зависимостей проекта
 c "🔧 Installing requirements..."
-pip install -r requirements.txt --no-cache-dir --no-warn-script-location \
-    --disable-pip-version-check --upgrade &>/dev/null
-s "✓ Requirements ready"
+pip install --upgrade --no-cache-dir --disable-pip-version-check -r requirements.txt &>/dev/null
+s "✓ Requirements installed"
 
-# Autostart
+# Автозапуск при входе в Termux
 c "🚀 Configuring startup..."
 {
     : > ~/../usr/etc/motd
@@ -48,6 +65,6 @@ c "🚀 Configuring startup..."
 } &>/dev/null
 s "✓ Startup configured"
 
-# Launch
+# Запуск Her
 clear && printf '\033[3;1f\033[1;32m🌟 Starting Her...\033[0m\n'
 exec python3 -m hikka
