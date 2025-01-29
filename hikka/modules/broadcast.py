@@ -212,18 +212,16 @@ class Broadcast:
         message_id: int,
         grouped_ids: List[int] = None
     ) -> bool:
-        # Расширенная проверка входных данных
         if not all(isinstance(x, int) for x in (chat_id, message_id)):
             raise TypeError("ID чата и сообщения должны быть целыми числами")
 
         if grouped_ids:
             if not isinstance(grouped_ids, list) or not all(isinstance(x, int) for x in grouped_ids):
                 raise TypeError("Grouped IDs должны быть списком целых чисел")
-            grouped_ids = tuple(sorted(set(grouped_ids)))  # Уникальные ID + сортировка
+            grouped_ids = tuple(sorted(set(grouped_ids)))
 
         key = (chat_id, message_id, grouped_ids) if grouped_ids else (chat_id, message_id, ())
         
-        # Защита от дубликатов
         if key in self.messages:
             return False
             
@@ -409,7 +407,6 @@ class BroadcastManager:
 
     async def _fetch_messages(self, msg_data: dict) -> Optional[Message]:
         try:
-            # Валидация и приведение типов
             chat_id = int(msg_data["chat_id"])
             message_id = int(msg_data["message_id"])
         except (KeyError, ValueError, TypeError) as e:
@@ -418,16 +415,14 @@ class BroadcastManager:
 
         cache_key = ("message", chat_id, message_id)
         
-        # Проверка кэша с обработкой исключений
         try:
             cached = await self._message_cache.get(cache_key)
             if cached:
                 return cached
         except Exception as e:
             logger.error(f"Ошибка доступа к кэшу: {e}")
-            await self._message_cache.set(cache_key, None)  # Инвалидация битой записи
+            await self._message_cache.set(cache_key, None)
 
-        # Запрос к API с проверкой результата
         try:
             msg = await self.client.get_messages(chat_id, ids=message_id)
             if not msg:
