@@ -316,7 +316,7 @@ class BroadcastManager:
                         messages_to_send[next_index % len(messages_to_send)]
                     ]
                 failed_chats = await self._send_messages_to_chats(
-                    code, messages_to_send
+                    code, messages_to_send, code_name
                 )
 
                 if failed_chats:
