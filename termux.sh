@@ -11,7 +11,7 @@ clear && printf '\033[3;1f\n\n\033[1;35m✨ Installing Her...\033[0m\n\n'
 c "⚙️  Setting up environment..."
 {
     pkg update -y
-    pkg install tur-repo python3.10 wget ncurses-utils openssl git python libjpeg-turbo -y
+    pkg install tur-repo ncurses-utils openssl libjpeg-turbo -y
 } &>/dev/null
 s "✓ Environment ready"
 
