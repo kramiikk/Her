@@ -16,7 +16,7 @@ from hikkatl import events
 from hikkatl.errors import FloodWaitError, RPCError, ChatAdminRequiredError
 from hikkatl.tl.types import Message
 
-from . import main, utils
+from . import _internal, main, utils
 from .database import Database
 from .loader import Modules
 from .tl_cache import CustomTelegramClient
@@ -255,6 +255,7 @@ class CommandDispatcher:
         for handler in self.raw_handlers:
             if isinstance(event, tuple(handler.updates)):
                 try:
+                    await _internal.fw_protect()
                     await handler(event)
                 except Exception as e:
                     logger.exception("Error in raw handler %s: %s", handler.id, e)
@@ -319,7 +320,7 @@ class CommandDispatcher:
                 "<b> failed!</b>"
             )
         with contextlib.suppress(Exception):
-            await message.reply(txt)
+            await utils.answer(message, txt)
 
     async def watcher_exc(
         self, exc: Exception, func: callable, message: Message
@@ -421,6 +422,7 @@ class CommandDispatcher:
     ) -> None:
         """Dispatch function execution to the future"""
         try:
+            await _internal.fw_protect()
             await func(message, *args)
         except Exception as e:
             await exception_handler(e, func, message)
@@ -488,18 +490,21 @@ class GrepHandler:
 
         async def modified_edit(text, *args, **kwargs):
             kwargs["parse_mode"] = "HTML"
+            await _internal.fw_protect()
             return await self.dispatcher.safe_api_call(
-                utils.answer(self.message, process_text(text), *args, **kwargs)
+                self.message.edit(self.message, process_text(text), *args, **kwargs)
             )
 
         async def modified_reply(text, *args, **kwargs):
             kwargs["parse_mode"] = "HTML"
+            await _internal.fw_protect()
             return await self.dispatcher.safe_api_call(
                 self.message.reply(process_text(text), *args, **kwargs)
             )
 
         async def modified_respond(text, *args, **kwargs):
             kwargs["parse_mode"] = "HTML"
+            await _internal.fw_protect()
             kwargs.setdefault("reply_to", utils.get_topic(self.message))
             return await self.dispatcher.safe_api_call(
                 self.message.respond(process_text(text), *args, **kwargs)

@@ -1,9 +1,17 @@
+# ✨ Her ModSuite
 
-### Disclaimer
+> **⚠️ Disclaimer**  
+> This software is provided "as is" without warranties. Use at your own risk.  
+> **INSTALL IT. You have been warned.**
 
->  INSTALL IT. You have been warned.
+---
 
-<hr>
-<h2>Installation</h2>
+## 🚀 Installation
 
-<code>git clone https://github.com/kramiikk/Her && cd Her && python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt && python3 -m hikka</code>
+```bash
+git clone https://github.com/kramiikk/Her
+cd Her
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+python3 -m hikka

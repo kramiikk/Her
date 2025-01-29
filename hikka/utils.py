@@ -251,6 +251,7 @@ async def get_user(message: Message) -> typing.Optional[User]:
     :return: User who sent message
     """
     try:
+        await fw_protect()
         return await message.get_sender()
     except ValueError:  # Not in database. Lets go looking for them.
         logger.warning("User not in session cache. Searching...")
@@ -260,6 +261,7 @@ async def get_user(message: Message) -> typing.Optional[User]:
         return await message.get_sender()
 
     if isinstance(message.peer_id, (PeerChannel, PeerChat)):
+        await fw_protect()
         async for user in message.client.iter_participants(
             message.peer_id,
             aggressive=True,
@@ -373,6 +375,7 @@ async def answer_file(
         kwargs.setdefault("reply_to", topic)
 
     try:
+        await fw_protect()
         response = await message.client.send_file(
             message.peer_id,
             file,
@@ -394,8 +397,6 @@ async def answer_file(
 async def answer(
     message: Message,
     response: str,
-    *,
-    reply_markup: typing.Optional[HikkaReplyMarkup] = None,
     **kwargs,
 ) -> Message:
     """Use this to give the response to a command"""
@@ -436,6 +437,7 @@ async def answer(
 
             return result
 
+        await fw_protect()
         result = await (message.edit if edit else message.respond)(
             text,
             parse_mode=lambda t: (t, entities),
@@ -501,6 +503,7 @@ async def get_target(message: Message, arg_no: int = 0) -> typing.Optional[int]:
         return None
 
     try:
+        await fw_protect()
         entity = await message.client.get_entity(user)
     except ValueError:
         return None
@@ -1119,6 +1122,7 @@ async def get_message_link(
         )
 
     if not chat and not (chat := message.chat):
+        await fw_protect()
         chat = await message.get_chat()
 
     topic_affix = (
