@@ -4,7 +4,6 @@
 >  INSTALL IT. You have been warned.
 
 <hr>
-<h2><img src="https://github.com/hikariatama/assets/raw/master/1326-command-window-line-flat.webp" height="54" align="middle"> Installation</h2>
+<h2>Installation</h2>
 
-<b>Installation:</b>
 <code>git clone https://github.com/kramiikk/Her && cd Her && python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt && python3 -m hikka</code>

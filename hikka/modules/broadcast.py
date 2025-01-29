@@ -510,7 +510,7 @@ class BroadcastManager:
                                     album_messages.append(msg)
                                     processed_ids.add(msg.id)
 
-                        grouped_ids = [reply_grouped_id] + sorted(list(set([msg.id for msg in album_messages])))
+                        grouped_ids = sorted(list(set([msg.id for msg in album_messages])))
 
                         for msg in album_messages:
                             cache_key = (msg.chat_id, msg.id)
