@@ -5,7 +5,7 @@ import time
 from collections import deque, OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
+from typing import Dict, Iterable, List, Optional, Set, Tuple, Union
 
 from telethon.tl.types import Message
 from telethon.errors import (
@@ -56,69 +56,48 @@ class SimpleCache:
         self.max_size = max_size
         self._lock = asyncio.Lock()
 
-    async def get(self, key: tuple) -> Optional[Any]:
-        async with self._lock:
-            entry = self.cache.get(key)
-            
-            if not entry:
-                return None
-
-            if not isinstance(entry, tuple) or len(entry) != 2:
-                logger.warning(f"Поврежденная запись в кэше: {key} -> {entry}")
-                del self.cache[key]
-                return None
-
-            expire_time, value = entry
-
-            if time.time() > expire_time:
-                del self.cache[key]
-                return None
-
-            return value
-
-    async def set(self, key: tuple, value: Any, expire: Optional[int] = None) -> None:
-        """
-        Set a value in cache using a tuple key
-        """
-        if not isinstance(key, tuple):
-            raise ValueError("Cache key must be a tuple")
-            
-        async with self._lock:
-            if expire is not None and expire <= 0:
-                return
-                
-            ttl = expire if expire is not None else self.ttl
-            expire_time = time.time() + ttl
-
-            if hasattr(value, 'to_dict'):
-                cached_value = value.to_dict()
-            else:
-                cached_value = value
-
-            if key in self.cache:
-                del self.cache[key]
-                
-            self.cache[key] = (expire_time, cached_value)
-
-            while len(self.cache) > self.max_size:
-                self.cache.popitem(last=False)
-
-    async def clean_expired(self, force: bool = False) -> None:
-        """Clean expired entries with improved efficiency"""
+    async def clean_expired(self, force: bool = False):
         async with self._lock:
             if not force and len(self.cache) < self.max_size // 2:
                 return
             current_time = time.time()
-            expired_keys = [
+            expired = [
                 k
                 for k, (expire_time, _) in self.cache.items()
                 if current_time > expire_time
             ]
-
-            for key in expired_keys:
+            for key in expired:
                 del self.cache[key]
-            if expired_keys:
-                logger.debug(f"Cleaned {len(expired_keys)} expired entries from cache")
+
+    async def get(self, key: tuple):
+        """
+        Get a value from cache using a tuple key
+        """
+        async with self._lock:
+            entry = self.cache.get(key)
+            if not entry:
+                return None
+            expire_time, value = entry
+            if time.time() > expire_time:
+                del self.cache[key]
+                return None
+            self.cache.move_to_end(key)
+            return value
+
+    async def set(self, key: tuple, value, expire: Optional[int] = None):
+        """
+        Set a value in cache using a tuple key
+        """
+        async with self._lock:
+            if expire is not None and expire <= 0:
+                return
+            ttl = expire if expire is not None else self.ttl
+            expire_time = time.time() + ttl
+            if key in self.cache:
+                del self.cache[key]
+            self.cache[key] = (expire_time, value)
+            while len(self.cache) > self.max_size:
+                self.cache.popitem(last=False)
 
     async def start_auto_cleanup(self):
         """Запускает фоновую задачу для периодической очистки кэша"""
@@ -138,11 +117,9 @@ class BroadcastMod(loader.Module):
         await self.manager.handle_command(message)
 
     async def client_ready(self):
-        """Initialization sequence with properly configured caches"""
+        """Initialization sequence"""
         self.manager = BroadcastManager(self._client, self.db, self._client.tg_id)
-        self.manager._message_cache = SimpleCache(ttl=7200, max_size=200)
-        self.manager.valid_chats_cache = SimpleCache(ttl=3600, max_size=500)
-
+        self.manager._message_cache = SimpleCache(ttl=14400, max_size=200)
         try:
             await asyncio.wait_for(self.manager._load_config(), timeout=30)
             await self.manager.start_cache_cleanup()
@@ -207,24 +184,15 @@ class Broadcast:
     original_interval: Tuple[int, int] = (10, 13)
 
     def add_message(
-        self,
-        chat_id: int,
-        message_id: int,
-        grouped_ids: List[int] = None
+        self, chat_id: int, message_id: int, grouped_ids: List[int] = None
     ) -> bool:
-        if not all(isinstance(x, int) for x in (chat_id, message_id)):
-            raise TypeError("ID чата и сообщения должны быть целыми числами")
-
         if grouped_ids:
-            if not isinstance(grouped_ids, list) or not all(isinstance(x, int) for x in grouped_ids):
-                raise TypeError("Grouped IDs должны быть списком целых чисел")
-            grouped_ids = tuple(sorted(set(grouped_ids)))
-
-        key = (chat_id, message_id, grouped_ids) if grouped_ids else (chat_id, message_id, ())
-        
+            grouped_ids = sorted(list(set(grouped_ids)))
+            if len(grouped_ids) == 1:
+                grouped_ids = None
+        key = (chat_id, message_id, tuple(grouped_ids) if grouped_ids else ())
         if key in self.messages:
             return False
-            
         self.messages.add(key)
         return True
 
@@ -244,7 +212,10 @@ class Broadcast:
         )
 
     def remove_message(
-        self, chat_id: int, message_id: int, grouped_ids: Optional[int] = None
+        self, 
+        chat_id: int, 
+        message_id: int, 
+        grouped_ids: Optional[int] = None
     ) -> bool:
         removed_count = 0
         keys_to_remove = []
@@ -254,16 +225,19 @@ class Broadcast:
 
             if msg_chat_id != chat_id or msg_message_id != message_id:
                 continue
+
             if grouped_ids:
                 if msg_grouped_ids and msg_grouped_ids[0] == grouped_ids:
                     keys_to_remove.append(key)
             else:
                 if not msg_grouped_ids:
                     keys_to_remove.append(key)
+
         if keys_to_remove:
             for key in keys_to_remove:
                 self.messages.remove(key)
                 removed_count += 1
+
         return removed_count > 0
 
 
@@ -406,34 +380,36 @@ class BroadcastManager:
                 await self.save_config()
 
     async def _fetch_messages(self, msg_data: dict) -> Optional[Message]:
+        """
+        Fetch a message from cache or Telegram
+        """
         try:
-            chat_id = int(msg_data["chat_id"])
-            message_id = int(msg_data["message_id"])
-        except (KeyError, ValueError, TypeError) as e:
-            logger.error(f"Некорректные данные: {msg_data} | Ошибка: {e}")
-            return None
+            chat_id = msg_data["chat_id"]
+            message_id = msg_data["message_id"]
 
-        cache_key = ("message", chat_id, message_id)
-        
-        try:
+            # Use tuple as cache key
+            cache_key = (chat_id, message_id)
+
             cached = await self._message_cache.get(cache_key)
             if cached:
                 return cached
-        except Exception as e:
-            logger.error(f"Ошибка доступа к кэшу: {e}")
-            await self._message_cache.set(cache_key, None)
 
-        try:
-            msg = await self.client.get_messages(chat_id, ids=message_id)
-            if not msg:
-                logger.debug(f"Сообщение {chat_id}:{message_id} не найдено")
+            try:
+                msg = await self.client.get_messages(entity=chat_id, ids=message_id)
+                if msg:
+                    # Cache using tuple key
+                    await self._message_cache.set(cache_key, msg)
+                    logger.debug(f"Сообщение {chat_id}:{message_id} сохранено в кэш")
+                    return msg
+                else:
+                    logger.error(f"Сообщение {chat_id}:{message_id} не найдено")
+                    return None
+            except ValueError as e:
+                logger.error(f"Чат/сообщение не существует: {chat_id} {message_id}: {e}")
                 return None
-                
-            await self._message_cache.set(cache_key, msg)
-            return msg
+
         except Exception as e:
-            logger.error(f"Ошибка получения сообщения: {e}")
-            await self._message_cache.set(cache_key, None, expire=60)
+            logger.error(f"Ошибка: {e}", exc_info=True)
             return None
 
     async def _get_chat_id(self, chat_identifier: str) -> Optional[int]:
@@ -508,9 +484,7 @@ class BroadcastManager:
                 logger.warning(f"🚫 Ошибка в чате {chat_id}. Удален из всех рассылок.")
         await self.save_config()
 
-    async def _handle_add_command(
-        self, message: Message, code: Optional[Broadcast], code_name: str
-    ):
+    async def _handle_add_command(self, message: Message, code: Optional[Broadcast], code_name: str):
         async with self._lock:
             reply = await message.get_reply_message()
             if not reply:
@@ -521,44 +495,50 @@ class BroadcastManager:
                 if is_new:
                     code = Broadcast()
                     self.codes[code_name] = code
+                    
                 grouped_ids = []
                 if hasattr(reply, "grouped_id") and reply.grouped_id:
                     try:
                         reply_grouped_id = reply.grouped_id
                         album_messages = []
-
+                        
+                        # Get messages around the reply
                         messages = await self.client.get_messages(
-                            reply.chat_id,
-                            limit=20,
+                            reply.chat_id, 
+                            limit=20,  # Увеличиваем лимит для надежности
                             max_id=reply.id + 10,
-                            min_id=reply.id - 10,
+                            min_id=reply.id - 10
                         )
-
+                        
+                        # Filter messages with the same grouped_id
                         for msg in messages:
-                            if (
-                                msg
-                                and getattr(msg, "grouped_id", None) == reply_grouped_id
-                            ):
+                            if msg and getattr(msg, "grouped_id", None) == reply_grouped_id:
                                 album_messages.append(msg)
+                                # Cache each album message
                                 cache_key = (msg.chat_id, msg.id)
                                 await self._message_cache.set(cache_key, msg)
+                        
                         grouped_ids = sorted([msg.id for msg in album_messages])
                         logger.debug(f"Найдено сообщений в альбоме: {len(grouped_ids)}")
+                        
                     except Exception as e:
                         logger.error(f"Ошибка получения альбома: {e}")
                         grouped_ids = []
+
                 success = code.add_message(
                     chat_id=reply.chat_id,
                     message_id=reply.id,
-                    grouped_ids=grouped_ids if grouped_ids else None,
+                    grouped_ids=grouped_ids if grouped_ids else None
                 )
 
                 if not success:
                     await utils.answer(message, "❌ Сообщение уже существует")
                     return
+                
+                # Cache the main message
                 cache_key = (reply.chat_id, reply.id)
                 await self._message_cache.set(cache_key, reply)
-
+                
                 await self.save_config()
 
                 if code_name in self.codes and len(self.codes[code_name].messages) > 0:
@@ -570,6 +550,7 @@ class BroadcastManager:
                     )
                 else:
                     await utils.answer(message, "⚠️ Ошибка сохранения конфигурации!")
+
             except Exception as e:
                 if is_new and code_name in self.codes:
                     del self.codes[code_name]
@@ -657,19 +638,23 @@ class BroadcastManager:
         if not self.codes:
             await utils.answer(message, "❌ Нет активных рассылок")
             return
+
         stats = []
 
         for name, code in self.codes.items():
             is_running = (
-                name in self.broadcast_tasks and not self.broadcast_tasks[name].done()
+                name in self.broadcast_tasks
+                and not self.broadcast_tasks[name].done()
             )
 
             total_messages = len(code.messages)
-            grouped_messages = sum(1 for msg in code.messages if msg[2])
+            grouped_messages = sum(
+                1 for msg in code.messages if msg[2]
+            )
 
             interval_modified = (
                 code.interval != code.original_interval
-                if hasattr(code, "original_interval")
+                if hasattr(code, 'original_interval')
                 else False
             )
 
@@ -691,6 +676,7 @@ class BroadcastManager:
                 f"├ Интервал: {current_interval} мин{original_interval}\n"
                 f"└ Режим: {'все сразу' if code.batch_mode else 'поочерёдно'}"
             )
+
         global_status = []
         if self.pause_event.is_set():
             global_status.append("🚫 Глобальная пауза активна")
@@ -702,6 +688,7 @@ class BroadcastManager:
                 global_status.append(
                     f"⚠️ Последний флуд: {int(hours)}ч {int(minutes)}м назад"
                 )
+
         response = (
             "📬 Состояние рассылок:\n"
             + ("\n" + "\n".join(global_status) + "\n" if global_status else "")
@@ -720,18 +707,14 @@ class BroadcastManager:
             grouped_id_for_removal = None
             if hasattr(reply, "grouped_id") and reply.grouped_id:
                 grouped_id_for_removal = reply.grouped_id
+
             removed_album = code.remove_message(
-                chat_id=reply.chat_id,
-                message_id=reply.id,
-                grouped_ids=grouped_id_for_removal,
+                chat_id=reply.chat_id, message_id=reply.id, grouped_ids=grouped_id_for_removal
             )
 
             if removed_album:
                 await self.save_config()
-                await utils.answer(
-                    message,
-                    f"✅ {'Альбом' if grouped_id_for_removal else 'Сообщение'} удалено из рассылки",
-                )
+                await utils.answer(message, f"✅ {'Альбом' if grouped_id_for_removal else 'Сообщение'} удалено из рассылки")
             else:
                 await utils.answer(message, "❌ Сообщение не найдено в рассылке")
 
@@ -823,7 +806,7 @@ class BroadcastManager:
     async def _handle_failed_chats(
         self, code_name: str, failed_chats: Set[int]
     ) -> None:
-        """Handle failed chats with proper cache key invalidation"""
+        """Обрабатывает чаты, в которые не удалось отправить сообщения."""
         if not failed_chats:
             return
         try:
@@ -832,10 +815,8 @@ class BroadcastManager:
                 if not code:
                     return
                 code.chats -= failed_chats
-
                 for chat_id in failed_chats:
-                    cache_key = ("chat_valid", chat_id)
-                    await self.valid_chats_cache.set(cache_key, False, expire=600)
+                    await self.valid_chats_cache.set(chat_id, None)
                 await self.save_config()
 
                 chat_groups = [
@@ -863,20 +844,14 @@ class BroadcastManager:
             logger.error(f"Ошибка обработки неудачных чатов для {code_name}: {e}")
 
     async def _is_chat_valid(self, chat_id: int) -> bool:
-        """
-        Check if a chat is valid using properly formatted cache keys
-        """
-        cache_key = ("chat_valid", chat_id)
-
-        cached_result = await self.valid_chats_cache.get(cache_key)
-        if cached_result is not None:
-            return cached_result
+        if cached := await self.valid_chats_cache.get(chat_id):
+            return cached
         try:
             await self.client.get_entity(chat_id)
-            await self.valid_chats_cache.set(cache_key, True, expire=3600)
+            await self.valid_chats_cache.set(chat_id, True, expire=3600)
             return True
         except Exception:
-            await self.valid_chats_cache.set(cache_key, False, expire=600)
+            await self.valid_chats_cache.set(chat_id, False, expire=600)
             return False
 
     async def _load_config(self):
@@ -924,49 +899,55 @@ class BroadcastManager:
                     logger.error(f"Некорректный формат кортежа: {msg_tuple}")
                     deleted_messages.append(msg_tuple)
                     continue
-                chat_id, message_id, grouped_ids = msg_tuple
 
+                chat_id, message_id, grouped_ids = msg_tuple
+                
+                # Проверяем базовые типы данных
                 if not isinstance(chat_id, int) or not isinstance(message_id, int):
-                    logger.error(
-                        f"Некорректные типы ID: chat_id={chat_id}, message_id={message_id}"
-                    )
+                    logger.error(f"Некорректные типы ID: chat_id={chat_id}, message_id={message_id}")
                     deleted_messages.append(msg_tuple)
                     continue
+                    
+                # Проверяем grouped_ids
                 if grouped_ids and not isinstance(grouped_ids, (tuple, list)):
                     logger.error(f"Некорректный формат grouped_ids: {grouped_ids}")
                     deleted_messages.append(msg_tuple)
                     continue
-                msg = await self._fetch_messages(
-                    {"chat_id": chat_id, "message_id": message_id}
-                )
 
+                # Проверяем наличие сообщения в кэше или возможность его получить
+                msg = await self._fetch_messages({
+                    "chat_id": chat_id,
+                    "message_id": message_id
+                })
+                
                 if msg is None:
-                    logger.error(
-                        f"Сообщение недоступно: chat_id={chat_id}, message_id={message_id}"
-                    )
+                    logger.error(f"Сообщение недоступно: chat_id={chat_id}, message_id={message_id}")
                     deleted_messages.append(msg_tuple)
                     continue
+
+                # Если есть grouped_ids, проверяем каждое сообщение альбома
                 if grouped_ids:
                     all_msgs_valid = True
                     for album_msg_id in grouped_ids:
-                        album_msg = await self._fetch_messages(
-                            {"chat_id": chat_id, "message_id": album_msg_id}
-                        )
+                        album_msg = await self._fetch_messages({
+                            "chat_id": chat_id,
+                            "message_id": album_msg_id
+                        })
                         if album_msg is None:
-                            logger.error(
-                                f"Сообщение альбома недоступно: chat_id={chat_id}, message_id={album_msg_id}"
-                            )
+                            logger.error(f"Сообщение альбома недоступно: chat_id={chat_id}, message_id={album_msg_id}")
                             all_msgs_valid = False
                             break
+                    
                     if not all_msgs_valid:
                         deleted_messages.append(msg_tuple)
                         continue
+
                 valid_messages.append(msg_tuple)
+
             except Exception as e:
-                logger.error(
-                    f"Ошибка обработки сообщения {msg_tuple}: {str(e)}", exc_info=True
-                )
+                logger.error(f"Ошибка обработки сообщения {msg_tuple}: {str(e)}", exc_info=True)
                 deleted_messages.append(msg_tuple)
+
         return valid_messages, deleted_messages
 
     async def _restart_all_broadcasts(self):
@@ -998,13 +979,12 @@ class BroadcastManager:
         self,
         chat_id: int,
         msg: Union[Message, List[Message]],
-        grouped_ids: Optional[List[int]] = None,
+        grouped_ids: Optional[List[int]] = None
     ) -> bool:
         if self.pause_event.is_set():
             return False
         await self.GLOBAL_LIMITER.acquire()
         try:
-
             async def forward_messages(messages: List[Message]) -> None:
                 await self.client.forward_messages(
                     entity=chat_id,
@@ -1018,12 +998,10 @@ class BroadcastManager:
                 if grouped_ids:
                     messages = []
                     for msg_id in grouped_ids:
-                        msg = await self._fetch_messages(
-                            {
-                                "chat_id": msg[0],
-                                "message_id": msg_id,
-                            }
-                        )
+                        msg = await self._fetch_messages({
+                            "chat_id": msg[0],
+                            "message_id": msg_id,
+                        })
                         if msg:
                             messages.append(msg)
                     if messages:
@@ -1052,34 +1030,41 @@ class BroadcastManager:
         """Улучшенная отправка с обработкой альбомов"""
         if self.pause_event.is_set():
             return set()
-        all_messages_to_send = []
 
-        for msg_tuple in code.messages:
+        all_messages_to_send = []
+        
+        # Fix: Iterate over message tuples instead of Message objects
+        for msg_tuple in code.messages:  # Use original message tuples from Broadcast
             chat_id, main_msg_id, grouped_ids = msg_tuple
 
+            # Rest of the processing remains the same
             all_msg_ids = [main_msg_id]
             if grouped_ids:
                 all_msg_ids.extend(grouped_ids)
+            
             album_messages = []
             for msg_id in all_msg_ids:
-                msg = await self._fetch_messages(
-                    {"chat_id": chat_id, "message_id": msg_id}
-                )
+                msg = await self._fetch_messages({
+                    "chat_id": chat_id,
+                    "message_id": msg_id
+                })
                 if msg:
                     album_messages.append(msg)
+            
             if album_messages:
-                all_messages_to_send.append(
-                    {
-                        "chat_id": chat_id,
-                        "messages": album_messages,
-                        "grouped_ids": grouped_ids if grouped_ids else None,
-                    }
-                )
+                all_messages_to_send.append({
+                    "chat_id": chat_id,
+                    "messages": album_messages,
+                    "grouped_ids": grouped_ids if grouped_ids else None
+                })
+
+        # Rest of the method remains unchanged
         valid_chats = [cid for cid in code.chats if await self._is_chat_valid(cid)]
         if not valid_chats:
             logger.error("💥 Нет доступных чатов для отправки!")
             code._active = False
             return set()
+
         failed_chats = set()
 
         for chat_id in valid_chats:
@@ -1088,17 +1073,20 @@ class BroadcastManager:
                 result = await self._send_message(
                     chat_id=chat_id,
                     msg=album["messages"],
-                    grouped_ids=album["grouped_ids"],
+                    grouped_ids=album["grouped_ids"]
                 )
-
+                
                 if not result:
                     success = False
                     break
+            
             if not success:
                 failed_chats.add(chat_id)
+
         if failed_chats:
             code.chats -= failed_chats
             await self.save_config()
+
         return failed_chats
 
     async def _send_batch(
@@ -1181,14 +1169,12 @@ class BroadcastManager:
                 messages = []
                 for msg in code.messages:
                     serialized_group = list(msg[2]) if msg[2] else []
-
-                    messages.append(
-                        {
-                            "chat_id": msg[0],
-                            "message_id": msg[1],
-                            "grouped_ids": serialized_group,
-                        }
-                    )
+                    
+                    messages.append({
+                        "chat_id": msg[0],
+                        "message_id": msg[1],
+                        "grouped_ids": serialized_group,
+                    })
                 config["codes"][name] = {
                     "chats": list(code.chats),
                     "messages": messages,
