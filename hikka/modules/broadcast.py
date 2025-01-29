@@ -5,7 +5,7 @@ import time
 from collections import deque, OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Dict, Iterable, List, Optional, Set, Tuple, Union
+from typing import  Any, Dict, Iterable, List, Optional, Set, Tuple, Union
 
 from telethon.tl.types import Message
 from telethon.errors import (
