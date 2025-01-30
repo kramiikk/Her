@@ -250,9 +250,7 @@ class BroadcastManager:
         chat_ring = deque(code.chats)
         last_sent = defaultdict(float)
         message = None
-        chat_semaphore = asyncio.Semaphore(
-            1
-        )  # Ограничиваем до 1 параллельного отправления
+        chat_semaphore = asyncio.Semaphore(1)
 
         while self._active and code._active and not self.pause_event.is_set():
             try:
@@ -268,9 +266,7 @@ class BroadcastManager:
                         continue
                 now = time.time()
                 next_chat = None
-                min_interval = code.interval[0] * 60  # конвертируем минуты в секунды
-
-                # Проверяем каждый чат в очереди
+                min_interval = code.interval[0] * 60
 
                 for _ in range(len(chat_ring)):
                     chat_id = chat_ring.popleft()
@@ -282,7 +278,6 @@ class BroadcastManager:
                     else:
                         chat_ring.append(chat_id)
                 if next_chat is None:
-                    # Если нет подходящих чатов, ждем до следующего возможного отправления
 
                     min_wait = min(
                         min_interval - (now - last_sent[chat_id])
@@ -290,8 +285,6 @@ class BroadcastManager:
                     )
                     await asyncio.sleep(min_wait + random.uniform(0.5, 1.5))
                     continue
-                # Отправляем сообщение
-
                 async with chat_semaphore:
                     success = await self._send_message(next_chat, message)
                     current_time = time.time()
@@ -306,8 +299,6 @@ class BroadcastManager:
                         if next_chat in code.chats:
                             code.chats.remove(next_chat)
                             await self.save_config()
-                    # Случайная задержка в пределах заданного интервала
-
                     delay = random.uniform(code.interval[0] * 60, code.interval[1] * 60)
                     await asyncio.sleep(delay)
             except asyncio.CancelledError:
