@@ -37,7 +37,7 @@ from hikkatl.sessions import MemorySession, SQLiteSession
 
 
 from . import configurator, database, loader, utils, version
-from ._internal import restart, fw_protect
+from ._internal import restart
 from .dispatcher import CommandDispatcher
 from .tl_cache import CustomTelegramClient
 from .version import __version__
@@ -412,7 +412,7 @@ class Her:
     ):
         session = SQLiteSession(
             os.path.join(BASE_DIR, "hikka.session")
-        )  # Фиксированное имя
+        )
 
         session.set_dc(
             client.session.dc_id,
@@ -465,7 +465,7 @@ class Her:
         await client.connect()
 
         if await self._phone_login(client):
-            self.sessions = [client]  # Сохраняем единственный клиент
+            self.sessions = [client]
             return True
         return False
 
@@ -474,7 +474,7 @@ class Her:
         if not self.sessions:
             return False
         session = self.sessions[0]
-        client = None  # Важно инициализировать переменную
+        client = None
 
         try:
             client = CustomTelegramClient(
@@ -520,8 +520,6 @@ class Her:
             self.sessions.clear()
             return False
         finally:
-            # Добавляем клиент только если не было ошибок
-
             if client:
                 self.sessions = [client]
         return bool(self.sessions)
@@ -530,7 +528,6 @@ class Her:
         """Wrapper around amain"""
         async with client:
             first = True
-            await fw_protect()
             me = await client.get_me()
             client._tg_id = me.id
             client.tg_id = me.id

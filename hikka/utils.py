@@ -68,7 +68,7 @@ from hikkatl.tl.types import (
 
 from ._internal import fw_protect
 from .tl_cache import CustomTelegramClient
-from .types import HikkaReplyMarkup, ListLike, Module
+from .types import ListLike, Module
 
 FormattingEntity = typing.Union[
     MessageEntityUnknown,
@@ -375,7 +375,6 @@ async def answer_file(
         kwargs.setdefault("reply_to", topic)
 
     try:
-        await fw_protect()
         response = await message.client.send_file(
             message.peer_id,
             file,
@@ -437,7 +436,6 @@ async def answer(
 
             return result
 
-        await fw_protect()
         result = await (message.edit if edit else message.respond)(
             text,
             parse_mode=lambda t: (t, entities),
