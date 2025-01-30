@@ -2,7 +2,6 @@ import asyncio
 import logging
 import random
 import time
-from functools import lru_cache
 from collections import deque, OrderedDict, defaultdict
 from dataclasses import dataclass, field
 from datetime import timedelta
@@ -294,31 +293,25 @@ class BroadcastManager:
                     )
             await self.save_config()
 
-    @lru_cache(maxsize=50)
     async def _fetch_message(self, chat_id: int, message_id: int) -> Optional[Message]:
         """Fetch a message from cache or Telegram"""
         try:
             cache_key = (chat_id, message_id)
-
             cached = await self._message_cache.get(cache_key)
             if cached:
                 return cached
-            try:
-                msg = await self.client.get_messages(entity=chat_id, ids=message_id)
-                if msg:
-                    await self._message_cache.set(cache_key, msg)
-                    logger.debug(f"Сообщение {chat_id}:{message_id} сохранено в кэш")
-                    return msg
-                else:
-                    logger.error(f"Сообщение {chat_id}:{message_id} не найдено")
-                    return None
-            except ValueError as e:
-                logger.error(
-                    f"Чат/сообщение не существует: {chat_id} {message_id}: {e}"
-                )
-                return None
+            msg = await self.client.get_messages(entity=chat_id, ids=message_id)
+            if msg:
+                await self._message_cache.set(cache_key, msg)
+                logger.debug(f"Сообщение {chat_id}:{message_id} сохранено в кэш")
+                return msg
+            logger.error(f"Сообщение {chat_id}:{message_id} не найдено")
+            return None
+        except ValueError as e:
+            logger.error(f"Чат/сообщение не существует: {chat_id} {message_id}: {e}")
+            return None
         except Exception as e:
-            logger.error(f"Ошибка: {e}", exc_info=True)
+            logger.error(f"Ошибка при получении сообщения: {e}", exc_info=True)
             return None
 
     async def _generate_stats_report(self) -> str:
