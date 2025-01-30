@@ -71,25 +71,14 @@ with contextlib.suppress(Exception):
 # fmt: off
 
 
-LATIN_MOCK = [
-    "iPhone", "Android", "Chrome", "macOS", "Galaxy", "Windows",
-    "Firefox", "iPad", "Ubuntu", "Edge", "Pixel", "iOS",
-    "Safari", "Laptop", "Fedora", "Opera", "Tablet", "Linux",
-    "Router", "WatchOS", "Chromium", "SmartTV", "SteamOS", "Kindle",
-    "RaspberryPi", "FireFoxOS", "PlayStation", "Xbox", "Arduino",
-    "WearOS", "Sailfish", "FreeBSD", "OpenBSD", "NetBSD",
-    "PalmOS", "Symbian", "BlackBerryOS", "Tizen", "webOS",
-    "QNX", "Solaris", "HP-UX", "AIX", "zOS",
-    "Vivaldi", "Brave", "TorBrowser", "DuckDuckGoBrowser", "UCBrowser",
-    "SamsungBrowser", "HuaweiBrowser", "MiBrowser", "YandexBrowser",
-    "Lynx", "Konqueror", "Midori", "PaleMoon", "SeaMonkey",
-    "MicrosoftEdge", "GoogleChrome", "MozillaFirefox", "AppleSafari", "OperaBrowser",
-    "InternetExplorer", "NetscapeNavigator", "Mosaic", "Cello",
-    "AndroidStudio", "Xcode", "VisualStudio", "Eclipse", "IntelliJ",
-    "SublimeText", "VSCode", "Atom", "NotepadPlusPlus", "TextEdit",
-    "Terminal", "PowerShell", "Bash", "Zsh", "Cmd",
-    "Docker", "Kubernetes", "VMware", "VirtualBox", "HyperV",
-    "AWS", "Azure", "GCP", "Heroku", "DigitalOcean"
+OFFICIAL_CLIENTS = [
+    "Telegram Android",
+    "Telegram iOS",
+    "Telegram Desktop",
+    "Telegram Web",
+    "Telegram macOS",
+    "Telegram Win",
+    "Telegram Linux",
 ]
 # fmt: on
 
@@ -99,57 +88,36 @@ class ApiToken(typing.NamedTuple):
     HASH: str
 
 
-def generate_app_name() -> str:
-    """
-    Generate random app name
-    :return: Random app name
-    :example: "Cresco Cibus Consilium"
-    """
-    return " ".join(random.choices(LATIN_MOCK, k=3))
-
-
-def get_app_name() -> str:
-    """
-    Generates random app name or gets the saved one of present
-    :return: App name
-    :example: "Cresco Cibus Consilium"
-    """
-    if not (app_name := get_config_key("app_name")):
-        app_name = generate_app_name()
-        save_config_key("app_name", app_name)
-    return app_name
-
-
 def generate_random_system_version():
     systems = [
         (
-            "Android", 
+            # Android
             lambda: f"Android {random.randint(10, 14)} (SDK {random.randint(30, 34)})",
-            "arm64-v8a"
+            "arm64-v8a",
         ),
         (
-            "iOS", 
-            lambda: f"iOS {random.randint(15, 17)}.{random.randint(0, 6)}.{random.randint(1, 3)}",
-            "Apple ARM"
+            # iOS
+            lambda: f"{random.randint(15, 17)}.{random.randint(0, 6)}.{random.randint(1, 3)}",
+            "Apple ARM",
         ),
         (
-            "Windows", 
-            lambda: f"Windows 10 {'Pro' if random.random() > 0.5 else 'Home'}",
-            "x64"
+            # Windows
+            lambda: f"10 Build {random.randint(19000, 22621)}",
+            "x64",
         ),
         (
-            "macOS", 
-            lambda: f"macOS 13.{random.randint(0, 4)} (Ventura)",
-            "x86_64"
+            # macOS
+            lambda: f"13.{random.randint(0, 4)}",
+            "x86_64",
         ),
         (
-            "Linux", 
-            lambda: f"Ubuntu 2{random.randint(2, 4)}.04 LTS",
-            "x64"
+            # Linux
+            lambda: f"Ubuntu 2{random.randint(2, 4)}.04",
+            "x64",
         ),
     ]
-    
-    system_name, version_gen, arch = random.choice(systems)
+
+    version_gen, arch = random.choice(systems)
     return f"{version_gen()} [{arch}]"
 
 
@@ -399,9 +367,7 @@ class Her:
         *,
         delay_restart: bool = False,
     ):
-        session = SQLiteSession(
-            os.path.join(BASE_DIR, "hikka.session")
-        )
+        session = SQLiteSession(os.path.join(BASE_DIR, "hikka.session"))
 
         session.set_dc(
             client.session.dc_id,
@@ -427,9 +393,7 @@ class Her:
 
     async def _phone_login(self, client: CustomTelegramClient) -> bool:
         phone = input(
-            "\033[0;96mEnter phone: \033[0m"
-            if self.arguments.tty
-            else "Enter phone: "
+            "\033[0;96mEnter phone: \033[0m" if self.arguments.tty else "Enter phone: "
         )
 
         await client.start(phone)
@@ -445,9 +409,9 @@ class Her:
             connection=self.conn,
             proxy=self.proxy,
             connection_retries=None,
-            device_model=get_app_name(),
+            device_model=random.choice(OFFICIAL_CLIENTS),
             system_version=generate_random_system_version(),
-            app_version=".".join(map(str, __version__)) + " x64",
+            app_version=f"{random.randint(8, 10)}.{random.randint(0, 9)}.{random.randint(0, 9)}",
             lang_code="en",
             system_lang_code="en-US",
         )
@@ -473,9 +437,9 @@ class Her:
                 connection=self.conn,
                 proxy=self.proxy,
                 connection_retries=None,
-                device_model=get_app_name(),
+                device_model=random.choice(OFFICIAL_CLIENTS),
                 system_version=generate_random_system_version(),
-                app_version=".".join(map(str, __version__)) + " x64",
+                app_version=f"{random.randint(8, 10)}.{random.randint(0, 9)}.{random.randint(0, 9)}",
                 lang_code="en",
                 system_lang_code="en-US",
             )
