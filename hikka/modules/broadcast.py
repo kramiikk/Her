@@ -154,7 +154,6 @@ class BroadcastMod(loader.Module):
             self.manager.adaptive_interval_task.cancel()
         if self.manager.cache_cleanup_task:
             self.manager.cache_cleanup_task.cancel()
-        await self.manager.save_config()
 
     async def watcher(self, message: Message):
         """Автоматически добавляет чаты в рассылку."""
@@ -309,7 +308,6 @@ class BroadcastManager:
                     if not code.is_valid_interval():
                         code.interval = (10, 13)
                 self.flood_wait_times = []
-                await self.save_config()
                 await self.client.send_message(
                     self.tg_id,
                     "🔄 12 часов без ошибок! Интервалы восстановлены до исходных",
@@ -332,7 +330,7 @@ class BroadcastManager:
                         self.tg_id,
                         f"⏱ Автокоррекция интервалов для {code_name}: {new_min}-{new_max} минут",
                     )
-                await self.save_config()
+            await self.save_config()
 
     async def _fetch_messages(self, msg_tuple: Tuple[int, int]) -> Optional[Message]:
         """
@@ -439,7 +437,7 @@ class BroadcastManager:
         async with self._lock:
             for code in self.codes.values():
                 code.chats.discard(chat_id)
-                logger.warning(f"🚫 Ошибка в чате {chat_id}. Удален из всех рассылок.")
+                logger.warning(f"🚫 Ошибка в чате {chat_id}. Удален из рассылок.")
         await self.save_config()
 
     async def _handle_add(self, message, code, code_name, args) -> str:
