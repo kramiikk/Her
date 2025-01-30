@@ -142,13 +142,16 @@ class BroadcastMod(loader.Module):
         if not hasattr(self, "manager"):
             return
         self.manager._active = False
-        
-        tasks = list(self.manager.broadcast_tasks.values())
-        self.manager.broadcast_tasks.clear()
-        
+
+        tasks = [
+            task for task in self.manager.broadcast_tasks.values() if not task.done()
+        ]
+
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
+
+        await self.manager._message_cache.clean_expired(force=True)
 
     async def watcher(self, message: Message):
         """Автоматически добавляет чаты в рассылку."""
@@ -295,15 +298,15 @@ class BroadcastManager:
 
     async def _fetch_message(self, chat_id: int, message_id: int) -> Optional[Message]:
         """Fetch a message from cache or Telegram"""
+        cache_key = (chat_id, message_id)
+
+        cached = await self._message_cache.get(cache_key)
+        if cached:
+            return cached
         try:
-            cache_key = (chat_id, message_id)
-            cached = await self._message_cache.get(cache_key)
-            if cached:
-                return cached
             msg = await self.client.get_messages(entity=chat_id, ids=message_id)
             if msg:
                 await self._message_cache.set(cache_key, msg)
-                logger.debug(f"Сообщение {chat_id}:{message_id} сохранено в кэш")
                 return msg
             logger.error(f"Сообщение {chat_id}:{message_id} не найдено")
             return None
@@ -527,14 +530,18 @@ class BroadcastManager:
     async def _restart_all_broadcasts(self):
         async with self._lock:
             for code_name, code in self.codes.items():
-                if code._active and not self.broadcast_tasks.get(code_name):
-                    try:
-                        self.broadcast_tasks[code_name] = asyncio.create_task(
-                            self._broadcast_loop(code_name)
-                        )
-                        logger.info(f"Фоновый перезапуск: {code_name}")
-                    except Exception as e:
-                        logger.error(f"Ошибка перезапуска {code_name}: {str(e)}")
+                if code._active:
+                    if task := self.broadcast_tasks.get(code_name):
+                        if not task.done() and not task.cancelled():
+                            task.cancel()
+                            try:
+                                await task
+                            except asyncio.CancelledError:
+                                pass
+                    self.broadcast_tasks[code_name] = asyncio.create_task(
+                        self._broadcast_loop(code_name)
+                    )
+                    logger.info(f"Перезапуск рассылки: {code_name}")
 
     async def _send_message(self, chat_id: int, msg: Message) -> bool:
         """Отправка сообщения с базовой обработкой ошибок"""
