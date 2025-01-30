@@ -207,8 +207,6 @@ class Broadcast:
     last_sent: float = 0
     total_sent: int = 0
     total_failed: int = 0
-    speed: float = 0
-    last_error: Optional[Tuple[str, float]] = None
 
     def is_valid_interval(self) -> bool:
         """Проверяет корректность интервала"""
@@ -221,18 +219,12 @@ class BroadcastManager:
 
     GLOBAL_LIMITER = RateLimiter(max_requests=20, time_window=60)
 
-    class MediaPermissions:
-        NONE = 0
-        TEXT_ONLY = 1
-        FULL_MEDIA = 2
-
     def __init__(self, client, db, tg_id):
         self.client = client
         self.db = db
         self.codes: Dict[str, Broadcast] = {}
         self.broadcast_tasks: Dict[str, asyncio.Task] = {}
         self._message_cache = SimpleCache(ttl=7200, max_size=50)
-        self.valid_chats_cache = SimpleCache(ttl=7200, max_size=500)
         self._active = True
         self._lock = asyncio.Lock()
         self.watcher_enabled = False
@@ -320,10 +312,7 @@ class BroadcastManager:
             await self.save_config()
 
     async def _fetch_messages(self, msg_tuple: Tuple[int, int]) -> Optional[Message]:
-        """
-        Fetch a message from cache or Telegram
-
-        """
+        """Fetch a message from cache or Telegram"""
         try:
             chat_id, message_id = msg_tuple
 
@@ -728,9 +717,3 @@ class BroadcastManager:
                 break
             except Exception as e:
                 logger.error(f"Ошибка в адаптивной регулировке: {e}", exc_info=True)
-
-    async def start_cache_cleanup(self):
-        """Запускает фоновую очистку кэша"""
-        self.cache_cleanup_task = asyncio.create_task(
-            self._message_cache.start_auto_cleanup()
-        )
