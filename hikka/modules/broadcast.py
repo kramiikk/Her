@@ -263,18 +263,17 @@ class BroadcastManager:
                 break
             try:
                 if not message:
-                    if not code.messages:  # Check if messages set is empty
+                    if not code.messages:
                         logger.error(f"[{code_name}] No messages available")
                         break
                         
-                    msg_tuple = random.choice(tuple(code.messages))  # Convert to tuple before choosing
+                    msg_tuple = random.choice(tuple(code.messages))
                     message = await self._fetch_messages(msg_tuple)
                     if not message:
                         code.messages.remove(msg_tuple)
                         await self.save_config()
                         continue
                         
-                # Rest of the broadcast loop implementation remains the same
                 interval_range = code.interval[1] - code.interval[0]
                 target_batch = max(
                     MIN_BATCH_SIZE,
@@ -388,7 +387,7 @@ class BroadcastManager:
 
         """
         try:
-            chat_id, message_id = msg_tuple  # Correctly unpack the tuple
+            chat_id, message_id = msg_tuple
             
             cache_key = (chat_id, message_id)
             
