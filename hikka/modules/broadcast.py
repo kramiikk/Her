@@ -124,6 +124,13 @@ class BroadcastMod(loader.Module):
         self.manager._message_cache = SimpleCache(ttl=7200, max_size=50)
         try:
             await asyncio.wait_for(self.manager.load_config(), timeout=30)
+
+            for code_name, code in self.manager.codes.items():
+                if code._active:
+                    self.manager.broadcast_tasks[code_name] = asyncio.create_task(
+                        self.manager._broadcast_loop(code_name)
+                    )
+                    logger.info(f"Автозапуск рассылки {code_name}")
             await self.manager.start_cache_cleanup()
             self.manager.adaptive_interval_task = asyncio.create_task(
                 self.manager.start_adaptive_interval_adjustment()
@@ -147,6 +154,7 @@ class BroadcastMod(loader.Module):
             self.manager.adaptive_interval_task.cancel()
         if self.manager.cache_cleanup_task:
             self.manager.cache_cleanup_task.cancel()
+        await self.manager.save_config()
 
     async def watcher(self, message: Message):
         """Автоматически добавляет чаты в рассылку."""
