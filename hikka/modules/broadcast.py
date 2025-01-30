@@ -140,18 +140,16 @@ class BroadcastMod(loader.Module):
                 )
 
     async def on_unload(self):
-        """Завершение работы модуля"""
         if not hasattr(self, "manager"):
             return
         self.manager._active = False
-
-        for task in self.manager.broadcast_tasks.values():
+        
+        tasks = list(self.manager.broadcast_tasks.values())
+        self.manager.broadcast_tasks.clear()
+        
+        for task in tasks:
             task.cancel()
-        if self.manager.adaptive_interval_task:
-            self.manager.adaptive_interval_task.cancel()
-        if self.manager.cache_cleanup_task:
-            self.manager.cache_cleanup_task.cancel()
-        await self.manager.save_config()
+        await asyncio.gather(*tasks, return_exceptions=True)
 
     async def watcher(self, message: Message):
         """Автоматически добавляет чаты в рассылку."""
