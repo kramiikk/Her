@@ -661,6 +661,7 @@ class BroadcastManager:
 
             for code_name, code_data in raw_config.get("codes", {}).items():
                 try:
+                    status = code_data.get("status", {})
                     code = Broadcast(
                         chats=set(map(int, code_data.get("chats", []))),
                         messages={
@@ -673,18 +674,12 @@ class BroadcastManager:
                         ),
                     )
 
-                    status = code_data.get("status", {})
                     code._active = status.get("active", False)
                     code.start_time = float(status.get("start_time", time.time()))
                     code.last_sent = float(status.get("last_sent", 0))
                     code.total_sent = int(status.get("total_sent", 0))
                     code.total_failed = int(status.get("total_failed", 0))
 
-                    if code_data.get("last_error"):
-                        code.last_error = (
-                            str(code_data["last_error"]["message"]),
-                            float(code_data["last_error"]["timestamp"]),
-                        )
                     self.codes[code_name] = code
                 except Exception as e:
                     logger.error(f"Ошибка загрузки {code_name}: {str(e)}")
