@@ -103,7 +103,6 @@ class SimpleCache:
         """Запускает фоновую задачу для периодической очистки кэша"""
         while True:
             await self.clean_expired()
-            logger.debug("Периодическая очистка выполнена")
             await asyncio.sleep(self.ttl)
 
 
@@ -630,7 +629,6 @@ class BroadcastManager:
         """Загрузка конфигурации с базовой валидацией"""
         try:
             raw_config = self.db.get("broadcast", "config") or {}
-            logger.debug("Начало загрузки конфигурации")
 
             for code_name, code_data in raw_config.get("codes", {}).items():
                 try:
@@ -658,7 +656,6 @@ class BroadcastManager:
                     logger.error(f"Ошибка загрузки {code_name}: {str(e)}")
                     continue
             await self._validate_loaded_data()
-            logger.info(f"Успешно загружено рассылок: {len(self.codes)}")
         except Exception as e:
             logger.error(f"Критическая ошибка загрузки: {str(e)}", exc_info=True)
             self.codes = {}
