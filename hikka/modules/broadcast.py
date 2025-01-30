@@ -113,6 +113,10 @@ class BroadcastMod(loader.Module):
 
     strings = {"name": "Broadcast"}
 
+    def __init__(self):
+        self.manager = BroadcastManager(self._client, self.db, self.tg_id)
+        super().__init__()
+
     @loader.command()
     async def bcmd(self, message):
         """Команда для управления рассылкой."""
