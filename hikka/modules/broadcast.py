@@ -342,18 +342,18 @@ class BroadcastManager:
     async def _generate_stats_report(self) -> str:
         """Генерация отчета: .br l"""
         if not self.codes:
-            return "📭 Нет активных рассылок"
-        report = ["📊 **Статистика рассылок**"]
+            return "😶‍🌫️ Нет активных рассылок"
+        report = ["🎩 <strong>Статистика рассылок</strong>"]
         for code_name, code in self.codes.items():
-            status = "✅" if code._active else "⏸"
+            status = "✨" if code._active else "🥶"
             runtime = str(timedelta(seconds=int(time.time() - code.start_time)))[:-3]
 
             report.append(
-                f"\n▸ **{code_name}** {status} {runtime}\n"
+                f"\n▸ <code>{code_name}</code> {status} {runtime}\n"
                 f"├ Сообщений: {len(code.messages)}\n"
                 f"├ Чатов: {len(code.chats)}\n"
                 f"├ Интервал: {code.interval[0]}-{code.interval[1]} мин\n"
-                f"└ Отправлено: ✅{code.total_sent} ❌{code.total_failed}"
+                f"└ Отправлено: 🎐{code.total_sent} ⛓‍💥{code.total_failed}"
             )
         return "".join(report)
 
@@ -445,7 +445,7 @@ class BroadcastManager:
         await self._message_cache.set(key, reply)
         await self.save_config()
 
-        return f"✅ {code_name} | Сообщений: {len(code.messages)}"
+        return f"🍑 <code>{code_name}</code> | Сообщений: {len(code.messages)}"
 
     async def _handle_add_chat(self, message, code, code_name, args) -> str:
         """Добавление чата: .br ac [code] [@chat]"""
@@ -460,7 +460,7 @@ class BroadcastManager:
             return "🚫 Лимит 500 чатов"
         code.chats.add(chat_id)
         await self.save_config()
-        return f"✅ +1 чат | Всего: {len(code.chats)}"
+        return f"🪴 +1 чат | Всего: {len(code.chats)}"
 
     async def _handle_delete(self, message, code, code_name, args) -> str:
         """Удаление рассылки: .br d [code]"""
@@ -511,7 +511,7 @@ class BroadcastManager:
             return "ℹ️ Чат не найден"
         code.chats.remove(chat_id)
         await self.save_config()
-        return f"✅ -1 чат | Осталось: {len(code.chats)}"
+        return f"🐲 -1 чат | Осталось: {len(code.chats)}"
 
     async def _handle_start(self, message, code, code_name, args) -> str:
         """Запуск рассылки: .br s [code]"""
@@ -584,7 +584,7 @@ class BroadcastManager:
         if len(args) < 2:
             return f"🔍 Автодобавление: {'ON' if self.watcher_enabled else 'OFF'}"
         self.watcher_enabled = args[1].lower() == "on"
-        return f"✅ Автодобавление: {'ВКЛ' if self.watcher_enabled else 'ВЫКЛ'}"
+        return f"🐺 Автодобавление: {'ВКЛ' if self.watcher_enabled else 'ВЫКЛ'}"
 
     async def _validate_loaded_data(self):
         """Базовая проверка загруженных данных"""
