@@ -233,7 +233,7 @@ class BroadcastManager:
         while self._active and code._active and not self.pause_event.is_set():
             try:
                 msg_tuple = random.choice(tuple(code.messages))
-                message = await self._fetch_message(msg_tuple)
+                message = await self._fetch_message(*msg_tuple)
                 if not message:
                     code.messages.remove(msg_tuple)
                     await self.save_config()
