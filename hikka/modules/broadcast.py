@@ -5,7 +5,7 @@ import time
 from .. import _internal
 from collections import deque, OrderedDict, defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Dict, Optional, Set, Tuple
 
 from telethon.tl.types import Message
@@ -191,26 +191,10 @@ class Broadcast:
     speed: float = 0
     last_error: Optional[Tuple[str, float]] = None
 
-    def add_message(self, chat_id: int, message_id: int) -> bool:
-        """Добавляет одиночное сообщение"""
-        key = (chat_id, message_id)
-        if key in self.messages:
-            return False
-        self.messages.add(key)
-        return True
-
     def is_valid_interval(self) -> bool:
         """Проверяет корректность интервала"""
         min_val, max_val = self.interval
         return 0 < min_val < max_val <= 1440
-
-    def remove_message(self, chat_id: int, message_id: int) -> bool:
-        """Удаляет сообщение из рассылки"""
-        key = (chat_id, message_id)
-        if key in self.messages:
-            self.messages.remove(key)
-            return True
-        return False
 
 
 class BroadcastManager:
@@ -374,18 +358,24 @@ class BroadcastManager:
             logger.error(f"Ошибка: {e}", exc_info=True)
             return None
 
-    async def _get_chat_id(self, chat_identifier: str) -> Optional[int]:
-        """Получает ID чата из разных форматов (ссылка, юзернейм, ID)"""
-        try:
-            if chat_identifier.lstrip("-").isdigit():
-                return int(chat_identifier)
-            clean_username = chat_identifier.lower()
-            for prefix in ["https://", "http://", "t.me/", "@", "telegram.me/"]:
-                clean_username = clean_username.replace(prefix, "")
-            entity = await self.client.get_entity(clean_username)
-            return entity.id
-        except Exception:
-            return None
+    async def _generate_stats_report(self) -> str:
+        """Генерация отчета: .br l"""
+        if not self.codes:
+            return "📭 Нет активных рассылок"
+        report = ["📊 **Статистика рассылок**"]
+        for code_name, code in self.codes.items():
+            status = "✅" if code._active else "⏸"
+            runtime = str(timedelta(seconds=int(time.time() - code.start_time)))[:-3]
+            progress = f"{len(code.chats)}/{code.initial_chats_count or '?'}"
+
+            report.append(
+                f"\n▸ **{code_name}** {status}\n"
+                f"├ Сообщений: {len(code.messages)}\n"
+                f"├ Чатов: {progress}\n"
+                f"├ Интервал: {code.interval[0]}-{code.interval[1]} мин\n"
+                f"└ Отправлено: ✅{code.total_sent} ❌{code.total_failed}"
+            )
+        return "".join(report)
 
     async def _handle_flood_wait(self, e: FloodWaitError, chat_id: int):
         """Глобальная обработка FloodWait с остановкой всех рассылок"""
@@ -446,319 +436,122 @@ class BroadcastManager:
                 logger.warning(f"🚫 Ошибка в чате {chat_id}. Удален из всех рассылок.")
         await self.save_config()
 
-    async def _handle_add_command(
-        self, message: Message, code: Optional[Broadcast], code_name: str
-    ):
-        async with self._lock:
-            reply = await message.get_reply_message()
-            if not reply:
-                await utils.answer(message, "❌ Ответьте на сообщение для добавления")
-                return
-            try:
-                if code is None:
-                    code = Broadcast()
-                    self.codes[code_name] = code
-                success = code.add_message(chat_id=reply.chat_id, message_id=reply.id)
+    async def _handle_add(self, message, code, code_name, args) -> str:
+        """Добавление сообщения в рассылку: .br a [code]"""
+        reply = await message.get_reply_message()
+        if not reply:
+            return "🚫 Ответьте на сообщение"
+        if not code:
+            code = Broadcast()
+            self.codes[code_name] = code
+        key = (reply.chat_id, reply.id)
+        if key in code.messages:
+            return "ℹ️ Сообщение уже добавлено"
+        code.messages.add(key)
+        await self._message_cache.set(key, reply)
+        await self.save_config()
 
-                if not success:
-                    await utils.answer(message, "❌ Сообщение уже существует")
-                    return
-                cache_key = (reply.chat_id, reply.id)
-                await self._message_cache.set(cache_key, reply)
-                await self.save_config()
+        return f"✅ {code_name} | Сообщений: {len(code.messages)}"
 
-                await utils.answer(
-                    message,
-                    f"✅ {'Создана рассылка' if code is None else 'Обновлена'} | "
-                    f"Сообщений: {len(code.messages)}",
-                )
-            except Exception as e:
-                if code is None and code_name in self.codes:
-                    del self.codes[code_name]
-                await utils.answer(
-                    message, f"🚨 Ошибка! Лог: {e.__class__.__name__}: {str(e)}"
-                )
+    async def _handle_add_chat(self, message, code, code_name, args) -> str:
+        """Добавление чата: .br ac [code] [@chat]"""
+        target = args[2] if len(args) > 2 else message.chat_id
+        chat_id = await self._parse_chat_identifier(target)
 
-    async def _handle_addchat_command(
-        self, message: Message, code: Broadcast, args: list
-    ):
-        """Обработчик команды addchat"""
-        if len(args) > 2:
-            chat_id = await self._get_chat_id(args[2])
-            if not chat_id:
-                await utils.answer(
-                    message, "❌ Не удалось получить ID чата. Проверьте ссылку/юзернейм"
-                )
-                return
-        else:
-            chat_id = message.chat_id
-        if len(code.chats) >= 500:
-            await utils.answer(message, f"❌ Достигнут лимит чатов 500")
-            return
+        if not chat_id:
+            return "🚫 Неверный формат чата"
         if chat_id in code.chats:
-            await utils.answer(message, "❌ Этот чат уже добавлен в рассылку")
-            return
+            return "ℹ️ Чат уже добавлен"
+        if len(code.chats) >= 500:
+            return "🚫 Лимит 500 чатов"
         code.chats.add(chat_id)
         await self.save_config()
-        code.initial_chats_count = len(code.chats)
-        await utils.answer(message, "✅ Чат добавлен в рассылку")
+        return f"✅ +1 чат | Всего: {len(code.chats)}"
 
-    async def _handle_delete_command(self, message: Message, code_name: str):
-        """Обработчик команды delete"""
-        task = self.broadcast_tasks.get(code_name)
-        if task and not task.done():
+    async def _handle_delete(self, message, code, code_name, args) -> str:
+        """Удаление рассылки: .br d [code]"""
+        if code_name in self.broadcast_tasks:
             self.broadcast_tasks[code_name].cancel()
         del self.codes[code_name]
         await self.save_config()
-        await utils.answer(message, f"✅ Рассылка {code_name} удалена")
+        return f"🗑 {code_name} удалена"
 
-    async def _handle_interval_command(
-        self, message: Message, code: Broadcast, args: list
-    ):
-        """Обработчик команды int"""
+    async def _handle_interval(self, message, code, code_name, args) -> str:
+        """Установка интервала: .br i [code] [min] [max]"""
         if len(args) < 4:
-            await utils.answer(
-                message, "❌ Укажите минимальный и максимальный интервал в минутах"
-            )
-            return
+            return "🚫 Укажите мин/макс интервалы"
         try:
             min_val = int(args[2])
             max_val = int(args[3])
         except ValueError:
-            await utils.answer(message, "❌ Интервалы должны быть числами")
-            return
+            return "🚫 Некорректные значения"
+        if not (0 < min_val < max_val <= 1440):
+            return "🚫 Интервал 1-1440 мин (min < max)"
         code.interval = (min_val, max_val)
-        if not code.is_valid_interval():
-            await utils.answer(
-                message, "❌ Некорректный интервал (0 < min < max <= 1440)"
-            )
-            return
         code.original_interval = code.interval
         await self.save_config()
-        await utils.answer(message, f"✅ Установлен интервал {min_val}-{max_val} минут")
 
-    async def _handle_list_command(self, message: Message):
-        """Показывает расширенную статистику рассылок"""
-        if not self.codes:
-            await utils.answer(message, "❌ Нет активных рассылок")
-            return
-        lines = ["📊 **Статистика рассылок**\n"]
+        return f"⏱ {code_name}: {min_val}-{max_val} мин"
 
-        for code_name, code in self.codes.items():
-
-            status_icon = "✅" if code._active else "⏸️"
-            runtime = timedelta(seconds=int(time.time() - code.start_time))
-            progress = (
-                f"{len(code.chats)}/{code.initial_chats_count}"
-                if code.initial_chats_count > 0
-                else len(code.chats)
-            )
-
-            next_run = (
-                datetime.fromtimestamp(code.last_sent + code.interval[0] * 60)
-                if code.last_sent
-                else "-"
-            )
-            last_activity = (
-                datetime.fromtimestamp(code.last_sent).strftime("%H:%M:%S")
-                if code.last_sent
-                else "никогда"
-            )
-
-            block = [
-                f"**{code_name}** {status_icon}",
-                f"├ 🕒 Работает: `{runtime}`",
-                f"├ 📨 Сообщений: `{len(code.messages)}`",
-                f"├ 📡 Статус: `{progress}` чатов",
-                f"├ ⏱ Интервал: `{code.interval[0]}-{code.interval[1]} мин`",
-                f"├ 📈 Успешно: `{code.total_sent}`",
-                f"├ ❌ Ошибки: `{code.total_failed}`",
-                (
-                    f"├ 🔄 Следующий цикл: `{next_run:%H:%M:%S}`"
-                    if code.last_sent
-                    else "├ 🔄 Следующий цикл: `-`"
-                ),
-                f"└ ⚡ Скорость: `{code.speed:.1f} msg/min`",
-            ]
-
-            if code.last_error:
-                block.append(
-                    f"└ 🔥 Последняя ошибка: `{code.last_error[0]}` ({datetime.fromtimestamp(code.last_error[1]):%H:%M:%S})"
-                )
-            lines.append("\n".join(block))
-        total_stats = (
-            f"\n**Общая статистика**\n"
-            f"├ Всего рассылок: {len(self.codes)}\n"
-            f"├ Активных: {sum(1 for c in self.codes.values() if c._active)}\n"
-            f"└ Всего сообщений отправлено: {sum(c.total_sent for c in self.codes.values())}"
-        )
-        lines.append(total_stats)
-
-        await utils.answer(message, "\n\n".join(lines))
-
-    async def _handle_remove_command(self, message: Message, code: Broadcast):
-        """Обработчик команды удаления сообщения из рассылки"""
+    async def _handle_remove(self, message, code, code_name, args) -> str:
+        """Удаление сообщения: .br r [code]"""
         reply = await message.get_reply_message()
         if not reply:
-            await utils.answer(
-                message, "❌ Ответьте на сообщение, которое нужно удалить"
-            )
-            return
-        try:
+            return "🚫 Ответьте на сообщение"
+        key = (reply.chat_id, reply.id)
+        if key not in code.messages:
+            return "🚫 Сообщение не найдено"
+        code.messages.remove(key)
+        await self._message_cache.set(key, None)
+        await self.save_config()
+        return f"✅ Удалено | Осталось: {len(code.messages)}"
 
-            chat_id = reply.chat_id
-            message_id = reply.id
+    async def _handle_remove_chat(self, message, code, code_name, args) -> str:
+        """Удаление чата: .br rc [code] [@chat]"""
+        target = args[2] if len(args) > 2 else message.chat_id
+        chat_id = await self._parse_chat_identifier(target)
 
-            removed = code.remove_message(chat_id, message_id)
-
-            if removed:
-
-                cache_key = (chat_id, message_id)
-                await self._message_cache.set(cache_key, None)
-                await self.save_config()
-
-                remaining = len(code.messages)
-                status = (
-                    f"✅ Сообщение удалено из рассылки\n"
-                    f"📊 Осталось сообщений: {remaining}\n"
-                    f"📍 Источник: [чат {chat_id}, сообщение {message_id}]"
-                )
-            else:
-                status = "❌ Сообщение не найдено в текущей рассылке"
-            await utils.answer(message, status)
-        except Exception as e:
-            error_msg = (
-                f"🚨 Критическая ошибка при удалении:\n"
-                f"Тип: {type(e).__name__}\n"
-                f"Описание: {str(e)}"
-            )
-            logger.error(error_msg, exc_info=True)
-            await utils.answer(message, error_msg)
-
-    async def _handle_rmchat_command(
-        self, message: Message, code: Broadcast, args: list
-    ):
-        """Обработчик команды rmchat"""
-        if len(args) > 2:
-            chat_id = await self._get_chat_id(args[2])
-            if not chat_id:
-                await utils.answer(
-                    message, "❌ Не удалось получить ID чата. Проверьте ссылку/юзернейм"
-                )
-                return
-        else:
-            chat_id = message.chat_id
+        if not chat_id:
+            return "🚫 Неверный формат чата"
         if chat_id not in code.chats:
-            await utils.answer(message, "❌ Этот чат не найден в рассылке")
-            return
+            return "ℹ️ Чат не найден"
         code.chats.remove(chat_id)
         await self.save_config()
-        await utils.answer(message, "✅ Чат удален из рассылки")
+        return f"✅ -1 чат | Осталось: {len(code.chats)}"
 
-    async def _handle_start_command(
-        self, message: Message, code: Broadcast, code_name: str
-    ):
-        """Обработчик команды start"""
+    async def _handle_start(self, message, code, code_name, args) -> str:
+        """Запуск рассылки: .br s [code]"""
         if not code.messages:
-            await utils.answer(message, "❌ Добавьте хотя бы одно сообщение в рассылку")
-            return
+            return "🚫 Нет сообщений для отправки"
         if not code.chats:
-            await utils.answer(message, "❌ Добавьте хотя бы один чат в рассылку")
-            return
-        if (
-            code_name in self.broadcast_tasks
-            and self.broadcast_tasks[code_name]
-            and not self.broadcast_tasks[code_name].done()
-        ):
-            self.broadcast_tasks[code_name].cancel()
-            try:
-                await self.broadcast_tasks[code_name]
-            except asyncio.CancelledError:
-                pass
+            return "🚫 Нет чатов для рассылки"
+        if code._active:
+            return "ℹ️ Рассылка уже активна"
         code._active = True
+        code.start_time = time.time()
         self.broadcast_tasks[code_name] = asyncio.create_task(
             self._broadcast_loop(code_name)
         )
-        await self.save_config()
-        await utils.answer(message, f"✅ Рассылка {code_name} запущена")
+        return f"🚀 {code_name} запущена | Чатов: {len(code.chats)}"
 
-    async def _handle_stop_command(
-        self, message: Message, code: Broadcast, code_name: str
-    ):
-        """Обработчик команды stop"""
+    async def _handle_stop(self, message, code, code_name, args) -> str:
+        """Остановка рассылки: .br x [code]"""
+        if not code._active:
+            return "ℹ️ Рассылка не активна"
         code._active = False
-        if (
-            code_name in self.broadcast_tasks
-            and not self.broadcast_tasks[code_name].done()
-        ):
+        if code_name in self.broadcast_tasks:
             self.broadcast_tasks[code_name].cancel()
-            try:
-                await self.broadcast_tasks[code_name]
-            except asyncio.CancelledError:
-                pass
-        await self.save_config()
-        await utils.answer(message, f"✅ Рассылка {code_name} остановлена")
+        return f"🛑 {code_name} остановлена"
 
-    async def _handle_watcher_command(self, message: Message, args: list):
-        """Обработчик команды watcher"""
-        if len(args) < 2:
-            status = "включен" if self.watcher_enabled else "выключен"
-            await utils.answer(
-                message,
-                "ℹ️ Автодобавление чатов\n"
-                f"Текущий статус: {status}\n\n"
-                "Использование: .br watcher on/off",
-            )
-            return
-        mode = args[1].lower()
-        if mode not in ["on", "off"]:
-            await utils.answer(message, "❌ Укажите on или off")
-            return
-        self.watcher_enabled = mode == "on"
-        await utils.answer(
-            message,
-            f"✅ Автодобавление чатов {'включено' if self.watcher_enabled else 'выключено'}",
-        )
-
-    async def _handle_failed_chats(
-        self, code_name: str, failed_chats: Set[int]
-    ) -> None:
-        """Обрабатывает чаты, в которые не удалось отправить сообщения."""
-        if not failed_chats:
-            return
+    async def _parse_chat_identifier(self, identifier) -> Optional[int]:
+        """Парсинг идентификатора чата"""
         try:
-            async with self._lock:
-                code = self.codes.get(code_name)
-                if not code:
-                    return
-                code.chats -= failed_chats
-                for chat_id in failed_chats:
-                    await self.valid_chats_cache.set(chat_id, None)
-                await self.save_config()
-
-                chat_groups = [
-                    ", ".join(
-                        str(chat_id) for chat_id in tuple(failed_chats)[i : i + 30]
-                    )
-                    for i in range(0, len(failed_chats), 30)
-                ]
-
-                base_message = (
-                    f"⚠️ Рассылка '{code_name}':\n"
-                    f"Не удалось отправить сообщения в {len(failed_chats)} чат(ов).\n"
-                    f"Чаты удалены из рассылки.\n\n"
-                    f"ID чатов:\n"
-                )
-
-                for group in chat_groups:
-                    await self.client.send_message(
-                        self.tg_id,
-                        base_message + group,
-                        schedule=datetime.now() + timedelta(seconds=60),
-                    )
-                    await _internal.fw_protect()
-        except Exception as e:
-            logger.error(f"Ошибка обработки неудачных чатов для {code_name}: {e}")
+            if isinstance(identifier, int) or str(identifier).lstrip("-").isdigit():
+                return int(identifier)
+            entity = await self.client.get_entity(identifier)
+            return entity.id
+        except Exception:
+            return None
 
     async def _restart_all_broadcasts(self):
         async with self._lock:
@@ -804,53 +597,49 @@ class BroadcastManager:
             logger.error(f"Неожиданная ошибка при отправке в {chat_id}: {repr(e)}")
             return False
 
+    def _toggle_watcher(self, args) -> str:
+        """Переключение авто-добавления: .br w [on/off]"""
+        if len(args) < 2:
+            return f"🔍 Автодобавление: {'ON' if self.watcher_enabled else 'OFF'}"
+        self.watcher_enabled = args[1].lower() == "on"
+        return f"✅ Автодобавление: {'ВКЛ' if self.watcher_enabled else 'ВЫКЛ'}"
+
     async def handle_command(self, message: Message):
-        """Обработчик команд для управления рассылкой"""
+        """Обработчик команд управления рассылкой"""
         args = message.text.split()[1:]
         if not args:
-            await utils.answer(message, "❌ Укажите действие и код рассылки")
-            return
+            return await utils.answer(message, "🚫 Недостаточно аргументов")
         action = args[0].lower()
         code_name = args[1] if len(args) > 1 else None
 
-        if action == "list":
-            await self._handle_list_command(message)
-            return
-        elif action == "watcher":
-            await self._handle_watcher_command(message, args)
-            return
-        elif action == "pause":
-            self.pause_event.set()
-            await utils.answer(message, "✅ Глобальная пауза активирована")
-            return
-        elif action == "resume":
-            self.pause_event.clear()
-            await self._restart_all_broadcasts()
-            await utils.answer(message, "✅ Рассылки возобновлены")
-            return
+        if action == "l":
+            return await utils.answer(message, await self._generate_stats_report())
+        if action == "w":
+            return await utils.answer(message, self._toggle_watcher(args))
         if not code_name:
-            await utils.answer(message, "❌ Укажите код рассылки")
-            return
+            return await utils.answer(message, "🚫 Укажите код рассылки")
         code = self.codes.get(code_name)
-        if action != "add" and not code:
-            await utils.answer(message, f"❌ Код рассылки {code_name} не найден")
-            return
-        command_handlers = {
-            "add": lambda: self._handle_add_command(message, code, code_name),
-            "del": lambda: self._handle_delete_command(message, code_name),
-            "rm": lambda: self._handle_remove_command(message, code),
-            "addchat": lambda: self._handle_addchat_command(message, code, args),
-            "rmchat": lambda: self._handle_rmchat_command(message, code, args),
-            "int": lambda: self._handle_interval_command(message, code, args),
-            "start": lambda: self._handle_start_command(message, code, code_name),
-            "stop": lambda: self._handle_stop_command(message, code, code_name),
+        handler_map = {
+            "a": self._handle_add,
+            "d": self._handle_delete,
+            "r": self._handle_remove,
+            "ac": self._handle_add_chat,
+            "rc": self._handle_remove_chat,
+            "i": self._handle_interval,
+            "s": self._handle_start,
+            "x": self._handle_stop,
         }
 
-        handler = command_handlers.get(action)
-        if handler:
-            await handler()
-        else:
-            await utils.answer(message, "❌ Неизвестное действие")
+        if action not in handler_map:
+            return await utils.answer(message, "🚫 Неизвестная команда")
+        if action != "a" and not code:
+            return await utils.answer(message, f"🚫 Рассылка {code_name} не найдена")
+        try:
+            result = await handler_map[action](message, code, code_name, args)
+            await utils.answer(message, result)
+        except Exception as e:
+            logger.error(f"Command error: {e}")
+            await utils.answer(message, f"🚨 Ошибка: {str(e)}")
 
     async def load_config(self):
         """Загрузка конфигурации в актуальном формате"""
