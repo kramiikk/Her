@@ -110,7 +110,7 @@ class SimpleCache:
 
 class BroadcastMod(loader.Module):
     """Модуль для массовой рассылки."""
-    
+
     def __init__(self):
         self.manager = None
 
@@ -627,40 +627,48 @@ class BroadcastManager:
 
     async def handle_command(self, message: Message):
         """Обработчик команд управления рассылкой"""
+        response = None
         args = message.text.split()[1:]
+
         if not args:
-            return await utils.answer(message, "🚫 Недостаточно аргументов")
-        action = args[0].lower()
-        code_name = args[1] if len(args) > 1 else None
+            response = "🚫 Недостаточно аргументов"
+        else:
+            action = args[0].lower()
+            code_name = args[1] if len(args) > 1 else None
 
-        if action == "l":
-            return await utils.answer(message, await self._generate_stats_report())
-        if action == "w":
-            return await utils.answer(message, self._toggle_watcher(args))
-        if not code_name:
-            return await utils.answer(message, "🚫 Укажите код рассылки")
-        code = self.codes.get(code_name)
-        handler_map = {
-            "a": self._handle_add,
-            "d": self._handle_delete,
-            "r": self._handle_remove,
-            "ac": self._handle_add_chat,
-            "rc": self._handle_remove_chat,
-            "i": self._handle_interval,
-            "s": self._handle_start,
-            "x": self._handle_stop,
-        }
+            if action == "l":
+                response = await self._generate_stats_report()
+            elif action == "w":
+                response = self._toggle_watcher(args)
+            else:
+                if not code_name:
+                    response = "🚫 Укажите код рассылки"
+                else:
+                    code = self.codes.get(code_name)
+                    handler_map = {
+                        "a": self._handle_add,
+                        "d": self._handle_delete,
+                        "r": self._handle_remove,
+                        "ac": self._handle_add_chat,
+                        "rc": self._handle_remove_chat,
+                        "i": self._handle_interval,
+                        "s": self._handle_start,
+                        "x": self._handle_stop,
+                    }
 
-        if action not in handler_map:
-            return await utils.answer(message, "🚫 Неизвестная команда")
-        if action != "a" and not code:
-            return await utils.answer(message, f"🚫 Рассылка {code_name} не найдена")
-        try:
-            result = await handler_map[action](message, code, code_name, args)
-            await utils.answer(message, result)
-        except Exception as e:
-            logger.error(f"Command error: {e}")
-            await utils.answer(message, f"🚨 Ошибка: {str(e)}")
+                    if action not in handler_map:
+                        response = "🚫 Неизвестная команда"
+                    elif action != "a" and not code:
+                        response = f"🚫 Рассылка {code_name} не найдена"
+                    else:
+                        try:
+                            handler = handler_map[action]
+                            result = await handler(message, code, code_name, args)
+                            response = result
+                        except Exception as e:
+                            logger.error(f"Command error: {e}")
+                            response = f"🚨 Ошибка: {str(e)}"
+        await utils.answer(message, response)
 
     async def load_config(self):
         """Загрузка конфигурации с базовой валидацией"""
