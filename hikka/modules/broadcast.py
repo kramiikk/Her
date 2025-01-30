@@ -5,7 +5,7 @@ import time
 from .. import _internal
 from collections import deque, OrderedDict, defaultdict
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import timedelta, datetime
 from typing import Dict, Optional, Set, Tuple
 
 from telethon.tl.types import Message
@@ -718,7 +718,7 @@ class BroadcastManager:
             config = {
                 "codes": {},
                 "meta": {
-                    "last_save": utils.get_datetime(),
+                    "last_save": datetime.now(),
                     "total_codes": len(self.codes),
                 },
             }
