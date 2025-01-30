@@ -112,7 +112,7 @@ class BroadcastMod(loader.Module):
     """Модуль для массовой рассылки."""
 
     strings = {"name": "Broadcast"}
-    
+
     @loader.command()
     async def bcmd(self, message):
         """Команда для управления рассылкой."""
@@ -247,98 +247,69 @@ class BroadcastManager:
         code = self.codes.get(code_name)
         if not code or not code.messages or not code.chats:
             return
-            
-        MAX_PARALLEL = 7
-        SAFETY_FACTOR = 0.9
-        MIN_BATCH_SIZE = 10
-        MAX_BATCH_SIZE = 30
-
         chat_ring = deque(code.chats)
         last_sent = defaultdict(float)
         message = None
-        semaphore = asyncio.Semaphore(MAX_PARALLEL)
+        chat_semaphore = asyncio.Semaphore(
+            1
+        )  # Ограничиваем до 1 параллельного отправления
 
         while self._active and code._active and not self.pause_event.is_set():
-            if not code._active:
-                break
             try:
                 if not message:
                     if not code.messages:
-                        logger.error(f"[{code_name}] No messages available")
+                        logger.error(f"[{code_name}] Нет доступных сообщений")
                         break
-                        
                     msg_tuple = random.choice(tuple(code.messages))
                     message = await self._fetch_messages(msg_tuple)
                     if not message:
                         code.messages.remove(msg_tuple)
                         await self.save_config()
                         continue
-                        
-                interval_range = code.interval[1] - code.interval[0]
-                target_batch = max(
-                    MIN_BATCH_SIZE,
-                    min(
-                        MAX_BATCH_SIZE,
-                        int(len(code.chats) * SAFETY_FACTOR / interval_range),
-                    ),
-                )
-
                 now = time.time()
-                batch = []
+                next_chat = None
+                min_interval = code.interval[0] * 60  # конвертируем минуты в секунды
+
+                # Проверяем каждый чат в очереди
+
                 for _ in range(len(chat_ring)):
                     chat_id = chat_ring.popleft()
-                    if now - last_sent[chat_id] >= code.interval[0] * 60:
-                        batch.append(chat_id)
-                        if len(batch) >= target_batch:
-                            break
-                    chat_ring.append(chat_id)
-                failed_chats = set()
-                batch_start_time = time.time()
-                sent_count = 0
+                    time_since_last = now - last_sent[chat_id]
 
-                async def send_to_chat(chat_id):
-                    nonlocal sent_count
-                    async with semaphore:
-                        try:
-                            success = await self._send_message(chat_id, message)
-                            if success:
-                                last_sent[chat_id] = now
-                                sent_count += 1
-                            else:
-                                failed_chats.add(chat_id)
-                            await asyncio.sleep(random.uniform(0.3, 0.7))
-                        except Exception as e:
-                            logger.error(f"Ошибка в {chat_id}: {str(e)}")
-                            failed_chats.add(chat_id)
-
-                if batch:
-                    await asyncio.gather(*[send_to_chat(cid) for cid in batch])
-                    chat_ring.extend(batch)
-
-                    time_diff = time.time() - batch_start_time
-                    if time_diff > 0:
-                        code.speed = sent_count / time_diff * 60
+                    if time_since_last >= min_interval:
+                        next_chat = chat_id
+                        break
                     else:
-                        code.speed = 0
-                if failed_chats:
-                    code.total_failed += len(failed_chats)
-                    code.chats -= failed_chats
-                    chat_ring = deque(
-                        cid for cid in chat_ring if cid not in failed_chats
+                        chat_ring.append(chat_id)
+                if next_chat is None:
+                    # Если нет подходящих чатов, ждем до следующего возможного отправления
+
+                    min_wait = min(
+                        min_interval - (now - last_sent[chat_id])
+                        for chat_id in chat_ring
                     )
-                    await self.save_config()
-                    await self._handle_failed_chats(code_name, failed_chats)
-                if len(batch) < target_batch:
-                    message = None
-                    sleep_time = random.uniform(
-                        code.interval[0] * 60 * 0.9, code.interval[1] * 60 * 1.1
-                    )
-                else:
-                    sleep_time = random.uniform(
-                        code.interval[0] * 60 / (len(code.chats) / target_batch),
-                        code.interval[1] * 60 / (len(code.chats) / target_batch),
-                    )
-                await asyncio.sleep(sleep_time)
+                    await asyncio.sleep(min_wait + random.uniform(0.5, 1.5))
+                    continue
+                # Отправляем сообщение
+
+                async with chat_semaphore:
+                    success = await self._send_message(next_chat, message)
+                    current_time = time.time()
+
+                    if success:
+                        last_sent[next_chat] = current_time
+                        code.last_sent = current_time
+                        code.total_sent += 1
+                        chat_ring.append(next_chat)
+                    else:
+                        code.total_failed += 1
+                        if next_chat in code.chats:
+                            code.chats.remove(next_chat)
+                            await self.save_config()
+                    # Случайная задержка в пределах заданного интервала
+
+                    delay = random.uniform(code.interval[0] * 60, code.interval[1] * 60)
+                    await asyncio.sleep(delay)
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -388,13 +359,12 @@ class BroadcastManager:
         """
         try:
             chat_id, message_id = msg_tuple
-            
+
             cache_key = (chat_id, message_id)
-            
+
             cached = await self._message_cache.get(cache_key)
             if cached:
                 return cached
-                
             try:
                 msg = await self.client.get_messages(entity=chat_id, ids=message_id)
                 if msg:
@@ -405,7 +375,9 @@ class BroadcastManager:
                     logger.error(f"Сообщение {chat_id}:{message_id} не найдено")
                     return None
             except ValueError as e:
-                logger.error(f"Чат/сообщение не существует: {chat_id} {message_id}: {e}")
+                logger.error(
+                    f"Чат/сообщение не существует: {chat_id} {message_id}: {e}"
+                )
                 return None
         except Exception as e:
             logger.error(f"Ошибка: {e}", exc_info=True)
@@ -808,27 +780,37 @@ class BroadcastManager:
                     )
 
     async def _send_message(self, chat_id: int, msg: Message) -> bool:
-        """Отправка одиночного сообщения"""
+        """Отправка одиночного сообщения с улучшенной обработкой ошибок"""
         if self.pause_event.is_set():
             return False
-        await self.GLOBAL_LIMITER.acquire()
-
         try:
-            await self.client.forward_messages(
-                entity=chat_id, messages=msg.id, from_peer=msg.chat_id
-            )
-            return True
-        except FloodWaitError as e:
-            logger.error(f"Флуд-контроль: {e}")
-            await self._handle_flood_wait(e, chat_id)
-            return False
-        except (ChatWriteForbiddenError, UserBannedInChannelError) as e:
-            logger.error(f"Доступ запрещен: {chat_id}")
-            await self._handle_permanent_error(chat_id)
-            return False
+            await self.GLOBAL_LIMITER.acquire()
+            max_retries = 3
+            retry_delay = 5
+
+            for attempt in range(max_retries):
+                try:
+                    await self.client.forward_messages(
+                        entity=chat_id, messages=msg.id, from_peer=msg.chat_id
+                    )
+                    return True
+                except FloodWaitError as e:
+                    logger.error(f"Флуд-контроль: {e}")
+                    await self._handle_flood_wait(e, chat_id)
+                    return False
+                except (ChatWriteForbiddenError, UserBannedInChannelError):
+                    logger.error(f"Доступ запрещен: {chat_id}")
+                    await self._handle_permanent_error(chat_id)
+                    return False
+                except Exception as e:
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(retry_delay * (attempt + 1))
+                        continue
+                    logger.error(f"🛑 Ошибка в {chat_id}: {repr(e)}")
+                    await self._handle_permanent_error(chat_id)
+                    return False
         except Exception as e:
-            logger.error(f"🛑 Ошибка в {chat_id}: {repr(e)}")
-            await self._handle_permanent_error(chat_id)
+            logger.error(f"Неожиданная ошибка при отправке в {chat_id}: {repr(e)}")
             return False
 
     async def handle_command(self, message: Message):
