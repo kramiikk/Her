@@ -110,12 +110,11 @@ class SimpleCache:
 
 class BroadcastMod(loader.Module):
     """Модуль для массовой рассылки."""
+    
+    def __init__(self):
+        self.manager = None
 
     strings = {"name": "Broadcast"}
-
-    def __init__(self):
-        self.manager = BroadcastManager(self._client, self.db, self.tg_id)
-        super().__init__()
 
     @loader.command()
     async def bcmd(self, message):
@@ -124,6 +123,7 @@ class BroadcastMod(loader.Module):
 
     async def client_ready(self):
         try:
+            self.manager = BroadcastManager(self.client, self.db, self.tg_id)
             await self.manager.load_config()
 
             for code_name, code in self.manager.codes.items():
@@ -147,11 +147,10 @@ class BroadcastMod(loader.Module):
 
     async def on_unload(self):
         self._active = False
-
         for task in self.manager.broadcast_tasks.values():
             if not task.done():
                 task.cancel()
-        results = await asyncio.gather(
+        await asyncio.gather(
             *self.manager.broadcast_tasks.values(), return_exceptions=True
         )
 
