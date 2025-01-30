@@ -5,7 +5,7 @@ import time
 from .. import _internal
 from collections import deque, OrderedDict, defaultdict
 from dataclasses import dataclass, field
-from datetime import timedelta, datetime
+from datetime import timedelta
 from typing import Dict, Optional, Set, Tuple
 
 from telethon.tl.types import Message
@@ -126,29 +126,27 @@ class BroadcastMod(loader.Module):
         try:
             self.manager = BroadcastManager(self.client, self.db, self.tg_id)
             await self.manager.load_config()
-            
+
             self.manager.adaptive_interval_task = asyncio.create_task(
                 self.manager.start_adaptive_interval_adjustment()
             )
             self.manager.cache_cleanup_task = asyncio.create_task(
                 self.manager._message_cache.start_auto_cleanup()
             )
-            
+
             for code_name, code in self.manager.codes.items():
                 if not (code._active and code.messages and code.chats):
                     continue
-                    
                 try:
                     self.manager.broadcast_tasks[code_name] = asyncio.create_task(
                         self.manager._broadcast_loop(code_name),
-                        name=f"auto_{code_name}"
+                        name=f"auto_{code_name}",
                     )
                     logger.info(f"Восстановлена рассылка: {code_name}")
                 except Exception as e:
                     logger.error(f"Ошибка восстановления {code_name}: {str(e)}")
                     code._active = False
                     await self.manager.save_config()
-                    
         except Exception as e:
             logger.critical(f"Ошибка инициализации: {str(e)}")
 
@@ -156,22 +154,18 @@ class BroadcastMod(loader.Module):
         """Корректное завершение работы модуля"""
         if not hasattr(self, "manager"):
             return
-            
         self.manager._active = False
-        
+
         tasks = list(self.manager.broadcast_tasks.values())
         if self.manager.adaptive_interval_task:
             tasks.append(self.manager.adaptive_interval_task)
         if self.manager.cache_cleanup_task:
             tasks.append(self.manager.cache_cleanup_task)
-            
         for task in tasks:
             if not task.done():
                 task.cancel()
-                
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
-        
         await self.manager.save_config()
 
     async def watcher(self, message: Message):
@@ -256,7 +250,6 @@ class BroadcastManager:
         code = self.codes.get(code_name)
         if not code or not code.messages or not code.chats:
             return
-            
         chat_ring = deque(code.chats)
         last_sent = defaultdict(float)
 
@@ -268,12 +261,12 @@ class BroadcastManager:
                     code.messages.remove(msg_tuple)
                     await self.save_config()
                     continue
-
-                chat_id = await self._get_next_chat(chat_ring, last_sent, code.interval[0])
+                chat_id = await self._get_next_chat(
+                    chat_ring, last_sent, code.interval[0]
+                )
                 if not chat_id:
                     await asyncio.sleep(60)
                     continue
-
                 if await self._send_message(chat_id, message):
                     last_sent[chat_id] = time.time()
                     code.last_sent = time.time()
@@ -283,10 +276,8 @@ class BroadcastManager:
                     code.total_failed += 1
                     code.chats.remove(chat_id)
                     await self.save_config()
-
                 delay = random.uniform(code.interval[0] * 60, code.interval[1] * 60)
                 await asyncio.sleep(delay)
-
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -377,7 +368,9 @@ class BroadcastManager:
             )
         return "".join(report)
 
-    async def _get_next_chat(self, chat_ring: deque, last_sent: dict, min_interval: int) -> Optional[int]:
+    async def _get_next_chat(
+        self, chat_ring: deque, last_sent: dict, min_interval: int
+    ) -> Optional[int]:
         """Получение следующего чата для рассылки"""
         now = time.time()
         min_interval *= 60
@@ -581,13 +574,10 @@ class BroadcastManager:
         """Отправка сообщения с базовой обработкой ошибок"""
         if self.pause_event.is_set():
             return False
-
         try:
             await self.GLOBAL_LIMITER.acquire()
             await self.client.forward_messages(
-                entity=chat_id, 
-                messages=msg.id, 
-                from_peer=msg.chat_id
+                entity=chat_id, messages=msg.id, from_peer=msg.chat_id
             )
             return True
         except FloodWaitError as e:
@@ -712,8 +702,10 @@ class BroadcastManager:
                 "codes": {
                     name: {
                         "chats": list(code.chats),
-                        "messages": [{"chat_id": cid, "message_id": mid} 
-                                for cid, mid in code.messages],
+                        "messages": [
+                            {"chat_id": cid, "message_id": mid}
+                            for cid, mid in code.messages
+                        ],
                         "interval": list(code.interval),
                         "original_interval": list(code.original_interval),
                         "status": {
@@ -722,7 +714,7 @@ class BroadcastManager:
                             "last_sent": code.last_sent,
                             "total_sent": code.total_sent,
                             "total_failed": code.total_failed,
-                        }
+                        },
                     }
                     for name, code in self.codes.items()
                 }
