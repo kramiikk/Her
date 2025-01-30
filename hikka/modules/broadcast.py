@@ -247,6 +247,7 @@ class BroadcastManager:
         code = self.codes.get(code_name)
         if not code or not code.messages or not code.chats:
             return
+            
         MAX_PARALLEL = 7
         SAFETY_FACTOR = 0.9
         MIN_BATCH_SIZE = 10
@@ -262,12 +263,18 @@ class BroadcastManager:
                 break
             try:
                 if not message:
-                    msg_key = random.choice(list(code.messages))
-                    message = await self._fetch_messages(msg_key)
+                    if not code.messages:  # Check if messages set is empty
+                        logger.error(f"[{code_name}] No messages available")
+                        break
+                        
+                    msg_tuple = random.choice(tuple(code.messages))  # Convert to tuple before choosing
+                    message = await self._fetch_messages(msg_tuple)
                     if not message:
-                        code.messages.remove(msg_key)
+                        code.messages.remove(msg_tuple)
                         await self.save_config()
                         continue
+                        
+                # Rest of the broadcast loop implementation remains the same
                 interval_range = code.interval[1] - code.interval[0]
                 target_batch = max(
                     MIN_BATCH_SIZE,
@@ -375,19 +382,20 @@ class BroadcastManager:
                     )
                 await self.save_config()
 
-    async def _fetch_messages(self, msg_data: dict) -> Optional[Message]:
+    async def _fetch_messages(self, msg_tuple: Tuple[int, int]) -> Optional[Message]:
         """
         Fetch a message from cache or Telegram
+
         """
         try:
-            chat_id = msg_data["chat_id"]
-            message_id = msg_data["message_id"]
-
+            chat_id, message_id = msg_tuple  # Correctly unpack the tuple
+            
             cache_key = (chat_id, message_id)
-
+            
             cached = await self._message_cache.get(cache_key)
             if cached:
                 return cached
+                
             try:
                 msg = await self.client.get_messages(entity=chat_id, ids=message_id)
                 if msg:
@@ -398,9 +406,7 @@ class BroadcastManager:
                     logger.error(f"Сообщение {chat_id}:{message_id} не найдено")
                     return None
             except ValueError as e:
-                logger.error(
-                    f"Чат/сообщение не существует: {chat_id} {message_id}: {e}"
-                )
+                logger.error(f"Чат/сообщение не существует: {chat_id} {message_id}: {e}")
                 return None
         except Exception as e:
             logger.error(f"Ошибка: {e}", exc_info=True)
