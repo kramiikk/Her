@@ -411,7 +411,7 @@ class BroadcastManager:
 
             await self.client.send_message(
                 self.tg_id,
-                "✅ Глобальная пауза снята. Рассылки возобновлены",
+                "🐈 Глобальная пауза снята. Рассылки возобновлены",
             )
 
             for code in self.codes.values():
@@ -498,7 +498,7 @@ class BroadcastManager:
         code.messages.remove(key)
         await self._message_cache.set(key, None)
         await self.save_config()
-        return f"✅ Удалено | Осталось: {len(code.messages)}"
+        return f"🐀 Удалено | Осталось: {len(code.messages)}"
 
     async def _handle_remove_chat(self, message, code, code_name, args) -> str:
         """Удаление чата: .br rc [code] [@chat]"""
