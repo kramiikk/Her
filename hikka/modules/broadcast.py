@@ -3,6 +3,7 @@ import logging
 import random
 import time
 from .. import _internal
+from functools import lru_cache
 from collections import deque, OrderedDict, defaultdict
 from dataclasses import dataclass, field
 from datetime import timedelta
@@ -111,10 +112,10 @@ class SimpleCache:
 class BroadcastMod(loader.Module):
     """Модуль для массовой рассылки."""
 
+    strings = {"name": "Broadcast"}
+
     def __init__(self):
         self.manager = None
-
-    strings = {"name": "Broadcast"}
 
     @loader.command()
     async def bcmd(self, message):
@@ -123,49 +124,34 @@ class BroadcastMod(loader.Module):
 
     async def client_ready(self):
         """Инициализация модуля при загрузке"""
-        try:
-            self.manager = BroadcastManager(self.client, self.db, self.tg_id)
-            await self.manager.load_config()
+        self.manager = BroadcastManager(self.client, self.db, self.tg_id)
+        await self.manager.load_config()
 
-            self.manager.adaptive_interval_task = asyncio.create_task(
-                self.manager.start_adaptive_interval_adjustment()
-            )
-            self.manager.cache_cleanup_task = asyncio.create_task(
-                self.manager._message_cache.start_auto_cleanup()
-            )
+        self.manager.adaptive_interval_task = asyncio.create_task(
+            self.manager.start_adaptive_interval_adjustment()
+        )
+        self.manager.cache_cleanup_task = asyncio.create_task(
+            self.manager._message_cache.start_auto_cleanup()
+        )
 
-            for code_name, code in self.manager.codes.items():
-                if not (code._active and code.messages and code.chats):
-                    continue
-                try:
-                    self.manager.broadcast_tasks[code_name] = asyncio.create_task(
-                        self.manager._broadcast_loop(code_name),
-                        name=f"auto_{code_name}",
-                    )
-                    logger.info(f"Восстановлена рассылка: {code_name}")
-                except Exception as e:
-                    logger.error(f"Ошибка восстановления {code_name}: {str(e)}")
-                    code._active = False
-                    await self.manager.save_config()
-        except Exception as e:
-            logger.critical(f"Ошибка инициализации: {str(e)}")
+        for code_name, code in self.manager.codes.items():
+            if code._active and code.messages and code.chats:
+                self.manager.broadcast_tasks[code_name] = asyncio.create_task(
+                    self.manager._broadcast_loop(code_name)
+                )
 
     async def on_unload(self):
-        """Корректное завершение работы модуля"""
+        """Завершение работы модуля"""
         if not hasattr(self, "manager"):
             return
         self.manager._active = False
 
-        tasks = list(self.manager.broadcast_tasks.values())
+        for task in self.manager.broadcast_tasks.values():
+            task.cancel()
         if self.manager.adaptive_interval_task:
-            tasks.append(self.manager.adaptive_interval_task)
+            self.manager.adaptive_interval_task.cancel()
         if self.manager.cache_cleanup_task:
-            tasks.append(self.manager.cache_cleanup_task)
-        for task in tasks:
-            if not task.done():
-                task.cancel()
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
+            self.manager.cache_cleanup_task.cancel()
         await self.manager.save_config()
 
     async def watcher(self, message: Message):
@@ -311,11 +297,10 @@ class BroadcastManager:
                     )
             await self.save_config()
 
-    async def _fetch_messages(self, msg_tuple: Tuple[int, int]) -> Optional[Message]:
+    @lru_cache(maxsize=50)
+    async def _fetch_message(self, chat_id: int, message_id: int) -> Optional[Message]:
         """Fetch a message from cache or Telegram"""
         try:
-            chat_id, message_id = msg_tuple
-
             cache_key = (chat_id, message_id)
 
             cached = await self._message_cache.get(cache_key)
@@ -382,9 +367,7 @@ class BroadcastManager:
                 if self.flood_wait_times
                 else 0
             )
-            wait_time = max(e.seconds + 15, avg_wait * 1.5)
-
-            wait_time = min(wait_time, 3600)
+            wait_time = min(max(e.seconds + 15, avg_wait * 1.5), 3600)
 
             self.last_flood_time = time.time()
             self.flood_wait_times.append(wait_time)
@@ -526,6 +509,9 @@ class BroadcastManager:
         self.broadcast_tasks[code_name] = asyncio.create_task(
             self._broadcast_loop(code_name)
         )
+
+        await self.save_config()
+
         return f"🚀 {code_name} запущена | Чатов: {len(code.chats)}"
 
     async def _handle_stop(self, message, code, code_name, args) -> str:
@@ -535,6 +521,8 @@ class BroadcastManager:
         code._active = False
         if code_name in self.broadcast_tasks:
             self.broadcast_tasks[code_name].cancel()
+        await self.save_config()
+
         return f"🛑 {code_name} остановлена"
 
     async def _parse_chat_identifier(self, identifier) -> Optional[int]:
