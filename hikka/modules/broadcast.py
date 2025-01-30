@@ -119,26 +119,27 @@ class BroadcastMod(loader.Module):
         await self.manager.handle_command(message)
 
     async def client_ready(self):
-        """Initialization sequence"""
-        self.manager = BroadcastManager(self._client, self.db, self._client.tg_id)
-        self.manager._message_cache = SimpleCache(ttl=7200, max_size=50)
         try:
-            await asyncio.wait_for(self.manager.load_config(), timeout=30)
+            await self.manager.load_config()
 
             for code_name, code in self.manager.codes.items():
                 if code._active:
-                    self.manager.broadcast_tasks[code_name] = asyncio.create_task(
-                        self.manager._broadcast_loop(code_name)
-                    )
-                    logger.info(f"Автозапуск рассылки {code_name}")
-            await self.manager.start_cache_cleanup()
-            self.manager.adaptive_interval_task = asyncio.create_task(
-                self.manager.start_adaptive_interval_adjustment()
-            )
-            self._initialized = True
+                    try:
+                        if code_name in self.manager.broadcast_tasks:
+                            self.manager.broadcast_tasks[code_name].cancel()
+                        self.manager.broadcast_tasks[code_name] = asyncio.create_task(
+                            self.manager._broadcast_loop(code_name),
+                            name=f"auto_{code_name}",
+                        )
+                        logger.info(
+                            f"Автозапуск: {code_name} (чатів: {len(code.chats)})"
+                        )
+                    except Exception as e:
+                        logger.error(f"Ошибка автозапуска {code_name}: {str(e)}")
+                        code._active = False
+                        await self.manager.save_config()
         except Exception as e:
-            logger.error(f"Initialization failed: {e}")
-            self._initialized = False
+            logger.critical(f"Init error: {str(e)}", exc_info=True)
 
     async def on_unload(self):
         self._active = False
@@ -560,12 +561,14 @@ class BroadcastManager:
     async def _restart_all_broadcasts(self):
         async with self._lock:
             for code_name, code in self.codes.items():
-                if code._active and code_name not in self.broadcast_tasks:
-                    if self.broadcast_tasks.get(code_name):
-                        self.broadcast_tasks[code_name].cancel()
-                    self.broadcast_tasks[code_name] = asyncio.create_task(
-                        self._broadcast_loop(code_name)
-                    )
+                if code._active and not self.broadcast_tasks.get(code_name):
+                    try:
+                        self.broadcast_tasks[code_name] = asyncio.create_task(
+                            self._broadcast_loop(code_name)
+                        )
+                        logger.info(f"Фоновый перезапуск: {code_name}")
+                    except Exception as e:
+                        logger.error(f"Ошибка перезапуска {code_name}: {str(e)}")
 
     async def _send_message(self, chat_id: int, msg: Message) -> bool:
         """Отправка одиночного сообщения с улучшенной обработкой ошибок"""
@@ -608,6 +611,17 @@ class BroadcastManager:
         self.watcher_enabled = args[1].lower() == "on"
         return f"✅ Автодобавление: {'ВКЛ' if self.watcher_enabled else 'ВЫКЛ'}"
 
+    async def _validate_loaded_data(self):
+        """Базовая проверка загруженных данных"""
+        for code_name, code in self.codes.items():
+            if code._active and (not code.messages or not code.chats):
+                logger.warning(f"Отключение {code_name}: нет сообщений/чатов")
+                code._active = False
+            if not (0 < code.interval[0] < code.interval[1] <= 1440):
+                logger.warning(f"Сброс интервала для {code_name}")
+                code.interval = (10, 13)
+                code.original_interval = (10, 13)
+
     async def handle_command(self, message: Message):
         """Обработчик команд управления рассылкой"""
         args = message.text.split()[1:]
@@ -646,83 +660,85 @@ class BroadcastManager:
             await utils.answer(message, f"🚨 Ошибка: {str(e)}")
 
     async def load_config(self):
-        """Загрузка конфигурации в актуальном формате"""
+        """Загрузка конфигурации с базовой валидацией"""
         try:
-            config = self.db.get("broadcast", "config") or {}
+            raw_config = self.db.get("broadcast", "config") or {}
+            logger.debug("Начало загрузки конфигурации")
 
-            for code_name, code_data in config.get("codes", {}).items():
-                messages = {
-                    (int(msg["chat_id"]), int(msg["message_id"]))
-                    for msg in code_data.get("messages", [])
-                    if isinstance(msg, dict)
-                    and "chat_id" in msg
-                    and "message_id" in msg
-                }
-
-                broadcast = Broadcast(
-                    chats=set(map(int, code_data.get("chats", []))),
-                    messages=messages,
-                    interval=tuple(map(int, code_data.get("interval", (10, 13)))),
-                    original_interval=tuple(
-                        map(
-                            int,
-                            code_data.get(
-                                "original_interval", code_data.get("interval", (10, 13))
-                            ),
-                        )
-                    ),
-                    start_time=code_data.get("start_time", time.time()),
-                    last_sent=code_data.get("last_sent", 0),
-                    total_sent=code_data.get("total_sent", 0),
-                    total_failed=code_data.get("total_failed", 0),
-                )
-                broadcast._active = code_data.get("active", False)
-
-                if "last_error" in code_data and isinstance(
-                    code_data["last_error"], list
-                ):
-                    broadcast.last_error = (
-                        str(code_data["last_error"][0]),
-                        float(code_data["last_error"][1]),
+            for code_name, code_data in raw_config.get("codes", {}).items():
+                try:
+                    code = Broadcast(
+                        chats=set(map(int, code_data.get("chats", []))),
+                        messages={
+                            (int(msg["chat_id"]), int(msg["message_id"]))
+                            for msg in code_data.get("messages", [])
+                        },
+                        interval=tuple(map(int, code_data.get("interval", (10, 13)))),
+                        original_interval=tuple(
+                            map(int, code_data.get("original_interval", (10, 13)))
+                        ),
                     )
-                self.codes[code_name] = broadcast
-                logger.debug(f"Loaded: {code_name} ({len(messages)} messages)")
+
+                    status = code_data.get("status", {})
+                    code._active = status.get("active", False)
+                    code.start_time = float(status.get("start_time", time.time()))
+                    code.last_sent = float(status.get("last_sent", 0))
+                    code.total_sent = int(status.get("total_sent", 0))
+                    code.total_failed = int(status.get("total_failed", 0))
+
+                    if code_data.get("last_error"):
+                        code.last_error = (
+                            str(code_data["last_error"]["message"]),
+                            float(code_data["last_error"]["timestamp"]),
+                        )
+                    self.codes[code_name] = code
+                except Exception as e:
+                    logger.error(f"Ошибка загрузки {code_name}: {str(e)}")
+                    continue
+            await self._validate_loaded_data()
+            logger.info(f"Успешно загружено рассылок: {len(self.codes)}")
         except Exception as e:
-            logger.critical(f"Config load failed: {str(e)}")
+            logger.error(f"Критическая ошибка загрузки: {str(e)}", exc_info=True)
             self.codes = {}
 
     async def save_config(self):
-        """Сохранение конфигурации в актуальном формате"""
+        """Упрощённое сохранение конфигурации без миграций"""
         try:
-            config = {"codes": {}, "version": 1}
+            config = {
+                "codes": {},
+                "meta": {
+                    "last_save": utils.get_datetime(),
+                    "total_codes": len(self.codes),
+                },
+            }
 
-            for name, code in self.codes.items():
-                messages = [
-                    {"chat_id": cid, "message_id": mid} for cid, mid in code.messages
-                ]
-
+            for code_name, code in self.codes.items():
                 code_data = {
                     "chats": list(code.chats),
-                    "messages": messages,
+                    "messages": [
+                        {"chat_id": cid, "message_id": mid}
+                        for cid, mid in code.messages
+                    ],
                     "interval": list(code.interval),
                     "original_interval": list(code.original_interval),
-                    "active": code._active,
-                    "start_time": code.start_time,
-                    "last_sent": code.last_sent,
-                    "total_sent": code.total_sent,
-                    "total_failed": code.total_failed,
+                    "status": {
+                        "active": code._active,
+                        "start_time": code.start_time,
+                        "last_sent": code.last_sent,
+                        "total_sent": code.total_sent,
+                        "total_failed": code.total_failed,
+                    },
+                    "last_error": (
+                        {"message": code.last_error[0], "timestamp": code.last_error[1]}
+                        if code.last_error
+                        else None
+                    ),
                 }
-
-                if code.last_error:
-                    code_data["last_error"] = [
-                        code.last_error[0],
-                        float(code.last_error[1]),
-                    ]
-                config["codes"][name] = code_data
+                config["codes"][code_name] = code_data
             self.db.set("broadcast", "config", config)
-            logger.debug("Конфигурация успешно сохранена")
+            logger.info(f"Конфигурация сохранена. Рассылок: {len(self.codes)}")
         except Exception as e:
-            logger.critical(f"Ошибка сохранения конфигурации: {str(e)}", exc_info=True)
+            logger.error(f"Ошибка сохранения: {str(e)}", exc_info=True)
 
     async def start_adaptive_interval_adjustment(self):
         """Фоновая задача для адаптации интервалов"""
