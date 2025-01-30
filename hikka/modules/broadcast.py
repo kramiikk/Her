@@ -718,7 +718,7 @@ class BroadcastManager:
             config = {
                 "codes": {},
                 "meta": {
-                    "last_save": datetime.now(),
+                    "last_save": datetime.now().isoformat(),
                     "total_codes": len(self.codes),
                 },
             }

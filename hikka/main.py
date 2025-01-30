@@ -121,47 +121,36 @@ def get_app_name() -> str:
 
 
 def generate_random_system_version():
-    """
-    Generates a random system version string similar to those used by Windows or Linux.
-
-    This function generates a random version string that follows the format used by operating systems
-    like Windows or Linux. The version string includes the major version, minor version, patch number,
-    and build number, each of which is randomly generated within specified ranges. Additionally, it
-    includes a random operating system name and version.
-
-    :return: A randomly generated system version string.
-    :example: "Windows 10.0.19042.1234" or "Ubuntu 20.04.19042.1234"
-    """
-    os_choices = [
-        ("Windows", "11"),
-        ("Windows", "10"),
-        ("Ubuntu", "24.04 LTS"),
-        ("Ubuntu", "22.04 LTS"),
-        ("Debian", "12"),
-        ("Fedora", "40"),
-        ("Arch Linux", "latest"),
-        ("CentOS", "Stream 9"),
-        ("AlmaLinux", "9"),
-        ("Rocky Linux", "9"),
-        ("NixOS", "latest"),
-        ("Pop!_OS", "22.04 LTS"),
-        ("Linux Mint", "21.3"),
-        ("Elementary OS", "7"),
-        ("Manjaro", "latest"),
-        ("openSUSE", "Leap 15.6"),
-        ("EndeavourOS", "latest"),
-        ("Garuda Linux", "latest"),
-        ("ChromeOS", "latest"),
-        ("macOS", "Sonoma"),
-        ("Android", "14"),
-        ("Android", "15"),
-        ("iOS", "17"),
-        ("iPadOS", "17"),
+    systems = [
+        (
+            "Android", 
+            lambda: f"Android {random.randint(10, 14)} (SDK {random.randint(30, 34)})",
+            "arm64-v8a"
+        ),
+        (
+            "iOS", 
+            lambda: f"iOS {random.randint(15, 17)}.{random.randint(0, 6)}.{random.randint(1, 3)}",
+            "Apple ARM"
+        ),
+        (
+            "Windows", 
+            lambda: f"Windows 10 {'Pro' if random.random() > 0.5 else 'Home'}",
+            "x64"
+        ),
+        (
+            "macOS", 
+            lambda: f"macOS 13.{random.randint(0, 4)} (Ventura)",
+            "x86_64"
+        ),
+        (
+            "Linux", 
+            lambda: f"Ubuntu 2{random.randint(2, 4)}.04 LTS",
+            "x64"
+        ),
     ]
-    os_name, os_version = random.choice(os_choices)
-
-    version = f"{os_name} {os_version}"
-    return version
+    
+    system_name, version_gen, arch = random.choice(systems)
+    return f"{version_gen()} [{arch}]"
 
 
 try:
