@@ -249,8 +249,10 @@ class CoreMod(loader.Module):
 
     strings = {
         "name": "Settings",
-        "no_code": "<emoji document_id=5854929766146118183>❌</emoji> <b>Должно быть </b><code>{}exec [python код]</code>",
-        "executing": "<b><emoji document_id=5332600281970517875>🔄</emoji> Выполняю код...</b>",
+        "no_code": "<emoji document_id=5854929766146118183>❌</emoji> <b>Должно быть </b><code>{}cmd [код или команда]</code>",
+        "executing": "<b><emoji document_id=5332600281970517875>🔄</emoji> Выполняю...</b>",
+        "python_executing": "<b><emoji document_id=5332600281970517875>🔄</emoji> Выполняю Python код...</b>",
+        "terminal_executing": "<b><emoji document_id=5332600281970517875>🔄</emoji> Выполняю команду терминала...</b>",
     }
 
     def __init__(self):
@@ -263,7 +265,7 @@ class CoreMod(loader.Module):
             ),
         )
         self.activecmds = {}
-    
+
     def format_duration(self, duration):
         if duration >= 1:
             return f"{round(duration, 2)} сек"
@@ -275,7 +277,7 @@ class CoreMod(loader.Module):
     async def client_ready(self, client, db):
         self.db = db
         self._client = client
-    
+
     async def cexecute(self, code, message, reply):
         client = self.client
         me = await client.get_me()
@@ -306,13 +308,15 @@ class CoreMod(loader.Module):
                 globals(),
                 **functions,
             )
-        except:
-            return traceback.format_exc().strip(), None, True
-        return result.getvalue().strip(), res, False
+        except SyntaxError:
+            return None, None, True, "syntax"  # Возвращаем тип ошибки
+        except Exception:
+            return traceback.format_exc().strip(), None, True, "runtime" # Возвращаем тип ошибки
+        return result.getvalue().strip(), res, False, None # Нет ошибок
 
     @loader.command()
-    async def ecmd(self, message):
-        """Выполнить python код"""
+    async def ccmd(self, message):
+        """Выполнить Python код или команду терминала (автоопределение)"""
 
         code = utils.get_args_raw(message)
         if not code:
@@ -324,9 +328,41 @@ class CoreMod(loader.Module):
         reply = await message.get_reply_message()
 
         start_time = time.perf_counter()
-        result, res, cerr = await self.cexecute(code, message, reply)
+        result, res, cerr, err_type = await self.cexecute(code, message, reply)
         stop_time = time.perf_counter()
         duration = stop_time - start_time
+
+        if err_type == "syntax":
+            await utils.answer(message, self.strings["terminal_executing"])
+            await self.run_command(message, code) # Выполняем как команду терминала
+            return # Завершаем выполнение, чтобы не выводить результаты Python-попытки
+        elif cerr and err_type == "runtime": # Обработка ошибок выполнения Python кода
+            result = str(result)
+            result = f"""<emoji document_id=5440381017384822513>🚫</emoji> Ошибка выполнения Python кода:
+<pre><code class="language-python">{result}</code></pre>
+"""
+            return await utils.answer(
+                message,
+                f"""<b>
+<emoji document_id=5431376038628171216>💻</emoji> Код:
+<pre><code class="language-python">{code}</code></pre>
+{result}
+<emoji document_id=5451732530048802485>⏳</emoji> Выполнен за {self.format_duration(duration)}</b>""",
+            )
+        elif cerr: # Другие ошибки, которые могут быть возвращены из cexecute, хотя в текущей реализации их быть не должно, но для надежности
+            result = str(result)
+            result = f"""<emoji document_id=5440381017384822513>🚫</emoji> Ошибка:
+<pre><code class="language-python">{result}</code></pre>
+"""
+            return await utils.answer(
+                message,
+                f"""<b>
+<emoji document_id=5431376038628171216>💻</emoji> Код:
+<pre><code class="language-python">{code}</code></pre>
+{result}
+<emoji document_id=5451732530048802485>⏳</emoji> Выполнен за {self.format_duration(duration)}</b>""",
+            )
+
 
         result = str(result)
         res = str(res)
@@ -347,10 +383,6 @@ class CoreMod(loader.Module):
 {result}
 <emoji document_id=5451732530048802485>⏳</emoji> Выполнен за {self.format_duration(duration)}</b>""",
         )
-
-    @loader.command()
-    async def tcmd(self, message):
-        await self.run_command(message, utils.get_args_raw(message))
 
     async def run_command(
         self,
