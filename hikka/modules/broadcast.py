@@ -665,12 +665,12 @@ class BroadcastManager:
                             ),
                         )
                     ),
-                    _active=code_data.get("active", False),
                     start_time=code_data.get("start_time", time.time()),
                     last_sent=code_data.get("last_sent", 0),
                     total_sent=code_data.get("total_sent", 0),
                     total_failed=code_data.get("total_failed", 0),
                 )
+                broadcast._active = code_data.get("active", False)
 
                 if "last_error" in code_data and isinstance(
                     code_data["last_error"], list
