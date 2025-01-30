@@ -2,7 +2,6 @@ import asyncio
 import logging
 import random
 import time
-from .. import _internal
 from functools import lru_cache
 from collections import deque, OrderedDict, defaultdict
 from dataclasses import dataclass, field
@@ -16,7 +15,7 @@ from telethon.errors import (
     FloodWaitError,
 )
 
-from .. import loader, utils, _internal
+from .. import loader, utils
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -234,7 +233,7 @@ class BroadcastManager:
         while self._active and code._active and not self.pause_event.is_set():
             try:
                 msg_tuple = random.choice(tuple(code.messages))
-                message = await self._fetch_messages(msg_tuple)
+                message = await self._fetch_message(msg_tuple)
                 if not message:
                     code.messages.remove(msg_tuple)
                     await self.save_config()
@@ -386,7 +385,6 @@ class BroadcastManager:
             for task in tasks:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
-            await _internal.fw_protect()
             await asyncio.sleep(wait_time)
 
             self.pause_event.clear()

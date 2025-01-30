@@ -309,10 +309,10 @@ class CoreMod(loader.Module):
                 **functions,
             )
         except SyntaxError:
-            return None, None, True, "syntax"  # Возвращаем тип ошибки
+            return None, None, True, "syntax"
         except Exception:
-            return traceback.format_exc().strip(), None, True, "runtime" # Возвращаем тип ошибки
-        return result.getvalue().strip(), res, False, None # Нет ошибок
+            return traceback.format_exc().strip(), None, True, "runtime"
+        return result.getvalue().strip(), res, False, None
 
     @loader.command()
     async def ccmd(self, message):
@@ -334,9 +334,9 @@ class CoreMod(loader.Module):
 
         if err_type == "syntax":
             await utils.answer(message, self.strings["terminal_executing"])
-            await self.run_command(message, code) # Выполняем как команду терминала
-            return # Завершаем выполнение, чтобы не выводить результаты Python-попытки
-        elif cerr and err_type == "runtime": # Обработка ошибок выполнения Python кода
+            await self.run_command(message, code)
+            return
+        elif cerr and err_type == "runtime":
             result = str(result)
             result = f"""<emoji document_id=5440381017384822513>🚫</emoji> Ошибка выполнения Python кода:
 <pre><code class="language-python">{result}</code></pre>
@@ -349,7 +349,7 @@ class CoreMod(loader.Module):
 {result}
 <emoji document_id=5451732530048802485>⏳</emoji> Выполнен за {self.format_duration(duration)}</b>""",
             )
-        elif cerr: # Другие ошибки, которые могут быть возвращены из cexecute, хотя в текущей реализации их быть не должно, но для надежности
+        elif cerr:
             result = str(result)
             result = f"""<emoji document_id=5440381017384822513>🚫</emoji> Ошибка:
 <pre><code class="language-python">{result}</code></pre>
