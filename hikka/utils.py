@@ -435,7 +435,7 @@ async def answer(
             )
 
             return result
-
+        await fw_protect()
         result = await (message.edit if edit else message.respond)(
             text,
             parse_mode=lambda t: (t, entities),

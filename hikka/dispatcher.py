@@ -16,7 +16,7 @@ from hikkatl import events
 from hikkatl.errors import FloodWaitError, RPCError, ChatAdminRequiredError
 from hikkatl.tl.types import Message
 
-from . import _internal, main, utils
+from . import main, utils
 from .database import Database
 from .loader import Modules
 from .tl_cache import CustomTelegramClient
@@ -488,21 +488,18 @@ class GrepHandler:
 
         async def modified_edit(text, *args, **kwargs):
             kwargs["parse_mode"] = "HTML"
-            await _internal.fw_protect()
             return await self.dispatcher.safe_api_call(
                 self.message.edit(self.message, process_text(text), *args, **kwargs)
             )
 
         async def modified_reply(text, *args, **kwargs):
             kwargs["parse_mode"] = "HTML"
-            await _internal.fw_protect()
             return await self.dispatcher.safe_api_call(
                 self.message.reply(process_text(text), *args, **kwargs)
             )
 
         async def modified_respond(text, *args, **kwargs):
             kwargs["parse_mode"] = "HTML"
-            await _internal.fw_protect()
             kwargs.setdefault("reply_to", utils.get_topic(self.message))
             return await self.dispatcher.safe_api_call(
                 self.message.respond(process_text(text), *args, **kwargs)
