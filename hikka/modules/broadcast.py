@@ -187,7 +187,6 @@ class Broadcast:
     last_sent: float = 0
     total_sent: int = 0
     total_failed: int = 0
-    initial_chats_count: int = 0
     speed: float = 0
     last_error: Optional[Tuple[str, float]] = None
 
@@ -366,12 +365,11 @@ class BroadcastManager:
         for code_name, code in self.codes.items():
             status = "✅" if code._active else "⏸"
             runtime = str(timedelta(seconds=int(time.time() - code.start_time)))[:-3]
-            progress = f"{len(code.chats)}/{code.initial_chats_count or '?'}"
 
             report.append(
-                f"\n▸ **{code_name}** {status}\n"
+                f"\n▸ **{code_name}** {status} {runtime}\n"
                 f"├ Сообщений: {len(code.messages)}\n"
-                f"├ Чатов: {progress}\n"
+                f"├ Чатов: {len(code.chats)}\n"
                 f"├ Интервал: {code.interval[0]}-{code.interval[1]} мин\n"
                 f"└ Отправлено: ✅{code.total_sent} ❌{code.total_failed}"
             )
@@ -672,7 +670,6 @@ class BroadcastManager:
                     last_sent=code_data.get("last_sent", 0),
                     total_sent=code_data.get("total_sent", 0),
                     total_failed=code_data.get("total_failed", 0),
-                    initial_chats_count=len(code_data.get("chats", [])),
                 )
 
                 if "last_error" in code_data and isinstance(
@@ -708,7 +705,6 @@ class BroadcastManager:
                     "last_sent": code.last_sent,
                     "total_sent": code.total_sent,
                     "total_failed": code.total_failed,
-                    "initial_chats_count": code.initial_chats_count,
                 }
 
                 if code.last_error:
