@@ -278,11 +278,10 @@ class CoreMod(loader.Module):
         await self._execute_command(message, command)
 
     async def _execute_command(self, message, command):
+        self.start_time = time.time()  # Добавляем инициализацию времени
         await utils.answer(message, self.strings["executing"])
         try:
-            result, output, error, err_type = await self._run_python(
-                code=command, message=message
-            )
+            result, output, error, err_type = await self._run_python(code=command, message=message)
             if err_type == "syntax":
                 await self._run_shell(message, command)
             else:
@@ -334,7 +333,7 @@ class CoreMod(loader.Module):
         }
 
     async def _format_result(self, message, code, result, output, error):
-        duration = time.perf_counter() - self.start_time
+        duration = time.time() - self.start_time
 
         base_text = (
             f"<emoji document_id=5431376038628171216>💻</emoji> <b>Код:</b>\n"
