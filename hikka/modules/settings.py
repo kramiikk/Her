@@ -482,6 +482,7 @@ class CoreMod(loader.Module):
         return {
             "message": message,
             "client": self.client,
+            "self": self,
             "reply": await message.get_reply_message(),
             **self.get_attrs(hikkatl.tl.functions, prefix="f_"),
         }
