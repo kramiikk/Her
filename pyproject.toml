@@ -1,26 +1,25 @@
 [tool.black]
-extend-exclude = "loaded_modules"
 preview = true
 
 [tool.poetry]
 name = "hikka"
-version = "1.6.9"
-description = "Telegram userbot focused on developer convenience"
+version = "1.7.9"
+description = "Telegram userbot"
 authors = ["kramiikk, t.me/kramiikk"]
 license = "GNU AGPLv3"
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.8"
-gitpython = "3.1.27"
-meval = "2.5"
-requests = "2.27.1"
-grapheme = "0.6.0"
-emoji = "2.1.0"
-psutil = "5.9.4"
-tgcrypto = "1.2.5"
-hikka-tl-new = "2.0.8"
-rsa = "4.9"
+python
+gitpython
+meval
+requests
+grapheme
+emoji
+psutil
+tgcrypto
+hikka-tl-new
+rsa
 
 
 [build-system]
