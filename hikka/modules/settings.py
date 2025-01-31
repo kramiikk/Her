@@ -256,7 +256,7 @@ class RawMessageEditor(MessageEditor):
             content = self._truncate_output(self.stdout + self.stderr, max_len_content)
             text = f"{progress}<code>{content}</code>"
         else:
-            full_output = f"Exit code: {self.rc}\n{self.final_output}"
+            full_output = self.final_output
             max_len_final = 4096 - 11
             pre_content = self._truncate_output(full_output, max_len_final)
             text = f"<pre>{pre_content}</pre>"
