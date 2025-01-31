@@ -99,7 +99,7 @@ class MessageEditor:
         return f"{frame} <b>Running for {elapsed:.1f}s</b>\n"
 
     async def redraw(self, force=False):
-        if not force and (time.time() - self.last_update < 0.1):
+        if not force and (time.time() - self.last_update < 0.5):
             return
         self.last_update = time.time()
 
@@ -259,7 +259,8 @@ class RawMessageEditor(MessageEditor):
         self.rc = rc
         await self.redraw()
 
-    async def redraw(self):
+    async def redraw(self, force=False):
+        await super().redraw(force)
         if time.time() - self.last_update < 0.5:
             return
         self.last_update = time.time()
@@ -506,6 +507,7 @@ class CoreMod(loader.Module):
 
     async def _wait_process(self, proc, editor):
         rc = await proc.wait()
+        await asyncio.sleep(0.5)
         editor.rc = rc
         editor.last_update = 0
         await editor.redraw()
