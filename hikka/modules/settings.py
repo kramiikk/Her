@@ -159,7 +159,7 @@ class MessageEditor:
     async def animate_progress(self):
         while self.rc is None:
             await self.redraw(force=True)
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(1)
 
 
 class SudoMessageEditor(MessageEditor):
@@ -466,7 +466,10 @@ class CoreMod(loader.Module):
         result = sys.stdout = StringIO()
         try:
             res = await meval(code, globals(), **await self._get_ctx(message))
-            return result.getvalue(), res, False, None
+            stdout = result.getvalue()
+            if not stdout and res is not None:
+                stdout = repr(res)
+            return stdout, res, False, None
         except SyntaxError:
             return None, None, True, "syntax"
         except Exception:
@@ -507,7 +510,7 @@ class CoreMod(loader.Module):
 
     async def _wait_process(self, proc, editor):
         rc = await proc.wait()
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(1)
         editor.rc = rc
         editor.last_update = 0
         await editor.redraw()
