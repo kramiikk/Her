@@ -238,7 +238,7 @@ class SudoMessageEditor(MessageEditor):
 
 
 class RawMessageEditor(MessageEditor):
-    def __init__(self, message, command, request_message):
+    def __init__(self, message, command):
         super().__init__(message=message, command=command, request_message=message)
         self.final_output = None
 
@@ -248,7 +248,7 @@ class RawMessageEditor(MessageEditor):
         await self.redraw(final=True)
 
     async def redraw(self, force=False, final=False):
-        if not final and (time.time() - self.last_update < 0.3):
+        if not final and not force and (time.time() - self.last_update < 0.3):
             return
         if self.rc is None and not final:
             progress = self._get_progress()
@@ -256,10 +256,10 @@ class RawMessageEditor(MessageEditor):
             content = self._truncate_output(self.stdout + self.stderr, max_len_content)
             text = f"{progress}<code>{content}</code>"
         else:
-            exit_code_line = f"<b>Exit code:</b> <code>{self.rc}</code>\n"
-            max_len_final = 4096 - len(exit_code_line) - 11
-            pre_content = self._truncate_output(self.final_output, max_len_final)
-            text = f"{exit_code_line}" f"<pre>{pre_content}</pre>"
+            full_output = f"Exit code: {self.rc}\n{self.final_output}"
+            max_len_final = 4096 - 11
+            pre_content = self._truncate_output(full_output, max_len_final)
+            text = f"<pre>{pre_content}</pre>"
         await utils.answer(self.message, text)
         self.last_update = time.time()
 
