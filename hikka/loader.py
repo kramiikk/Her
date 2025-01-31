@@ -274,6 +274,7 @@ class Modules:
     def __init__(
         self,
         client: "CustomTelegramClient",  # type: ignore  # noqa: F821
+        session,
         db: Database,
     ):
         self._initial_registration = True
@@ -286,6 +287,7 @@ class Modules:
         self._core_commands = []
         self.__approve = []
         self.client = client
+        self.session = session
         self._db = db
         self.db = db
         asyncio.ensure_future(self._junk_collector())
