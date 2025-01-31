@@ -239,7 +239,7 @@ class SudoMessageEditor(MessageEditor):
 
 class RawMessageEditor(MessageEditor):
     def __init__(self, message, command):
-        super().__init__(message=message, command=command, request_message=message)
+        super().__init__(message=message, command=command)
         self.final_output = None
 
     async def cmd_ended(self, rc):
