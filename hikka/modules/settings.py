@@ -245,36 +245,33 @@ class SudoMessageEditor(MessageEditor):
 
 
 class RawMessageEditor(MessageEditor):
-    def __init__(self, message, command, request_message, show_done=False):
+    def __init__(self, message, command, request_message):
         super().__init__(
             message=message, command=command, request_message=request_message
         )
-        self.show_done = show_done
-
-    def _prepare_output(self, text: str) -> str:
-        max_len = 4096 - 150
-        return self._truncate_output(text, max_len)
+        self.final_output = None
 
     async def cmd_ended(self, rc):
         self.rc = rc
-        await self.redraw()
+        self.final_output = self.stdout or self.stderr or "📭 No output"
+        await self.redraw(final=True)
 
-    async def redraw(self, force=False):
-        await super().redraw(force)
-        if time.time() - self.last_update < 0.5:
+    async def redraw(self, force=False, final=False):
+        if not final and (time.time() - self.last_update < 0.3):
             return
-        self.last_update = time.time()
-        content = self.stderr if self.rc not in (None, 0) else self.stdout
-        content = content or "📭 No output"
+            
+        if self.rc is None and not final:
+            progress = self._get_progress()
+            content = self._prepare_output(self.stdout + self.stderr)
+            text = f"{progress}<code>{content}</code>"
+        else:
+            text = (
+                f"<b>Exit code:</b> <code>{self.rc}</code>\n"
+                f"<pre>{self._prepare_output(self.final_output)}</pre>"
+            )
 
-        progress = self._get_progress()
-        text = f"{progress}<code>{self._prepare_output(content)}</code>"
-
-        if self.rc is not None and self.show_done:
-            text += "\n✅ Done"
-        if len(text) > 4096:
-            text = f"{progress}❌ Output too long ({len(content)} chars)"
         await utils.answer(self.message, text)
+        self.last_update = time.time()
 
 
 class CoreMod(loader.Module):
@@ -489,7 +486,6 @@ class CoreMod(loader.Module):
                 message=message,
                 command=command,
                 request_message=message,
-                show_done=True,
             )
         proc = await asyncio.create_subprocess_shell(
             command,
