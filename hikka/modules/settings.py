@@ -411,7 +411,7 @@ class CoreMod(loader.Module):
             return traceback.format_exc(), None, True, "runtime"
 
     async def _run_shell(self, message, command):
-        editor = RawMessageEditor(message, command, message)
+        editor = RawMessageEditor(message, command, self.config, message)
         proc = await asyncio.create_subprocess_shell(
             command,
             stdin=asyncio.subprocess.PIPE,
@@ -421,12 +421,8 @@ class CoreMod(loader.Module):
         )
         self.active_processes[hash_msg(message)] = proc
         await asyncio.gather(
-            read_stream(
-                editor.update_stdout, proc.stdout, 1
-            ),
-            read_stream(
-                editor.update_stderr, proc.stderr, 1
-            ),
+            read_stream(editor.update_stdout, proc.stdout, 1),
+            read_stream(editor.update_stderr, proc.stderr, 1),
             self._wait_process(proc, editor),
         )
 
