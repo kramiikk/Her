@@ -21,19 +21,17 @@ def hash_msg(message):
 async def read_stream(func: callable, stream, delay: float):
     buffer = []
     last_flush = time.time()
-    
+
     while True:
         chunk = await stream.read(512)
         if not chunk:
             break
-        
         buffer.append(chunk.decode(errors="replace"))
 
         if "\n" in chunk.decode() or time.time() - last_flush > 0.5:
             await func("".join(buffer).strip())
             buffer.clear()
             last_flush = time.time()
-    
     if buffer:
         await func("".join(buffer).strip())
 
@@ -165,6 +163,7 @@ class MessageEditor:
             await self.redraw(force=True)
             await asyncio.sleep(1)
 
+
 class SudoMessageEditor(MessageEditor):
     PASS_REQ = r"\[sudo\] password for .+?:"
     WRONG_PASS = r"\[sudo\] password for (.*): Sorry, try again\."
@@ -242,24 +241,25 @@ class SudoMessageEditor(MessageEditor):
 
 class RawMessageEditor(MessageEditor):
     def __init__(self, message, command, request_message):
-        super().__init__(message=message, command=command, request_message=request_message)
+        super().__init__(
+            message=message, command=command, request_message=request_message
+        )
         self.final_output = None
 
     async def cmd_ended(self, rc):
         self.rc = rc
-        
+
         output = (self.stdout.strip() + "\n" + self.stderr.strip()).strip()
         self.final_output = output or "🐈 No output"
-        
+
         await self.redraw(final=True)
 
     async def redraw(self, force=False, final=False):
         if not final and not force and (time.time() - self.last_update < 0.3):
             return
-            
         content = (self.stdout + "\n" + self.stderr).strip()
         max_len = 3500
-        
+
         if self.rc is None and not final:
             progress = self._get_progress()
             truncated = self._truncate_output(content, max_len - len(progress))
@@ -267,7 +267,6 @@ class RawMessageEditor(MessageEditor):
         else:
             truncated = self._truncate_output(content, 4090)
             text = f"<pre>{truncated}</pre>" if truncated else "<pre>🐈 No output</pre>"
-            
         await utils.answer(self.message, text)
         self.last_update = time.time()
 
@@ -507,7 +506,7 @@ class CoreMod(loader.Module):
         rc = await proc.wait()
 
         await asyncio.sleep(0.1)
-        
+
         await editor.cmd_ended(rc)
         del self.active_processes[hash_msg(editor.message)]
 
