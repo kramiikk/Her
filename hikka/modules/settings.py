@@ -163,7 +163,7 @@ class SudoMessageEditor(MessageEditor):
     )
 
     def __init__(self, message, command, request_message):
-        super().__init__(message, command, request_message)
+        super().__init__(message=message, command=command, request_message=request_message)
         self.process = None
         self.state = 0
         self.authmsg = None
@@ -225,7 +225,7 @@ class SudoMessageEditor(MessageEditor):
 
 class RawMessageEditor(SudoMessageEditor):
     def __init__(self, message, command, request_message, show_done=False):
-        super().__init__(message, command, request_message)
+        super().__init__(message=message, command=command, request_message=request_message)
         self.show_done = show_done
 
     def _prepare_output(self, text: str) -> str:
@@ -479,7 +479,15 @@ class CoreMod(loader.Module):
             "message": message,
             "client": self.client,
             "reply": await message.get_reply_message(),
-            **utils.get_attrs(hikkatl.tl.functions, prefix="f_"),
+            **self.get_attrs(hikkatl.tl.functions, prefix="f_"),
+        }
+
+    def get_attrs(self, module, prefix=""):
+        """Возвращает атрибуты модуля с указанным префиксом"""
+        return {
+            f"{prefix}{name}": getattr(module, name)
+            for name in dir(module)
+            if not name.startswith("_") and not callable(getattr(module, name))
         }
 
     async def _format_result(self, message, code, result, output, error):
