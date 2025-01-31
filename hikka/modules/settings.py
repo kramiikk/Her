@@ -247,13 +247,13 @@ class SudoMessageEditor(MessageEditor):
 class RawMessageEditor(MessageEditor):
     def __init__(self, message, command, request_message):
         super().__init__(
-            message=message, command=command, request_message=request_message
+            message=message, command=command, request_message=message
         )
         self.final_output = None
 
     async def cmd_ended(self, rc):
         self.rc = rc
-        self.final_output = self.stdout or self.stderr or "📭 No output"
+        self.final_output = self.stdout or self.stderr or "🐈 No output"
         await self.redraw(final=True)
 
     async def redraw(self, force=False, final=False):
@@ -262,12 +262,12 @@ class RawMessageEditor(MessageEditor):
             
         if self.rc is None and not final:
             progress = self._get_progress()
-            content = self._prepare_output(self.stdout + self.stderr)
+            content = self._truncate_output(self.stdout + self.stderr)
             text = f"{progress}<code>{content}</code>"
         else:
             text = (
                 f"<b>Exit code:</b> <code>{self.rc}</code>\n"
-                f"<pre>{self._prepare_output(self.final_output)}</pre>"
+                f"<pre>{self._truncate_output(self.final_output)}</pre>"
             )
 
         await utils.answer(self.message, text)
