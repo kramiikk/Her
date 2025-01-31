@@ -238,13 +238,13 @@ class SudoMessageEditor(MessageEditor):
 
 
 class RawMessageEditor(MessageEditor):
-    def __init__(self, message, command):
-        super().__init__(message=message, command=command)
+    def __init__(self, message, command, request_message):
+        super().__init__(message=message, command=command, request_message=request_message)
         self.final_output = None
 
     async def cmd_ended(self, rc):
         self.rc = rc
-        self.final_output = self.stdout or self.stderr or "📭 No output"
+        self.final_output = self.stdout or self.stderr or "🐈 No output"
         await self.redraw(final=True)
 
     async def redraw(self, force=False, final=False):
@@ -476,6 +476,7 @@ class CoreMod(loader.Module):
             editor = RawMessageEditor(
                 message=message,
                 command=command,
+                request_message=message,
             )
         proc = await asyncio.create_subprocess_shell(
             command,
