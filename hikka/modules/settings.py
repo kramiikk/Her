@@ -239,9 +239,7 @@ class SudoMessageEditor(MessageEditor):
 
 class RawMessageEditor(MessageEditor):
     def __init__(self, message, command, request_message):
-        super().__init__(
-            message=message, command=command, request_message=request_message
-        )
+        super().__init__(message=message, command=command, request_message=message)
         self.final_output = None
 
     async def cmd_ended(self, rc):
@@ -254,13 +252,14 @@ class RawMessageEditor(MessageEditor):
             return
         if self.rc is None and not final:
             progress = self._get_progress()
-            content = self._truncate_output(self.stdout + self.stderr)
+            max_len_content = 4096 - len(progress) - 11
+            content = self._truncate_output(self.stdout + self.stderr, max_len_content)
             text = f"{progress}<code>{content}</code>"
         else:
-            text = (
-                f"<b>Exit code:</b> <code>{self.rc}</code>\n"
-                f"<pre>{self._truncate_output(self.final_output)}</pre>"
-            )
+            exit_code_line = f"<b>Exit code:</b> <code>{self.rc}</code>\n"
+            max_len_final = 4096 - len(exit_code_line) - 11
+            pre_content = self._truncate_output(self.final_output, max_len_final)
+            text = f"{exit_code_line}" f"<pre>{pre_content}</pre>"
         await utils.answer(self.message, text)
         self.last_update = time.time()
 
