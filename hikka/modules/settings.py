@@ -236,24 +236,17 @@ class SudoMessageEditor(MessageEditor):
             self.process.kill()
             self.state = 2
 
-    async def on_message_edited(self, event):
-        if self.authmsg and event.id == self.authmsg.id:
-            password = event.raw_text.split("\n", 1)[0].encode()
-            self.process.stdin.write(password + b"\n")
-            await utils.answer(event, "🔒 Processing...")
-            self.state = 1
-
 
 class RawMessageEditor(MessageEditor):
     def __init__(self, message, command, request_message):
         super().__init__(
-            message=message, command=command, request_message=message
+            message=message, command=command, request_message=request_message
         )
         self.final_output = None
 
     async def cmd_ended(self, rc):
         self.rc = rc
-        self.final_output = self.stdout or self.stderr or "🐈 No output"
+        self.final_output = self.stdout or self.stderr or "📭 No output"
         await self.redraw(final=True)
 
     async def redraw(self, force=False, final=False):
@@ -262,12 +255,12 @@ class RawMessageEditor(MessageEditor):
             
         if self.rc is None and not final:
             progress = self._get_progress()
-            content = self._truncate_output(self.stdout + self.stderr)
+            content = self._prepare_output(self.stdout + self.stderr)
             text = f"{progress}<code>{content}</code>"
         else:
             text = (
                 f"<b>Exit code:</b> <code>{self.rc}</code>\n"
-                f"<pre>{self._truncate_output(self.final_output)}</pre>"
+                f"<pre>{self._prepare_output(self.final_output)}</pre>"
             )
 
         await utils.answer(self.message, text)
@@ -432,6 +425,7 @@ class CoreMod(loader.Module):
             return True
         return False
 
+    @loader.command()
     async def ccmd(self, message):
         """Execute Python code or shell command"""
         command = utils.get_args_raw(message)
