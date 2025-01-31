@@ -165,7 +165,9 @@ class SudoMessageEditor(MessageEditor):
     )
 
     def __init__(self, message, command, request_message):
-        super().__init__(message=message, command=command, request_message=request_message)
+        super().__init__(
+            message=message, command=command, request_message=request_message
+        )
         self.process = None
         self.state = 0
         self.authmsg = None
@@ -183,8 +185,8 @@ class SudoMessageEditor(MessageEditor):
         self.process = process
 
     async def update_stderr(self, stderr):
-        self.stderr = stderr
-        lines = stderr.strip().split("\n")
+        self.stderr += stderr
+        lines = self.stderr.strip().split("\n")
         lastline = lines[-1] if lines else ""
         handled = False
 
@@ -194,6 +196,7 @@ class SudoMessageEditor(MessageEditor):
             await utils.answer(self.authmsg, "❌ Authentication failed, try again")
             self.state = 0
             handled = True
+            self.stderr = ""
         if not handled and self.PASS_REQ in lastline and self.state == 0:
             await self._handle_auth_request(lastline)
             handled = True
@@ -213,9 +216,20 @@ class SudoMessageEditor(MessageEditor):
             f"🔐 Enter password for {utils.escape_html(user)} to run:\n"
             f"<code>{utils.escape_html(self.command)}</code>",
         )
-        self.message.client.add_event_handler(
-            self.on_message_edited, hikkatl.events.MessageEdited(chats=["me"])
-        )
+        try:
+            response = await self.message.client.wait_for(
+                hikkatl.events.NewMessage(chats=["me"], from_users="me"),
+                timeout=60,
+            )
+            password = response.raw_text.split("\n", 1)[0].encode() + b"\n"
+            self.process.stdin.write(password)
+            await self.process.stdin.drain()
+            await utils.answer(response, "🔒 Processing...")
+            self.state = 1
+        except asyncio.TimeoutError:
+            await utils.answer(self.authmsg, "❌ Timeout waiting for password")
+            self.process.kill()
+            self.state = 2
 
     async def on_message_edited(self, event):
         if self.authmsg and event.id == self.authmsg.id:
@@ -227,7 +241,9 @@ class SudoMessageEditor(MessageEditor):
 
 class RawMessageEditor(SudoMessageEditor):
     def __init__(self, message, command, request_message, show_done=False):
-        super().__init__(message=message, command=command, request_message=request_message)
+        super().__init__(
+            message=message, command=command, request_message=request_message
+        )
         self.show_done = show_done
 
     def _prepare_output(self, text: str) -> str:
@@ -451,6 +467,8 @@ class CoreMod(loader.Module):
             return traceback.format_exc(), None, True, "runtime"
 
     async def _run_shell(self, message, command):
+        if command.strip().startswith("sudo "):
+            command = f"LANG=C sudo -S {command[len('sudo '):]}"
         editor = RawMessageEditor(
             message=message,
             command=command,
@@ -465,6 +483,8 @@ class CoreMod(loader.Module):
             cwd=utils.get_base_dir(),
         )
         self.active_processes[hash_msg(message)] = proc
+        editor.update_process(proc)
+
         await asyncio.gather(
             read_stream(editor.update_stdout, proc.stdout, 1),
             read_stream(editor.update_stderr, proc.stderr, 1),

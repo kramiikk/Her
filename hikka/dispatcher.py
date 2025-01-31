@@ -278,7 +278,7 @@ class CommandDispatcher:
         )
 
     async def command_exc(
-        self, exc: Exception, func: callable, message: Message
+        self, exc: Exception, _func: callable, message: Message
     ) -> None:
         """Handle command exceptions"""
         logger.exception("Command failed", exc_info=exc)
@@ -322,7 +322,7 @@ class CommandDispatcher:
             await utils.answer(message, txt)
 
     async def watcher_exc(
-        self, exc: Exception, func: callable, message: Message
+        self, exc: Exception, _func: callable, _message: Message
     ) -> None:
         """Handle watcher exceptions"""
         logger.exception("Error running watcher", exc_info=exc)
