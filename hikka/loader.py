@@ -6,6 +6,7 @@
 # This file is a part of Her
 # 🌐 https://github.com/hikariatama/Hikka
 
+
 import asyncio
 import builtins
 import contextlib
@@ -65,6 +66,7 @@ __all__ = [
 
 logger = logging.getLogger(__name__)
 
+
 async def stop_placeholder() -> bool:
     return True
 
@@ -88,7 +90,6 @@ native_import = builtins.__import__
 def patched_import(name: str, *args, **kwargs):
     if name.startswith("telethon"):
         return native_import("hikkatl" + name[8:], *args, **kwargs)
-
     return native_import(name, *args, **kwargs)
 
 
@@ -124,7 +125,6 @@ class InfiniteLoop:
             self._task.add_done_callback(self._stop)
             self._task.cancel()
             return asyncio.ensure_future(self._wait_for_stop.wait())
-
         return asyncio.ensure_future(stop_placeholder())
 
     def start(self, *args, **kwargs):
@@ -133,33 +133,28 @@ class InfiniteLoop:
 
     async def actual_loop(self, *args, **kwargs):
         # Wait for loader to set attribute
+
         while not self.module_instance:
             await asyncio.sleep(0.01)
-
         if isinstance(self._stop_clause, str) and self._stop_clause:
             self.module_instance.set(self._stop_clause, True)
-
         self.status = True
 
         while self.status:
             if self._wait_before:
                 await asyncio.sleep(self.interval)
-
             if (
                 isinstance(self._stop_clause, str)
                 and self._stop_clause
                 and not self.module_instance.get(self._stop_clause, False)
             ):
                 break
-
             try:
                 await self.func(self.module_instance, *args, **kwargs)
             except Exception:
                 logger.exception("Error running loop!")
-
             if not self._wait_before:
                 await asyncio.sleep(self.interval)
-
         self._wait_for_stop.set()
 
         self.status = False
@@ -190,10 +185,6 @@ BASE_DIR = (
     else os.path.normpath(os.path.join(utils.get_base_dir(), ".."))
 )
 
-LOADED_MODULES_DIR = os.path.join(BASE_DIR, "loaded_modules")
-LOADED_MODULES_PATH = Path(LOADED_MODULES_DIR)
-LOADED_MODULES_PATH.mkdir(parents=True, exist_ok=True)
-
 
 def ratelimit(func: Command) -> Command:
     """Decorator that causes ratelimiting for this command to be enforced more strictly"""
@@ -207,10 +198,8 @@ def tag(*tags, **kwarg_tags):
     def inner(func: Command) -> Command:
         for _tag in tags:
             setattr(func, _tag, True)
-
         for _tag, value in kwarg_tags.items():
             setattr(func, _tag, value)
-
         return func
 
     return inner
@@ -225,10 +214,8 @@ def _mark_method(mark: str, *args, **kwargs) -> typing.Callable[..., Command]:
         setattr(func, mark, True)
         for arg in args:
             setattr(func, arg, True)
-
         for kwarg, value in kwargs.items():
             setattr(func, kwarg, value)
-
         return func
 
     return decorator
@@ -288,7 +275,6 @@ class Modules:
         self,
         client: "CustomTelegramClient",  # type: ignore  # noqa: F821
         db: Database,
-        allclients: list,
     ):
         self._initial_registration = True
         self.commands = {}
@@ -302,7 +288,6 @@ class Modules:
         self.client = client
         self._db = db
         self.db = db
-        self.secure_boot = False
         asyncio.ensure_future(self._junk_collector())
 
     async def _junk_collector(self):
@@ -319,7 +304,6 @@ class Modules:
                 commands.update(module.hikka_commands)
                 callback_handlers.update(module.hikka_callback_handlers)
                 watchers.extend(module.hikka_watchers.values())
-
             self.commands = commands
             self.callback_handlers = callback_handlers
 
@@ -328,11 +312,8 @@ class Modules:
     async def register_all(
         self,
         mods: typing.Optional[typing.List[str]] = None,
-        no_external: bool = False,
     ) -> typing.List[Module]:
         """Load all modules in the module directory"""
-        external_mods = []
-
         if not mods:
             mods = [
                 os.path.join(utils.get_base_dir(), MODULES_NAME, mod)
@@ -341,29 +322,8 @@ class Modules:
                     os.listdir(os.path.join(utils.get_base_dir(), MODULES_NAME)),
                 )
             ]
-
-            self.secure_boot = self._db.get(__name__, "secure_boot", False)
-
-            external_mods = (
-                []
-                if self.secure_boot
-                else [
-                    (LOADED_MODULES_PATH / mod).resolve()
-                    for mod in filter(
-                        lambda x: (
-                            x.endswith(f"{self.client.tg_id}.py")
-                            and not x.startswith("_")
-                        ),
-                        os.listdir(LOADED_MODULES_DIR),
-                    )
-                ]
-            )
-
         loaded = []
         loaded += await self._register_modules(mods)
-
-        if not no_external:
-            loaded += await self._register_modules(external_mods, "<file>")
 
         return loaded
 
@@ -391,7 +351,6 @@ class Modules:
                 loaded += [await self.register_module(spec, module_name, origin)]
             except Exception as e:
                 logger.exception("Failed to load module %s due to %s:", mod, e)
-
         return loaded
 
     async def register_module(
@@ -399,7 +358,6 @@ class Modules:
         spec: importlib.machinery.ModuleSpec,
         module_name: str,
         origin: str = "<core>",
-        save_fs: bool = False,
     ) -> Module:
         """Register single module from importlib spec"""
         module = importlib.util.module_from_spec(spec)
@@ -419,25 +377,12 @@ class Modules:
 
         if hasattr(module, "__version__"):
             ret.__version__ = module.__version__
-
         if ret is None:
             ret = module.register(module_name)
             if not isinstance(ret, Module):
                 raise TypeError(f"Instance is not a Module, it is {type(ret)}")
-
         await self.complete_registration(ret)
         ret.__origin__ = origin
-
-        cls_name = ret.__class__.__name__
-
-        if save_fs:
-            path = os.path.join(
-                LOADED_MODULES_DIR,
-                f"{cls_name}_{self.client.tg_id}.py",
-            )
-
-            if origin == "<string>":
-                Path(path).write_text(spec.loader.data.decode())
 
         return ret
 
@@ -453,7 +398,6 @@ class Modules:
             self._core_commands += list(
                 map(lambda x: x.lower(), list(instance.hikka_commands))
             )
-
         for _command, cmd in instance.hikka_commands.items():
             self.commands.update({_command.lower(): cmd})
 
@@ -462,7 +406,6 @@ class Modules:
         for _watcher in self.watchers:
             if _watcher.__self__.__class__.__name__ == instance.__class__.__name__:
                 self.watchers.remove(_watcher)
-
         for _watcher in instance.hikka_watchers.values():
             self.watchers += [_watcher]
 
@@ -510,7 +453,6 @@ class Modules:
                 for _, method in utils.iter_attrs(module):
                     if isinstance(method, InfiniteLoop):
                         method.stop()
-
         self.modules += [instance]
 
     def dispatch(self, _command: str) -> typing.Tuple[str, typing.Optional[str]]:
@@ -553,13 +495,10 @@ class Modules:
                     type(mod.config),
                     mod.config,
                 )
-
         if not hasattr(mod, "name"):
-            mod.name = getattr(mod, 'name', mod.__class__.__name__)
-
+            mod.name = getattr(mod, "name", mod.__class__.__name__)
         if skip_hook:
             return
-
         try:
             mod.config_complete()
         except Exception as e:
@@ -592,7 +531,6 @@ class Modules:
         except SelfUnload as e:
             if no_self_unload:
                 raise e
-
             self.modules.remove(mod)
         except SelfSuspend as e:
             if no_self_unload:
@@ -609,14 +547,12 @@ class Modules:
             )
             self.modules.remove(mod)
             raise
-
         for _, method in utils.iter_attrs(mod):
             if isinstance(method, InfiniteLoop):
                 setattr(method, "module_instance", mod)
 
                 if method.autostart:
                     method.start()
-
         self.unregister_commands(mod)
         self.unregister_raw_handlers(mod)
 
