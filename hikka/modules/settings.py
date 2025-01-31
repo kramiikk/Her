@@ -19,19 +19,20 @@ def hash_msg(message):
 
 
 async def read_stream(func: callable, stream, delay: float):
-    last_task = None
+    last_data = time.time()
     data = b""
     while True:
-        dat = await stream.read(1)
-        if not dat:
-            if last_task:
-                last_task.cancel()
-                await func(data.decode())
+        chunk = await stream.read(1024)
+        if not chunk:
             break
-        data += dat
-        if last_task:
-            last_task.cancel()
-        last_task = asyncio.ensure_future(sleep_for_task(func, data, delay))
+        data += chunk
+        if time.time() - last_data > delay or b"\n" in chunk:
+            await func(data.decode(errors="replace").strip())
+            data = b""
+            last_data = time.time()
+    
+    if data:
+        await func(data.decode(errors="replace").strip())
 
 
 async def sleep_for_task(func: callable, data: bytes, delay: float):
@@ -244,22 +245,24 @@ class RawMessageEditor(MessageEditor):
 
     async def cmd_ended(self, rc):
         self.rc = rc
-        self.final_output = self.stdout or self.stderr or "🐈 No output"
+        
+        output = (self.stdout.strip() + "\n" + self.stderr.strip()).strip()
+        self.final_output = output or "🐈 No output"
+        
         await self.redraw(final=True)
 
     async def redraw(self, force=False, final=False):
         if not final and not force and (time.time() - self.last_update < 0.3):
             return
+            
+        content = (self.stdout + "\n" + self.stderr).strip()
+        
         if self.rc is None and not final:
             progress = self._get_progress()
-            max_len_content = 4096 - len(progress) - 11
-            content = self._truncate_output(self.stdout + self.stderr, max_len_content)
-            text = f"{progress}<code>{content}</code>"
+            text = f"{progress}<pre>{content}</pre>"
         else:
-            full_output = self.final_output
-            max_len_final = 4096 - 11
-            pre_content = self._truncate_output(full_output, max_len_final)
-            text = f"<pre>{pre_content}</pre>"
+            text = f"<pre>{content}</pre>" if content else "<pre>🐈 No output</pre>"
+            
         await utils.answer(self.message, text)
         self.last_update = time.time()
 
@@ -497,10 +500,10 @@ class CoreMod(loader.Module):
 
     async def _wait_process(self, proc, editor):
         rc = await proc.wait()
-        await asyncio.sleep(1)
-        editor.rc = rc
-        editor.last_update = 0
-        await editor.redraw()
+
+        await asyncio.sleep(0.1)
+        
+        await editor.cmd_ended(rc)
         del self.active_processes[hash_msg(editor.message)]
 
     async def _get_ctx(self, message):
