@@ -2,7 +2,7 @@ GitPython
 meval
 requests
 grapheme
-emoji
+emoji==1.6.3
 psutil
 tgcrypto
 rsa
