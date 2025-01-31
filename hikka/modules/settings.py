@@ -252,17 +252,15 @@ class RawMessageEditor(MessageEditor):
     async def redraw(self, force=False, final=False):
         if not final and (time.time() - self.last_update < 0.3):
             return
-            
         if self.rc is None and not final:
             progress = self._get_progress()
-            content = self._prepare_output(self.stdout + self.stderr)
+            content = self._truncate_output(self.stdout + self.stderr)
             text = f"{progress}<code>{content}</code>"
         else:
             text = (
                 f"<b>Exit code:</b> <code>{self.rc}</code>\n"
-                f"<pre>{self._prepare_output(self.final_output)}</pre>"
+                f"<pre>{self._truncate_output(self.final_output)}</pre>"
             )
-
         await utils.answer(self.message, text)
         self.last_update = time.time()
 
