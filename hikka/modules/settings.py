@@ -59,7 +59,6 @@ class MessageEditor:
         self,
         message: hikkatl.tl.types.Message,
         command: str,
-        config,
         request_message,
     ):
         self.message = message
@@ -71,7 +70,7 @@ class MessageEditor:
         self.progress_index = 0
         self.last_update = 0
         self.request_message = request_message
-    
+
     async def cmd_ended(self, rc):
         self.rc = rc
         await self.redraw()
@@ -163,8 +162,8 @@ class SudoMessageEditor(MessageEditor):
         r"\[sudo\] password for (.*): sudo: [0-9]+ incorrect password attempts"
     )
 
-    def __init__(self, message, command, config, request_message):
-        super().__init__(message, command, config, request_message)
+    def __init__(self, message, command, request_message):
+        super().__init__(message, command, request_message)
         self.process = None
         self.state = 0
         self.authmsg = None
@@ -225,14 +224,14 @@ class SudoMessageEditor(MessageEditor):
 
 
 class RawMessageEditor(SudoMessageEditor):
-    def __init__(self, message, command, config, request_message, show_done=False):
-        super().__init__(message, command, config, request_message)
+    def __init__(self, message, command, request_message, show_done=False):
+        super().__init__(message, command, request_message)
         self.show_done = show_done
 
     def _prepare_output(self, text: str) -> str:
         max_len = 4096 - 150
         return self._truncate_output(text, max_len)
-    
+
     async def cmd_ended(self, rc):
         self.rc = rc
         await self.redraw()
@@ -277,101 +276,139 @@ class CoreMod(loader.Module):
         command = command.strip()
 
         def tokenize(s):
-            in_quotes = {'\'': False, '"': False}
+            in_quotes = {"'": False, '"': False}
             tokens = []
             current = []
-            
+
             i = 0
             while i < len(s):
                 char = s[i]
-                
+
                 if char in ['"', "'"]:
                     in_quotes[char] = not in_quotes[char]
                     current.append(char)
                     i += 1
                     continue
-                
                 if any(in_quotes.values()):
                     current.append(char)
                     i += 1
                     continue
-                
-                if char in '|&><':
+                if char in "|&><":
                     if current:
-                        tokens.append(''.join(current))
+                        tokens.append("".join(current))
                         current = []
-
-                    if i + 1 < len(s) and s[i:i+2] in ['||', '&&', '>>', '<<']:
-                        tokens.append(s[i:i+2])
+                    if i + 1 < len(s) and s[i : i + 2] in ["||", "&&", ">>", "<<"]:
+                        tokens.append(s[i : i + 2])
                         i += 2
                     else:
                         tokens.append(char)
                         i += 1
                     continue
-                
                 if char.isspace():
                     if current:
-                        tokens.append(''.join(current))
+                        tokens.append("".join(current))
                         current = []
                 else:
                     current.append(char)
                 i += 1
-            
             if current:
-                tokens.append(''.join(current))
-            
+                tokens.append("".join(current))
             return tokens
 
         parts = tokenize(command)
         if not parts:
             return False
-            
         shell_commands = {
-            'git', 'ls', 'cd', 'pwd', 'cat', 'echo', 'rm', 'cp', 'mv',
-            'mkdir', 'rmdir', 'touch', 'chmod', 'chown', 'find',
-            'grep', 'ps', 'kill', 'apt', 'apt-get', 'systemctl',
-            'service', 'bash', 'sh', 'ssh', 'scp', 'wget', 'curl'
+            "git",
+            "ls",
+            "cd",
+            "pwd",
+            "cat",
+            "echo",
+            "rm",
+            "cp",
+            "mv",
+            "mkdir",
+            "rmdir",
+            "touch",
+            "chmod",
+            "chown",
+            "find",
+            "grep",
+            "ps",
+            "kill",
+            "apt",
+            "apt-get",
+            "systemctl",
+            "service",
+            "bash",
+            "sh",
+            "ssh",
+            "scp",
+            "wget",
+            "curl",
         }
-        
+
         if parts[0] in shell_commands:
             return True
-
         python_context = {
-            'if', 'else', 'elif', 'while', 'for', 'in', 'def', 'class',
-            'return', 'yield', 'with', 'import', 'from', 'as', 'try',
-            'except', 'finally', 'raise', 'assert', 'lambda', 'and',
-            'or', 'not', 'is', 'None', 'True', 'False'
+            "if",
+            "else",
+            "elif",
+            "while",
+            "for",
+            "in",
+            "def",
+            "class",
+            "return",
+            "yield",
+            "with",
+            "import",
+            "from",
+            "as",
+            "try",
+            "except",
+            "finally",
+            "raise",
+            "assert",
+            "lambda",
+            "and",
+            "or",
+            "not",
+            "is",
+            "None",
+            "True",
+            "False",
         }
 
         def is_python_context(index):
             """Проверяет, находится ли оператор в контексте Python кода"""
             if index <= 0 or index >= len(parts) - 1:
                 return False
-                
             prev_token = parts[index - 1]
             next_token = parts[index + 1]
-            
-            if (prev_token in python_context or 
-                next_token in python_context or
-                prev_token.isidentifier() or
-                prev_token.replace('.', '').isdigit() or
-                '=' in prev_token or
-                any(op in prev_token for op in ['(', '[', '{', '+', '-', '*', '/', '%'])):
+
+            if (
+                prev_token in python_context
+                or next_token in python_context
+                or prev_token.isidentifier()
+                or prev_token.replace(".", "").isdigit()
+                or "=" in prev_token
+                or any(
+                    op in prev_token for op in ["(", "[", "{", "+", "-", "*", "/", "%"]
+                )
+            ):
                 return True
-            
             return False
 
         for i, part in enumerate(parts):
-            if part in {'|', '||', '&&', '>', '>>', '<', '<<', '&'}:
+            if part in {"|", "||", "&&", ">", ">>", "<", "<<", "&"}:
                 if not is_python_context(i):
                     return True
-
-        if command.startswith('./') or command.startswith('/'):
+        if command.startswith("./") or command.startswith("/"):
             return True
-            
-        if re.search(r'\$[A-Za-z_][A-Za-z0-9_]*', command):
+        if re.search(r"\$[A-Za-z_][A-Za-z0-9_]*", command):
             return True
-            
         return False
 
     async def ccmd(self, message):
@@ -381,7 +418,6 @@ class CoreMod(loader.Module):
             return await utils.answer(
                 message, self.strings["no_code"].format(self.get_prefix())
             )
-        
         if self.is_shell_command(command):
             await utils.answer(message, self.strings["terminal_executing"])
             await self._run_shell(message, command)
@@ -392,7 +428,9 @@ class CoreMod(loader.Module):
         self.start_time = time.time()
         await utils.answer(message, self.strings["python_executing"])
         try:
-            result, output, error, err_type = await self._run_python(code=command, message=message)
+            result, output, error, err_type = await self._run_python(
+                code=command, message=message
+            )
             if err_type == "syntax":
                 await self._run_shell(message, command)
             else:
@@ -411,7 +449,12 @@ class CoreMod(loader.Module):
             return traceback.format_exc(), None, True, "runtime"
 
     async def _run_shell(self, message, command):
-        editor = RawMessageEditor(message, command, self.config, message)
+        editor = RawMessageEditor(
+            message=message,
+            command=command,
+            request_message=message,
+            show_done=True,
+        )
         proc = await asyncio.create_subprocess_shell(
             command,
             stdin=asyncio.subprocess.PIPE,
