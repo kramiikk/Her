@@ -476,7 +476,6 @@ class CoreMod(loader.Module):
             editor = RawMessageEditor(
                 message=message,
                 command=command,
-                request_message=message,
             )
         proc = await asyncio.create_subprocess_shell(
             command,
