@@ -61,6 +61,8 @@ class MessageEditor:
         command: str,
         request_message,
     ):
+        self.active_time = 0
+        self.last_activity = time.time()
         self.message = message
         self.command = command
         self.stdout = ""
@@ -470,9 +472,11 @@ class CoreMod(loader.Module):
         )
 
     async def _wait_process(self, proc, editor):
-        await proc.wait()
+        rc = await proc.wait()
+        editor.rc = rc
+        editor.last_update = 0
+        await editor.redraw()
         del self.active_processes[hash_msg(editor.message)]
-        await editor.cmd_ended(proc.returncode)
 
     async def _get_ctx(self, message):
         return {
