@@ -93,13 +93,13 @@ class MessageEditor:
         return text[:part] + "\n\n... 🔻 Output truncated 🔻 ...\n\n" + text[-part:]
 
     def _get_progress(self):
-        elapsed = int(time.time() - self.start_time)
+        elapsed = time.time() - self.start_time
         frame = self.PROGRESS_FRAMES[self.progress_index % len(self.PROGRESS_FRAMES)]
         self.progress_index += 1
-        return f"{frame} <b>Running for {elapsed}s</b>\n"
+        return f"{frame} <b>Running for {elapsed:.1f}s</b>\n"
 
-    async def redraw(self):
-        if time.time() - self.last_update < 0.5:
+    async def redraw(self, force=False):
+        if not force and (time.time() - self.last_update < 0.1):
             return
         self.last_update = time.time()
 
@@ -156,6 +156,11 @@ class MessageEditor:
                 f"stderr: {len(self.stderr)})",
             )
 
+    async def animate_progress(self):
+        while self.rc is None:
+            await self.redraw(force=True)
+            await asyncio.sleep(0.5)
+
 
 class SudoMessageEditor(MessageEditor):
     PASS_REQ = r"\[sudo\] password for .+?:"
@@ -197,11 +202,9 @@ class SudoMessageEditor(MessageEditor):
             self.state = 0
             handled = True
             self.stderr = ""
-
         if not handled and re.search(self.PASS_REQ, lastline) and self.state == 0:
             await self._handle_auth_request(lastline)
             handled = True
-
         if not handled and any(
             re.fullmatch(self.TOO_MANY_TRIES, line) for line in lines
         ):
@@ -241,7 +244,7 @@ class SudoMessageEditor(MessageEditor):
             self.state = 1
 
 
-class RawMessageEditor(SudoMessageEditor):
+class RawMessageEditor(MessageEditor):
     def __init__(self, message, command, request_message, show_done=False):
         super().__init__(
             message=message, command=command, request_message=request_message
@@ -469,14 +472,21 @@ class CoreMod(loader.Module):
             return traceback.format_exc(), None, True, "runtime"
 
     async def _run_shell(self, message, command):
-        if command.strip().startswith("sudo "):
+        is_sudo = command.strip().startswith("sudo ")
+        if is_sudo:
             command = f"LANG=C sudo -S {command[len('sudo '):]}"
-        editor = RawMessageEditor(
-            message=message,
-            command=command,
-            request_message=message,
-            show_done=True,
-        )
+            editor = SudoMessageEditor(
+                message=message,
+                command=command,
+                request_message=message,
+            )
+        else:
+            editor = RawMessageEditor(
+                message=message,
+                command=command,
+                request_message=message,
+                show_done=True,
+            )
         proc = await asyncio.create_subprocess_shell(
             command,
             stdin=asyncio.subprocess.PIPE,
@@ -485,12 +495,13 @@ class CoreMod(loader.Module):
             cwd=utils.get_base_dir(),
         )
         self.active_processes[hash_msg(message)] = proc
-        editor.update_process(proc)
-
+        if is_sudo:
+            editor.update_process(proc)
         await asyncio.gather(
             read_stream(editor.update_stdout, proc.stdout, 1),
             read_stream(editor.update_stderr, proc.stderr, 1),
             self._wait_process(proc, editor),
+            editor.animate_progress(),
         )
 
     async def _wait_process(self, proc, editor):
@@ -560,9 +571,6 @@ class CoreMod(loader.Module):
         return text[:part_len] + separator + text[-part_len:]
 
     def format_duration(self, duration: float) -> str:
-        """Форматирование времени выполнения"""
         if duration >= 1:
-            return f"{duration:.2f} сек"
-        elif duration >= 0.001:
-            return f"{duration*1000:.2f} мс"
-        return f"{duration*1e6:.2f} мкс"
+            return f"{duration:.1f} сек"
+        return f"{duration * 1000:.1f} мс"
