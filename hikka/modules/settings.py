@@ -158,7 +158,7 @@ class MessageEditor:
 
 
 class SudoMessageEditor(MessageEditor):
-    PASS_REQ = "[sudo] password for"
+    PASS_REQ = r"\[sudo\] password for .+?:"
     WRONG_PASS = r"\[sudo\] password for (.*): Sorry, try again\."
     TOO_MANY_TRIES = (
         r"\[sudo\] password for (.*): sudo: [0-9]+ incorrect password attempts"
@@ -197,9 +197,11 @@ class SudoMessageEditor(MessageEditor):
             self.state = 0
             handled = True
             self.stderr = ""
-        if not handled and self.PASS_REQ in lastline and self.state == 0:
+
+        if not handled and re.search(self.PASS_REQ, lastline) and self.state == 0:
             await self._handle_auth_request(lastline)
             handled = True
+
         if not handled and any(
             re.fullmatch(self.TOO_MANY_TRIES, line) for line in lines
         ):
