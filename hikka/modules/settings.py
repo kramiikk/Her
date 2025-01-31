@@ -19,20 +19,23 @@ def hash_msg(message):
 
 
 async def read_stream(func: callable, stream, delay: float):
-    last_data = time.time()
-    data = b""
+    buffer = []
+    last_flush = time.time()
+    
     while True:
-        chunk = await stream.read(1024)
+        chunk = await stream.read(512)
         if not chunk:
             break
-        data += chunk
-        if time.time() - last_data > delay or b"\n" in chunk:
-            await func(data.decode(errors="replace").strip())
-            data = b""
-            last_data = time.time()
+        
+        buffer.append(chunk.decode(errors="replace"))
+
+        if "\n" in chunk.decode() or time.time() - last_flush > 0.5:
+            await func("".join(buffer).strip())
+            buffer.clear()
+            last_flush = time.time()
     
-    if data:
-        await func(data.decode(errors="replace").strip())
+    if buffer:
+        await func("".join(buffer).strip())
 
 
 async def sleep_for_task(func: callable, data: bytes, delay: float):
@@ -162,7 +165,6 @@ class MessageEditor:
             await self.redraw(force=True)
             await asyncio.sleep(1)
 
-
 class SudoMessageEditor(MessageEditor):
     PASS_REQ = r"\[sudo\] password for .+?:"
     WRONG_PASS = r"\[sudo\] password for (.*): Sorry, try again\."
@@ -256,12 +258,15 @@ class RawMessageEditor(MessageEditor):
             return
             
         content = (self.stdout + "\n" + self.stderr).strip()
+        max_len = 3500
         
         if self.rc is None and not final:
             progress = self._get_progress()
-            text = f"{progress}<pre>{content}</pre>"
+            truncated = self._truncate_output(content, max_len - len(progress))
+            text = f"{progress}<pre>{truncated}</pre>"
         else:
-            text = f"<pre>{content}</pre>" if content else "<pre>🐈 No output</pre>"
+            truncated = self._truncate_output(content, 4090)
+            text = f"<pre>{truncated}</pre>" if truncated else "<pre>🐈 No output</pre>"
             
         await utils.answer(self.message, text)
         self.last_update = time.time()
