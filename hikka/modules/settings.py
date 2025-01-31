@@ -20,20 +20,23 @@ def hash_msg(message):
 
 async def read_stream(func: callable, stream, delay: float):
     buffer = []
-    last_flush = time.time()
-
+    last_send = time.time()
+    
     while True:
-        chunk = await stream.read(512)
+        chunk = await stream.read(2048)
         if not chunk:
             break
-        buffer.append(chunk.decode(errors="replace"))
-
-        if "\n" in chunk.decode() or time.time() - last_flush > 0.5:
-            await func("".join(buffer).strip())
+            
+        decoded = chunk.decode(errors="replace").replace("\r\n", "\n")
+        buffer.append(decoded)
+        
+        if "\n" in decoded or time.time() - last_send > 0.8:
+            await func("".join(buffer))
             buffer.clear()
-            last_flush = time.time()
+            last_send = time.time()
+    
     if buffer:
-        await func("".join(buffer).strip())
+        await func("".join(buffer))
 
 
 async def sleep_for_task(func: callable, data: bytes, delay: float):
@@ -241,34 +244,54 @@ class SudoMessageEditor(MessageEditor):
 
 class RawMessageEditor(MessageEditor):
     def __init__(self, message, command, request_message):
-        super().__init__(
-            message=message, command=command, request_message=request_message
-        )
-        self.final_output = None
+        super().__init__(message=message, command=command, request_message=request_message)
+        self._buffer = []
+        self._last_flush = 0
+
+    async def _flush_buffer(self):
+        content = "\n".join(self._buffer).strip()
+        if not content:
+            return
+            
+        if self.rc is None:
+            progress = self._get_progress()
+            max_len = 4096 - len(progress) - 50
+            truncated = self._truncate_output(content, max_len, keep_edges=True)
+            text = f"{progress}<pre>{truncated}</pre>"
+        else:
+            max_len = 4096 - 50
+            truncated = self._truncate_output(content, max_len, keep_edges=True)
+            text = f"<pre>{truncated}</pre>"
+        
+        if time.time() - self._last_flush > 1 or self.rc is not None:
+            await utils.answer(self.message, text)
+            self._last_flush = time.time()
+
+    def _truncate_output(self, text: str, max_len: int, keep_edges=True) -> str:
+        text = utils.escape_html(text)
+        if len(text) <= max_len:
+            return text
+            
+        if keep_edges:
+            edge_len = max(200, (max_len - 100) // 2)
+            return (
+                text[:edge_len].strip() + 
+                "\n\n... 🔻 Output truncated 🔻 ...\n\n" + 
+                text[-edge_len:].strip()
+            )
+        return text[:max_len].strip()
+
+    async def update_stdout(self, stdout):
+        self._buffer.append(stdout)
+        await self._flush_buffer()
+
+    async def update_stderr(self, stderr):
+        self._buffer.append(stderr)
+        await self._flush_buffer()
 
     async def cmd_ended(self, rc):
         self.rc = rc
-
-        output = (self.stdout.strip() + "\n" + self.stderr.strip()).strip()
-        self.final_output = output or "🐈 No output"
-
-        await self.redraw(final=True)
-
-    async def redraw(self, force=False, final=False):
-        if not final and not force and (time.time() - self.last_update < 0.3):
-            return
-        content = (self.stdout + "\n" + self.stderr).strip()
-        max_len = 3500
-
-        if self.rc is None and not final:
-            progress = self._get_progress()
-            truncated = self._truncate_output(content, max_len - len(progress))
-            text = f"{progress}<pre>{truncated}</pre>"
-        else:
-            truncated = self._truncate_output(content, 4090)
-            text = f"<pre>{truncated}</pre>" if truncated else "<pre>🐈 No output</pre>"
-        await utils.answer(self.message, text)
-        self.last_update = time.time()
+        await self._flush_buffer()
 
 
 class CoreMod(loader.Module):
