@@ -171,25 +171,17 @@ def save_config_key(key: str, value: str) -> bool:
 
 
 def gen_port(cfg: str = "port", no8080: bool = False) -> int:
-    """
-    Generates random free port in case of VDS.
-    In case of Docker, also return 8080, as it's already exposed by default.
-    :returns: Integer value of generated port
-    """
+    """Надежная генерация свободного порта"""
     if "DOCKER" in os.environ and not no8080:
         return 8080
-    # But for own server we generate new free port, and assign to it
-
+        
     if port := get_config_key(cfg):
         return port
-    # If we didn't get port from config, generate new one
-    # First, try to randomly get port
 
-    while port := random.randint(1024, 65536):
-        if socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect_ex(
-            ("localhost", port)
-        ):
-            break
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.bind(('', 0))
+    port = sock.getsockname()[1]
+    sock.close()
     return port
 
 
@@ -280,12 +272,14 @@ class Her:
     """Main userbot instance, which can handle multiple clients"""
 
     def __init__(self):
-        global BASE_DIR, BASE_PATH, CONFIG_PATH
-        self.arguments = parse_arguments()
+        self.base_dir = self._get_base_dir()
+        self.base_path = Path(self.base_dir)
+        self.config_path = self.base_path / "config.json"
+        
         if self.arguments.data_root:
-            BASE_DIR = self.arguments.data_root
-            BASE_PATH = Path(BASE_DIR)
-            CONFIG_PATH = BASE_PATH / "config.json"
+            self.base_dir = self.arguments.data_root
+            self.base_path = Path(self.base_dir)
+            self.config_path = self.base_path / "config.json"
         
         self._init_session_structure()
         
@@ -297,23 +291,24 @@ class Her:
         self._get_api_token()
         self._get_proxy()
         
-    def _init_session_structure(self):
-        """Создаёт необходимую файловую структуру"""
-        session_dir = Path(BASE_DIR)
-        session_dir.mkdir(parents=True, exist_ok=True)
+    def _get_base_dir(self):
+        return (
+            "/data"
+            if "DOCKER" in os.environ
+            else os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        )
         
-        session_file = session_dir / "her.session"
-        if not session_file.exists():
-            with contextlib.closing(sqlite3.connect(session_file)) as conn:
-                conn.execute("""
-                    CREATE TABLE IF NOT EXISTS sessions (
-                        dc_id INTEGER PRIMARY KEY,
-                        server_address TEXT,
-                        port INTEGER,
-                        auth_key BLOB
-                    )
-                """)
-                conn.commit()
+    def _init_session_structure(self):
+        """Инициализация файла сессии через Telethon"""
+        session_path = Path(BASE_DIR) / "her.session"
+        if not session_path.exists():
+            try:
+                session = SQLiteSession(str(session_path))
+                session.save()
+                logging.info("Initialized new session file using Telethon")
+            except Exception as e:
+                logging.error(f"Session init failed: {e}")
+                raise
 
     def _get_proxy(self):
         """
@@ -337,24 +332,45 @@ class Her:
         self.proxy, self.conn = None, ConnectionTcpFull
 
     def _read_sessions(self):
-        """Загружает сессии с улучшенной обработкой ошибок"""
+        """Улучшенная загрузка сессий с проверкой целостности"""
         session_path = Path(BASE_DIR) / "her.session"
+        self.sessions = []
+        
+        if not session_path.exists():
+            logging.warning("Session file not found")
+            return
+
         try:
-            if session_path.exists():
-                with contextlib.closing(sqlite3.connect(session_path)) as conn:
-                    conn.execute("PRAGMA integrity_check")
-                    conn.execute("SELECT * FROM sessions LIMIT 1")
+            # Проверка целостности SQLite файла
+            with contextlib.closing(sqlite3.connect(session_path)) as conn:
+                integrity_check = conn.execute("PRAGMA quick_check").fetchone()
+                if integrity_check[0] != "ok":
+                    raise sqlite3.DatabaseError(f"Database corrupted: {integrity_check[0]}")
+
+            session = SQLiteSession(str(session_path))
+            
+            if not session.auth_key:
+                raise AuthKeyInvalidError("Empty auth key")
                 
-                self.sessions = [SQLiteSession(str(session_path))]
-                logging.debug(f"Session loaded: {session_path}")
-            else:
-                logging.warning("Session file not found after structure init")
-                self.sessions = []
-        except sqlite3.DatabaseError as e:
-            logging.error(f"Invalid session: {e}, recreating...")
+            self.sessions.append(session)
+            logging.info(f"Loaded session from {session_path}")
+            
+        except (sqlite3.DatabaseError, AuthKeyInvalidError) as e:
+            logging.error(f"Invalid session: {e}")
+            self._handle_corrupted_session(session_path)
+        except Exception as e:
+            logging.error(f"Unexpected error: {e}")
+            self._handle_corrupted_session(session_path)
+
+    def _handle_corrupted_session(self, session_path: Path):
+        """Обработка поврежденных сессий"""
+        logging.warning("Removing corrupted session...")
+        try:
             session_path.unlink(missing_ok=True)
             self._init_session_structure()
-            self._read_sessions()
+        except Exception as e:
+            logging.error(f"Failed to reset session: {e}")
+            raise RuntimeError("Session recovery failed") from e
 
     def _get_api_token(self):
         """Get API Token from disk or environment"""
@@ -436,71 +452,42 @@ class Her:
             raise
 
     async def save_client_session(self, client: CustomTelegramClient):
-        session_path = Path(BASE_DIR) / "her.session"
-        temp_session_path = session_path.with_name("her.temp.session")
-        
+        """Упрощенное сохранение сессии"""
         try:
-            session_path.parent.mkdir(parents=True, exist_ok=True)
-            
-            temp_session = SQLiteSession(str(temp_session_path))
-            temp_session.set_dc(
-                client.session.dc_id,
-                client.session.server_address,
-                client.session.port,
-            )
-            temp_session.auth_key = client.session.auth_key
-            
-            temp_session.save()
-            if not temp_session_path.exists():
-                raise FileNotFoundError(f"Temp file {temp_session_path} not created!")
-                
-            temp_session_path.replace(session_path)
-            logging.info(f"Session rotated: {temp_session_path} → {session_path}")
-            
-            await client.disconnect()
-            client.session = SQLiteSession(str(session_path))
-            await self._common_client_setup(client)
-            
-            client.hikka_db = database.Database(client)
-            await client.hikka_db.init()
-            
+            client.session.save()
+            logging.info("Session saved successfully")
         except Exception as e:
-            logging.error(f"Session save failed: {repr(e)}")
-            if temp_session_path.exists():
-                temp_session_path.unlink(missing_ok=True)
+            logging.error(f"Session save failed: {e}")
             raise
-        finally:
-            if temp_session_path.exists():
-                temp_session_path.unlink(missing_ok=True)
 
     async def _initial_setup(self) -> bool:
-        max_attempts = 3
-        for attempt in range(1, max_attempts + 1):
-            try:
-                client = await self._common_client_setup(
-                    self._create_client(MemorySession())
-                )
-
+        """Исправленный процесс начальной настройки"""
+        client = None
+        try:
+            session_path = self.base_path / "her.session"
+            session = SQLiteSession(str(session_path))
+            
+            client = self._create_client(session)
+            await client.connect()
+            
+            if not await client.is_user_authorized():
+                logging.info("Starting authentication...")
                 await client.start(
-                    phone=lambda: input("\n📱 Enter phone number: "),
-                    password=lambda: getpass.getpass("🔒 2FA password (if set): "),
-                    code_callback=lambda: input("📳 SMS/Telegram code: "),
+                    phone=lambda: input("Phone: "),
+                    password=lambda: getpass.getpass("2FA: "),
+                    code_callback=lambda: input("Code: ")
                 )
-
-                me = await client.get_me()
-                client.tg_id = me.id
-                await self.save_client_session(client)
-
-                # Добавляем обновление списка сессий
-                self._read_sessions()  # <-- Важное исправление
-                logging.info("✅ Successfully authorized!")
-                return True
-            except Exception as e:
-                logging.error(f"❌ Setup error ({attempt}/{max_attempts}): {repr(e)}")
-                if attempt == max_attempts:
-                    return False
-                await asyncio.sleep(2)
-        return False
+            
+            client.session.save()
+            self._read_sessions()
+            return True
+            
+        except Exception as e:
+            logging.error(f"Setup failed: {e}")
+            return False
+        finally:
+            if client:
+                await client.disconnect()
 
     async def _init_clients(self) -> bool:
         """Инициализация клиентов с защитой от IndexError"""
@@ -611,20 +598,27 @@ class Her:
 
     async def _main(self):
         """Main entrypoint"""
-        save_config_key("port", self.arguments.port)
-        await self._get_token()
+        try:
+            save_config_key("port", self.arguments.port)
+            await self._get_token()
 
-        if not await self._init_clients():
-            return
-        self.loop.set_exception_handler(
-            lambda _, x: logging.error(
-                "Exception on event loop! %s",
-                x["message"],
-                exc_info=x.get("exception", None),
-            )
+            if not await self._init_clients():
+                return
+                
+            self.loop.set_exception_handler(self._exception_handler)
+            
+            await self.amain_wrapper(self.sessions[0])
+        except Exception as e:
+            logging.critical(f"Critical error: {e}")
+            sys.exit(1)
+
+    def _exception_handler(self, loop, context):
+        """Обработчик исключений event loop"""
+        logging.error(
+            "Event loop error: %s (message: %s)",
+            context.get("exception"),
+            context["message"]
         )
-
-        await self.amain_wrapper(self.sessions[0])
 
     def _shutdown_handler(self):
         """Shutdown handler"""
