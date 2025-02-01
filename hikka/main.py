@@ -26,12 +26,8 @@ from pathlib import Path
 import hikkatl
 from hikkatl import events
 from hikkatl.errors import (
-    ApiIdInvalidError,
     AuthKeyInvalidError,
-    FloodWaitError,
-    PhoneNumberInvalidError,
-    PhoneCodeInvalidError,
-    SessionPasswordNeededError,
+    NetworkError,
 )
 from hikkatl.network.connection import (
     ConnectionTcpFull,
@@ -72,6 +68,9 @@ with contextlib.suppress(Exception):
     if "microsoft-standard" in uname().release:
         IS_WSL = True
 # fmt: off
+
+
+
 
 
 
@@ -387,23 +386,33 @@ class Her:
 
     def _generate_app_version(self) -> str:
         """Генерация версии приложения"""
+        base_version = f"{random.randint(8, 10)}"
         return (
-            f"{random.randint(8, 10)}.{random.randint(0, 9)}"
-            if isinstance(self, Her) and hasattr(self, "_initial_setup")
-            else f"{random.randint(8, 10)}.{random.randint(0, 9)}.{random.randint(0, 9)}"
+            f"{base_version}.{random.randint(0, 9)}"
+            if random.choice([True, False])
+            else f"{base_version}.{random.randint(0, 9)}.{random.randint(0, 9)}"
         )
 
     async def _common_client_setup(self, client: CustomTelegramClient):
         """Общая настройка клиента"""
-        await client.connect()
-        client.phone = "🏴‍☠️ +888###"
-        return client
+        try:
+            await client.connect()
+            client.phone = "🏴‍☠️ +888###"
+            return client
+        except (OSError, NetworkError) as e:
+            logging.error(f"Connection error: {e}")
+            await client.disconnect()
+            raise
 
     async def save_client_session(self, client: CustomTelegramClient):
         session_path = Path(BASE_DIR) / "her.session"
         temp_session_path = session_path.with_suffix(".temp")
 
         try:
+            temp_dir = Path(BASE_DIR) / "temp"
+            temp_dir.mkdir(exist_ok=True)
+            temp_session_path = temp_dir / "her.session.temp"
+
             temp_session = SQLiteSession(temp_session_path)
             temp_session.set_dc(
                 client.session.dc_id,
@@ -413,13 +422,15 @@ class Her:
             temp_session.auth_key = client.session.auth_key
             temp_session.save()
 
-            await asyncio.sleep(0.1)
-            session_path.unlink(missing_ok=True)
-            temp_session_path.rename(session_path)
+            temp_session_path.replace(session_path)
 
-            new_session = SQLiteSession(session_path)
+            logging.info(
+                f"Session saved: {session_path} "
+                f"(size: {session_path.stat().st_size} bytes)"
+            )
+
             await client.disconnect()
-            client.session = new_session
+            client.session = SQLiteSession(session_path)
             await self._common_client_setup(client)
 
             client.hikka_db = database.Database(client)
@@ -432,26 +443,31 @@ class Her:
             temp_session_path.unlink(missing_ok=True)
 
     async def _initial_setup(self) -> bool:
-        try:
-            client = await self._common_client_setup(
-                self._create_client(MemorySession())
-            )
+        max_attempts = 3
+        for attempt in range(1, max_attempts + 1):
+            try:
+                client = await self._common_client_setup(
+                    self._create_client(MemorySession())
+                )
 
-            await client.start(
-                phone=lambda: input("\n📱 Enter phone number: "),
-                password=lambda: getpass.getpass("🔒 2FA password (if set): "),
-                code_callback=lambda: input("📳 SMS/Telegram code: "),
-            )
+                await client.start(
+                    phone=lambda: input("\n📱 Enter phone number: "),
+                    password=lambda: getpass.getpass("🔒 2FA password (if set): "),
+                    code_callback=lambda: input("📳 SMS/Telegram code: "),
+                )
 
-            await self.save_client_session(client)
-            client.tg_id = (await client.get_me()).id
-            logging.info("✅ Successfully authorized!")
-            return True
-        except Exception as e:
-            logging.error(f"❌ Setup error: {repr(e)}")
-            return False
-        finally:
-            await client.disconnect()
+                me = await client.get_me()
+                client.tg_id = me.id
+                await self.save_client_session(client)
+
+                logging.info("✅ Successfully authorized!")
+                return True
+            except Exception as e:
+                logging.error(f"❌ Setup error ({attempt}/{max_attempts}): {repr(e)}")
+                if attempt == max_attempts:
+                    return False
+                await asyncio.sleep(2)
+        return False
 
     async def _init_clients(self) -> bool:
         session_path = Path(BASE_DIR) / "her.session"
@@ -459,8 +475,17 @@ class Her:
         if not session_path.exists():
             return await self._initial_setup()
         try:
-            with sqlite3.connect(session_path) as conn:
-                conn.execute("SELECT * FROM sessions")
+            conn = sqlite3.connect(session_path)
+            cursor = conn.execute("PRAGMA integrity_check")
+            integrity_check = cursor.fetchone()
+            if integrity_check[0] != "ok":
+                raise sqlite3.DatabaseError("Database integrity check failed")
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            tables = {row[0] for row in cursor.fetchall()}
+            if not {"sessions", "Entities", "SentFiles", "UpdateState"}.issubset(
+                tables
+            ):
+                raise sqlite3.DatabaseError("Invalid table structure")
             client = await self._common_client_setup(
                 self._create_client(SQLiteSession(session_path))
             )
@@ -469,10 +494,12 @@ class Her:
                 raise AuthKeyInvalidError
             self.sessions = [client]
             return True
-        except (sqlite3.DatabaseError, AuthKeyInvalidError):
-            logging.error("⚠️ Invalid session, recreating...")
+        except (sqlite3.DatabaseError, AuthKeyInvalidError) as e:
+            logging.error(f"⚠️ Invalid session ({e}), recreating...")
             session_path.unlink(missing_ok=True)
             return await self._init_clients()
+        finally:
+            conn.close()
 
     async def amain_wrapper(self, client: CustomTelegramClient):
         """Wrapper around amain"""
