@@ -5,22 +5,21 @@ preview = true
 name = "hikka"
 version = "1.7.9"
 description = "Telegram userbot"
-authors = ["kramiikk, t.me/kramiikk"]
+authors = ["kramiikk"]
 license = "GNU AGPLv3"
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python
-gitpython
-meval
-requests
-grapheme
-emoji
-psutil
-tgcrypto
-hikka-tl-new
-rsa
-
+python = "^3.8"
+gitpython = "^3.1.44"
+meval = "^2.5"
+requests = "^2.32.3"
+grapheme = "^0.6.0"
+emoji = "^2.1.0"
+psutil = "^6.1.1"
+tgcrypto = "^1.2.5"
+hikka-tl-new = "^2.0.8"
+rsa = "^4.9"
 
 [build-system]
 requires = ["poetry-core"]
