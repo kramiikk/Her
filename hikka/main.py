@@ -478,8 +478,13 @@ class Her:
     async def _init_clients(self) -> bool:
         """Reads sessions from disk and initializes them as clients."""
         if not self.sessions:
-            logging.error("No session found. Please restart the application to log in.")
-            sys.exit(1)
+            if not await self._initial_setup():
+                logging.error("❌ Authentication failed. Please try again.")
+                sys.exit(1)
+            if not self.sessions:
+                logging.error("❌ Session creation failed.")
+                sys.exit(1)
+
         session = self.sessions[0]
         client = None
 
