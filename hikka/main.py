@@ -28,6 +28,9 @@ from hikkatl.errors import (
     ApiIdInvalidError,
     AuthKeyDuplicatedError,
     PhoneNumberInvalidError,
+    AuthKeyInvalidError,
+    SessionRevokedError,
+    SessionExpiredError,
 )
 from hikkatl.network.connection import (
     ConnectionTcpFull,
@@ -444,11 +447,25 @@ class Her:
                 system_lang_code="en-US",
             )
             await client.connect()
-            client.phone = "Why do you need your own phone number?"
-        except (sqlite3.OperationalError, TypeError, AuthKeyDuplicatedError) as e:
-            logging.error("Session error: %s", e)
+            client.phone = "+888"
+        except (
+            sqlite3.OperationalError, 
+            TypeError, 
+            AuthKeyDuplicatedError,
+            AuthKeyInvalidError,
+            SessionRevokedError,
+            SessionExpiredError,
+        ) as e:
+            logging.error(
+                "Session invalidated! Reason: %s. Removing session file...", 
+                repr(e)
+            )
             if hasattr(session, "filename") and session.filename:
-                Path(session.filename).unlink(missing_ok=True)
+                try:
+                    Path(session.filename).unlink(missing_ok=True)
+                    Path(f"{session.filename}.journal").unlink(missing_ok=True)
+                except Exception as cleanup_err:
+                    logging.error(f"Failed to cleanup session: {cleanup_err}")
             self.sessions.clear()
             return False
         except (ValueError, ApiIdInvalidError):
