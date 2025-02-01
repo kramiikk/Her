@@ -4,6 +4,7 @@
 # This file is a part of Her
 # 🌐 https://github.com/hikariatama/Hikka
 
+
 import copy
 import inspect
 import logging
@@ -16,12 +17,10 @@ from hikkatl import helpers
 from hikkatl._updates import ChannelState, Entity, EntityType, SessionState
 from hikkatl.errors.rpcerrorlist import TopicDeletedError
 from hikkatl.hints import EntityLike
-from hikkatl.network import MTProtoSender
 from hikkatl.tl import functions
 from hikkatl.tl.alltlobjects import LAYER
 from hikkatl.tl.functions.channels import GetFullChannelRequest
 from hikkatl.tl.functions.users import GetFullUserRequest
-from hikkatl.tl.tlobject import TLRequest
 from hikkatl.tl.types import (
     ChannelFull,
     Message,
@@ -30,14 +29,12 @@ from hikkatl.tl.types import (
     UpdateShort,
     UserFull,
 )
-from hikkatl.utils import is_list_like
 
 from .types import (
     CacheRecordEntity,
     CacheRecordFullChannel,
     CacheRecordFullUser,
     CacheRecordPerms,
-    Module,
 )
 
 logger = logging.getLogger(__name__)
@@ -54,7 +51,6 @@ def hashable(value: typing.Any) -> bool:
         hash(value)
     except TypeError:
         return False
-
     return True
 
 
@@ -82,8 +78,6 @@ class CustomTelegramClient(TelegramClient):
             CacheRecordFullUser,
         ] = {}
 
-        self._forbidden_constructors: typing.List[int] = []
-
         self._raw_updates_processor: typing.Optional[
             typing.Callable[
                 [typing.Union[Updates, UpdatesCombined, UpdateShort]],
@@ -96,7 +90,6 @@ class CustomTelegramClient(TelegramClient):
             raise ValueError(
                 "TelegramClient instance cannot be reused after logging out"
             )
-
         if self._loop is None:
             self._loop = helpers.get_running_loop()
         elif self._loop != helpers.get_running_loop():
@@ -104,7 +97,6 @@ class CustomTelegramClient(TelegramClient):
                 "The asyncio event loop must not change after connection (see the FAQ"
                 " for details)"
             )
-
         connection = self._connection(
             self.session.server_address,
             self.session.port,
@@ -116,11 +108,10 @@ class CustomTelegramClient(TelegramClient):
 
         if unix_socket_path is not None:
             connection.set_unix_socket(unix_socket_path)
-
         if not await self._sender.connect(connection):
             # We don't want to init or modify anything if we were already connected
-            return
 
+            return
         self.session.auth_key = self._sender.auth_key
         self.session.save()
 
@@ -142,7 +133,6 @@ class CustomTelegramClient(TelegramClient):
                     )
                 else:
                     cs.append(ChannelState(entity_id, state.pts))
-
             self._message_box.load(ss, cs)
             for state in cs:
                 try:
@@ -158,13 +148,11 @@ class CustomTelegramClient(TelegramClient):
                             EntityType.CHANNEL, entity.channel_id, entity.access_hash
                         )
                     )
-
         self._init_request.query = functions.help.GetConfigRequest()
 
         req = self._init_request
         if self._no_updates:
             req = functions.InvokeWithoutUpdatesRequest(req)
-
         await self._sender.send(functions.InvokeWithLayerRequest(LAYER, req))
 
         if self._message_box.is_empty():
@@ -173,7 +161,6 @@ class CustomTelegramClient(TelegramClient):
                 await self._on_login(
                     me
                 )  # also calls GetState to initialize the MessageBox
-
         self._updates_handle = self.loop.create_task(self._update_loop())
         self._keepalive_handle = self.loop.create_task(self._keepalive_loop())
 
@@ -185,10 +172,8 @@ class CustomTelegramClient(TelegramClient):
     def raw_updates_processor(self, value: callable):
         if self._raw_updates_processor is not None:
             raise ValueError("raw_updates_processor is already set")
-
         if not callable(value):
             raise ValueError("raw_updates_processor must be callable")
-
         self._raw_updates_processor = value
 
     @property
@@ -206,10 +191,6 @@ class CustomTelegramClient(TelegramClient):
     @property
     def hikka_fulluser_cache(self) -> typing.Dict[int, CacheRecordFullUser]:
         return self._hikka_fulluser_cache
-
-    @property
-    def forbidden_constructors(self) -> typing.List[str]:
-        return self._forbidden_constructors
 
     async def force_get_entity(self, *args, **kwargs):
         """Forcefully makes a request to Telegram to get the entity."""
@@ -242,10 +223,8 @@ class CustomTelegramClient(TelegramClient):
                 return await super().get_entity(entity)
         else:
             hashable_entity = entity
-
         if str(hashable_entity).isdigit() and int(hashable_entity) < 0:
             hashable_entity = int(str(hashable_entity)[4:])
-
         if (
             not force
             and hashable_entity
@@ -256,7 +235,6 @@ class CustomTelegramClient(TelegramClient):
             )
         ):
             return copy.deepcopy(self._hikka_entity_cache[hashable_entity].entity)
-
         resolved_entity = await super().get_entity(entity)
 
         if resolved_entity:
@@ -265,11 +243,9 @@ class CustomTelegramClient(TelegramClient):
 
             if getattr(resolved_entity, "id", None):
                 self._hikka_entity_cache[resolved_entity.id] = cache_record
-
             if getattr(resolved_entity, "username", None):
                 self._hikka_entity_cache[f"@{resolved_entity.username}"] = cache_record
                 self._hikka_entity_cache[resolved_entity.username] = cache_record
-
         return copy.deepcopy(resolved_entity)
 
     async def get_perms_cached(
@@ -303,7 +279,6 @@ class CustomTelegramClient(TelegramClient):
                 )
             except StopIteration:
                 return await self.get_permissions(entity, user)
-
             try:
                 hashable_user = next(
                     getattr(user, attr)
@@ -315,13 +290,10 @@ class CustomTelegramClient(TelegramClient):
         else:
             hashable_entity = entity
             hashable_user = user
-
         if str(hashable_entity).isdigit() and int(hashable_entity) < 0:
             hashable_entity = int(str(hashable_entity)[4:])
-
         if str(hashable_user).isdigit() and int(hashable_user) < 0:
             hashable_user = int(str(hashable_user)[4:])
-
         if (
             not force
             and hashable_entity
@@ -336,7 +308,6 @@ class CustomTelegramClient(TelegramClient):
             return copy.deepcopy(
                 self._hikka_perms_cache[hashable_entity][hashable_user].perms
             )
-
         resolved_perms = await self.get_permissions(entity, user)
 
         if resolved_perms:
@@ -346,30 +317,27 @@ class CustomTelegramClient(TelegramClient):
                 resolved_perms,
                 exp,
             )
-            self._hikka_perms_cache.setdefault(hashable_entity, {})[hashable_user] = (
-                cache_record
-            )
+            self._hikka_perms_cache.setdefault(hashable_entity, {})[
+                hashable_user
+            ] = cache_record
 
             def save_user(key: typing.Union[str, int]):
                 nonlocal self, cache_record, user, hashable_user
                 if getattr(user, "id", None):
                     self._hikka_perms_cache.setdefault(key, {})[user.id] = cache_record
-
                 if getattr(user, "username", None):
-                    self._hikka_perms_cache.setdefault(key, {})[f"@{user.username}"] = (
-                        cache_record
-                    )
-                    self._hikka_perms_cache.setdefault(key, {})[user.username] = (
-                        cache_record
-                    )
+                    self._hikka_perms_cache.setdefault(key, {})[
+                        f"@{user.username}"
+                    ] = cache_record
+                    self._hikka_perms_cache.setdefault(key, {})[
+                        user.username
+                    ] = cache_record
 
             if getattr(entity, "id", None):
                 save_user(entity.id)
-
             if getattr(entity, "username", None):
                 save_user(f"@{entity.username}")
                 save_user(entity.username)
-
         return copy.deepcopy(resolved_perms)
 
     async def get_fullchannel(
@@ -397,10 +365,8 @@ class CustomTelegramClient(TelegramClient):
                 return await self(GetFullChannelRequest(channel=entity))
         else:
             hashable_entity = entity
-
         if str(hashable_entity).isdigit() and int(hashable_entity) < 0:
             hashable_entity = int(str(hashable_entity)[4:])
-
         if (
             not force
             and self._hikka_fullchannel_cache.get(hashable_entity)
@@ -408,7 +374,6 @@ class CustomTelegramClient(TelegramClient):
             and self._hikka_fullchannel_cache[hashable_entity].ts + exp > time.time()
         ):
             return self._hikka_fullchannel_cache[hashable_entity].full_channel
-
         result = await self(GetFullChannelRequest(channel=entity))
         self._hikka_fullchannel_cache[hashable_entity] = CacheRecordFullChannel(
             hashable_entity,
@@ -442,10 +407,8 @@ class CustomTelegramClient(TelegramClient):
                 return await self(GetFullUserRequest(entity))
         else:
             hashable_entity = entity
-
         if str(hashable_entity).isdigit() and int(hashable_entity) < 0:
             hashable_entity = int(str(hashable_entity)[4:])
-
         if (
             not force
             and self._hikka_fulluser_cache.get(hashable_entity)
@@ -453,7 +416,6 @@ class CustomTelegramClient(TelegramClient):
             and self._hikka_fulluser_cache[hashable_entity].ts + exp > time.time()
         ):
             return self._hikka_fulluser_cache[hashable_entity].full_user
-
         result = await self(GetFullUserRequest(entity))
         self._hikka_fulluser_cache[hashable_entity] = CacheRecordFullUser(
             hashable_entity,
@@ -527,12 +489,10 @@ class CustomTelegramClient(TelegramClient):
         except TopicDeletedError:
             if no_retry:
                 raise
-
             topic = await self._find_topic_in_stack(args[0], stack)
 
             if not topic:
                 raise
-
             kwargs["reply_to"] = topic
             kwargs["_topic_no_retry"] = True
             return await self._topic_guesser(native_method, stack, *args, **kwargs)
@@ -553,91 +513,10 @@ class CustomTelegramClient(TelegramClient):
             **kwargs,
         )
 
-    async def _call(
-        self,
-        sender: MTProtoSender,
-        request: TLRequest,
-        ordered: bool = False,
-        flood_sleep_threshold: typing.Optional[int] = None,
-    ):
-        """
-        Calls the given request and handles user-side forbidden constructors
-
-        :param sender: Sender to use
-        :param request: Request to send
-        :param ordered: Whether to send the request ordered
-        :param flood_sleep_threshold: Flood sleep threshold
-        :return: The result of the request
-        """
-
-        # ⚠️⚠️  WARNING!  ⚠️⚠️
-        # If you are a module developer, and you'll try to bypass this protection to
-        # force user join your channel, you will be added to SCAM modules
-        # list and you will be banned from Hikka federation.
-        # Let USER decide, which channel he will follow. Do not be so petty
-        # I hope, you understood me.
-        # Thank you
-
-        not_tuple = False
-        if not is_list_like(request):
-            not_tuple = True
-            request = (request,)
-
-        new_request = []
-
-        for item in request:
-            if item.CONSTRUCTOR_ID in self._forbidden_constructors and next(
-                (
-                    frame_info.frame.f_locals["self"]
-                    for frame_info in inspect.stack()
-                    if hasattr(frame_info, "frame")
-                    and hasattr(frame_info.frame, "f_locals")
-                    and isinstance(frame_info.frame.f_locals, dict)
-                    and "self" in frame_info.frame.f_locals
-                    and isinstance(frame_info.frame.f_locals["self"], Module)
-                    and not getattr(
-                        frame_info.frame.f_locals["self"], "__origin__", ""
-                    ).startswith("<core")
-                ),
-                None,
-            ):
-                continue
-
-            new_request += [item]
-
-        if not new_request:
-            return
-
-        return await super()._call(
-            sender,
-            new_request[0] if not_tuple else tuple(new_request),
-            ordered,
-            flood_sleep_threshold,
-        )
-
-    def forbid_constructor(self, constructor: int):
-        """
-        Forbids the given constructor to be called
-
-        :param constructor: Constructor id to forbid
-        """
-        self._forbidden_constructors.extend([constructor])
-        self._forbidden_constructors = list(set(self._forbidden_constructors))
-
-    def forbid_constructors(self, constructors: list):
-        """
-        Forbids the given constructors to be called.
-        All existing forbidden constructors will be removed
-
-        :param constructors: Constructor ids to forbid
-        """
-        self._forbidden_constructors = list(set(constructors))
-
     def _handle_update(
         self: "CustomTelegramClient",
         update: typing.Union[Updates, UpdatesCombined, UpdateShort],
     ):
         if self._raw_updates_processor is not None:
             self._raw_updates_processor(update)
-
         super()._handle_update(update)
