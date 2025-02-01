@@ -11,6 +11,7 @@ import argparse
 import asyncio
 import contextlib
 import importlib
+import getpass
 import json
 import logging
 import os
@@ -25,6 +26,10 @@ from pathlib import Path
 import hikkatl
 from hikkatl import events
 from hikkatl.errors import (
+    FloodWaitError,
+    PhoneMigrateError,
+    PhoneCodeInvalidError,
+    SessionPasswordNeededError,
     ApiIdInvalidError,
     AuthKeyDuplicatedError,
     PhoneNumberInvalidError,
@@ -72,6 +77,7 @@ with contextlib.suppress(Exception):
     if "microsoft-standard" in uname().release:
         IS_WSL = True
 # fmt: off
+
 
 
 OFFICIAL_CLIENTS = [
@@ -367,68 +373,113 @@ class Her:
     async def save_client_session(
         self,
         client: CustomTelegramClient,
-        *,
-        delay_restart: bool = False,
     ):
-        session = SQLiteSession(os.path.join(BASE_DIR, "hikka.session"))
+        try:
+            session = SQLiteSession(os.path.join(BASE_DIR, "hikka.session"))
+            session.set_dc(
+                client.session.dc_id,
+                client.session.server_address,
+                client.session.port,
+            )
+            session.auth_key = client.session.auth_key
+            session.save()
 
-        session.set_dc(
-            client.session.dc_id,
-            client.session.server_address,
-            client.session.port,
-        )
+            client.session = session
+            client.hikka_db = database.Database(client)
+            await client.hikka_db.init()
+        except (sqlite3.OperationalError, OSError) as e:
+            logging.error(f"⚠️ Critical session error: {e}")
+            logging.info("Please restart the application manually.")
+            sys.exit(1)
 
-        session.auth_key = client.session.auth_key
-        session.save()
+    async def _phone_login(self, client):
+        try:
+            await client.start(
+                phone=lambda: input("Phone: "),
+                password=lambda: getpass("2FA Password: "),
+                code_callback=lambda: input("Code: "),
+                max_attempts=3,
+            )
+            return True
+        except PhoneCodeInvalidError:
+            logging.error("Invalid code")
+        return False
 
-        if not delay_restart:
-            client.disconnect()
-            restart()
-        client.session = session
-        # Set db attribute to this client in order to save
+    async def _initial_setup(self, attempt: int = 1) -> bool:
+        max_attempts = 3
+        try:
+            if attempt > max_attempts:
+                logging.critical("❌ Maximum auth attempts. Restart manually.")
+                sys.exit(1)
+            client = CustomTelegramClient(
+                MemorySession(),
+                self.api_token.ID,
+                self.api_token.HASH,
+                connection=self.conn,
+                proxy=self.proxy,
+                connection_retries=None,
+                device_model=random.choice(OFFICIAL_CLIENTS),
+                system_version=generate_random_system_version(),
+                app_version=f"{random.randint(8, 10)}.{random.randint(0, 9)}",
+                lang_code="en",
+                system_lang_code="en-US",
+            )
 
-        client.hikka_db = database.Database(client)
-        await client.hikka_db.init()
+            await client.connect()
 
-        if delay_restart:
-            client.disconnect()
-            await asyncio.sleep(3600)  # Will be restarted from web anyway
-
-    async def _phone_login(self, client: CustomTelegramClient) -> bool:
-        phone = input(
-            "\033[0;96mEnter phone: \033[0m" if self.arguments.tty else "Enter phone: "
-        )
-
-        await client.start(phone)
-
-        await self.save_client_session(client)
-        return True
-
-    async def _initial_setup(self) -> bool:
-        client = CustomTelegramClient(
-            MemorySession(),
-            self.api_token.ID,
-            self.api_token.HASH,
-            connection=self.conn,
-            proxy=self.proxy,
-            connection_retries=None,
-            device_model=random.choice(OFFICIAL_CLIENTS),
-            system_version=generate_random_system_version(),
-            app_version=f"{random.randint(8, 10)}.{random.randint(0, 9)}.{random.randint(0, 9)}",
-            lang_code="en",
-            system_lang_code="en-US",
-        )
-        await client.connect()
-
-        if await self._phone_login(client):
+            try:
+                logging.info(f"🔑 Authentication attempt {attempt}/{max_attempts}")
+                await client.start(
+                    phone=lambda: input("\n📱 Enter phone number: "),
+                    password=lambda: getpass.getpass("🔒 2FA password (if set): "),
+                    code_callback=lambda: input("📳 SMS/Telegram code: "),
+                    max_attempts=3,
+                    timeout=20,
+                )
+            except (PhoneNumberInvalidError, PhoneCodeInvalidError) as e:
+                logging.error(f"❌ Validation error: {e}")
+                return False
+            except FloodWaitError as e:
+                wait_time = e.seconds + 5
+                logging.warning(f"⏳ FloodWait: Need to wait {wait_time} seconds")
+                await asyncio.sleep(wait_time)
+                return await self._initial_setup(attempt + 1)
+            except PhoneMigrateError as e:
+                logging.error(f"⚠️ Phone number migrated to DC {e.new_dc}")
+                await client._switch_dc(e.new_dc)
+                return await self._initial_setup(attempt)
+            except SessionPasswordNeededError:
+                logging.error("🔒 2FA password required but not provided")
+                return False
+            logging.info("✅ Successfully authorized!")
+            await self.save_client_session(client)
             self.sessions = [client]
             return True
-        return False
+        except sqlite3.OperationalError as e:
+            logging.error(f"💾 Database error: {e}")
+            await asyncio.sleep(50**attempt)
+            return await self._initial_setup(attempt + 1)
+        except (AuthKeyInvalidError, SessionRevokedError) as e:
+            logging.error(f"🔐 Session invalidated: {e}")
+            await asyncio.sleep(50**attempt)
+            return await self._initial_setup(attempt + 1)
+        except Exception as e:
+            logging.error(f"⚠️ Unexpected error: {repr(e)}")
+            if attempt < max_attempts:
+                delay = 50**attempt + random.uniform(0, 2)
+                logging.info(f"⏳ Retrying in {delay:.1f} seconds...")
+                await asyncio.sleep(delay)
+                return await self._initial_setup(attempt + 1)
+            return False
+        finally:
+            with contextlib.suppress(Exception):
+                await client.disconnect()
 
     async def _init_clients(self) -> bool:
         """Reads sessions from disk and initializes them as clients."""
         if not self.sessions:
-            return False
+            logging.error("No session found. Please restart the application to log in.")
+            sys.exit(1)
         session = self.sessions[0]
         client = None
 
@@ -447,18 +498,17 @@ class Her:
                 system_lang_code="en-US",
             )
             await client.connect()
-            client.phone = "+888"
+            client.phone = "🏴‍☠️ +888###"
         except (
-            sqlite3.OperationalError, 
-            TypeError, 
+            sqlite3.OperationalError,
+            TypeError,
             AuthKeyDuplicatedError,
             AuthKeyInvalidError,
             SessionRevokedError,
             SessionExpiredError,
         ) as e:
             logging.error(
-                "Session invalidated! Reason: %s. Removing session file...", 
-                repr(e)
+                "⚠️ Session invalidated! Please restart the application with 'python3 -m hikka' to re-login."
             )
             if hasattr(session, "filename") and session.filename:
                 try:
@@ -466,40 +516,29 @@ class Her:
                     Path(f"{session.filename}.journal").unlink(missing_ok=True)
                 except Exception as cleanup_err:
                     logging.error(f"Failed to cleanup session: {cleanup_err}")
-            self.sessions.clear()
-            return False
+            sys.exit(1)
         except (ValueError, ApiIdInvalidError):
-            configurator.api_config()
-            return False
+            logging.error("Invalid API ID. Please reconfigure with 'python3 -m hikka'.")
+            sys.exit(1)
         except PhoneNumberInvalidError:
-            logging.error(
-                "Phone number is incorrect. Use international format (+XX...) "
-                "and don't put spaces in it."
-            )
-            self.sessions.clear()
-            return False
+            logging.error("Invalid phone number. Please restart to enter correct one.")
+            sys.exit(1)
         except InteractiveAuthRequired:
-            logging.error(
-                "Session %s requires re-authentication.",
-                session.filename,
-            )
-            self.sessions.clear()
-            return False
+            logging.error("Session expired. Please restart to re-authenticate.")
+            sys.exit(1)
         except Exception as e:
-            logging.error(f"Unexpected error initializing client: {e}")
-            self.sessions.clear()
-            return False
+            logging.error(f"Unexpected error: {str(e)}")
+            sys.exit(1)
         finally:
             if client:
                 self.sessions = [client]
-        return bool(self.sessions)
+        return True
 
     async def amain_wrapper(self, client: CustomTelegramClient):
         """Wrapper around amain"""
         async with client:
             first = True
             me = await client.get_me()
-            client._tg_id = me.id
             client.tg_id = me.id
             client.hikka_me = me
             while await self.amain(first, client):
@@ -588,9 +627,7 @@ class Her:
         save_config_key("port", self.arguments.port)
         await self._get_token()
 
-        if (
-            not self.sessions or not await self._init_clients()
-        ) and not await self._initial_setup():
+        if not await self._init_clients():
             return
         self.loop.set_exception_handler(
             lambda _, x: logging.error(
