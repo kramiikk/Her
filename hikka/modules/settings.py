@@ -4,12 +4,11 @@ import re
 import time
 import sys
 import traceback
-
+from .. import loader, utils, main
 import hikkatl
+
 from meval import meval
 from io import StringIO
-
-from .. import loader, utils
 
 logger = logging.getLogger(__name__)
 
@@ -532,14 +531,44 @@ class CoreMod(loader.Module):
 
         await editor.cmd_ended(rc)
         del self.active_processes[hash_msg(editor.message)]
+        
+    def get_sub(self, mod):
+        """Returns a dictionary of module attributes that don't start with _"""
+        return {
+            name: getattr(mod, name)
+            for name in dir(mod)
+            if not name.startswith("_")
+        }
+
+    async def lookup(self, name):
+        """Helper function to lookup objects by name"""
+        try:
+            return eval(name)
+        except Exception:
+            return None
 
     async def _get_ctx(self, message):
+        reply = await message.get_reply_message()
         return {
             "message": message,
             "client": self.client,
+            "reply": reply,
+            "r": reply,
+            **self.get_sub(hikkatl.tl.types),
+            **self.get_sub(hikkatl.tl.functions),
+            "event": message,
+            "chat": message.to_id,
+            "hikkatl": hikkatl,
+            "telethon": hikkatl,
+            "utils": utils,
+            "main": main,
+            "loader": loader,
+            "f": hikkatl.tl.functions,
+            "c": self.client,
+            "m": message,
+            "lookup": self.lookup,
             "self": self,
-            "reply": await message.get_reply_message(),
-            **self.get_attrs(hikkatl.tl.functions, prefix="f_"),
+            "db": self.db
         }
 
     def get_attrs(self, module, prefix=""):
