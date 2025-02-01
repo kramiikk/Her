@@ -383,6 +383,7 @@ class Her:
             )
             session.auth_key = client.session.auth_key
             session.save()
+            await asyncio.sleep(0.5) 
 
             client.session = session
             client.hikka_db = database.Database(client)

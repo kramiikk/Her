@@ -104,24 +104,27 @@ class Database(dict):
         self.read()
 
     def read(self):
-        """Read database and stores it in self"""
         if self._redis:
             try:
-                self.update(
-                    **json.loads(
-                        self._redis.get(
-                            str(self._client.tg_id),
-                        ).decode(),
-                    )
-                )
+                data = self._redis.get(str(self._client.tg_id))
+                if data:
+                    self.update(**json.loads(data.decode()))
+                else:
+                    logger.debug("Redis empty, new DB created")
             except Exception:
-                logger.exception("Error reading redis database")
+                logger.exception("Redis error")
             return
 
         try:
-            self.update(**json.loads(self._db_file.read_text()))
-        except Exception:
-            logger.warning("Database read failed! Creating new one...")
+            if self._db_file.exists():
+                self.update(**json.loads(self._db_file.read_text()))
+            else:
+                logger.debug("Local DB not found, creating new one")
+        except json.JSONDecodeError:
+            logger.error("DB corrupted, resetting...")
+            self._db_file.unlink()
+        except Exception as e:
+            logger.error(f"Read failed: {e}")
 
     def process_db_autofix(self, db: dict) -> bool:
         if not utils.is_serializable(db):
