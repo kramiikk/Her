@@ -76,6 +76,7 @@ with contextlib.suppress(Exception):
 
 
 
+
 OFFICIAL_CLIENTS = [
     "Telegram Android",
     "Telegram iOS",
@@ -366,47 +367,75 @@ class Her:
             importlib.invalidate_caches()
             self._get_api_token()
 
-    async def save_client_session(
-        self,
-        client: CustomTelegramClient,
-    ):
+    def _create_client(
+        self, session: typing.Union[MemorySession, SQLiteSession]
+    ) -> CustomTelegramClient:
+        """Фабричный метод для создания клиента Telegram"""
+        return CustomTelegramClient(
+            session,
+            self.api_token.ID,
+            self.api_token.HASH,
+            connection=self.conn,
+            proxy=self.proxy,
+            connection_retries=None,
+            device_model=random.choice(OFFICIAL_CLIENTS),
+            system_version=generate_random_system_version(),
+            app_version=self._generate_app_version(),
+            lang_code="en",
+            system_lang_code="en-US",
+        )
+
+    def _generate_app_version(self) -> str:
+        """Генерация версии приложения"""
+        return (
+            f"{random.randint(8, 10)}.{random.randint(0, 9)}"
+            if isinstance(self, Her) and hasattr(self, "_initial_setup")
+            else f"{random.randint(8, 10)}.{random.randint(0, 9)}.{random.randint(0, 9)}"
+        )
+
+    async def _common_client_setup(self, client: CustomTelegramClient):
+        """Общая настройка клиента"""
+        await client.connect()
+        client.phone = "🏴‍☠️ +888###"
+        return client
+
+    async def save_client_session(self, client: CustomTelegramClient):
+        session_path = Path(BASE_DIR) / "her.session"
+        temp_session_path = session_path.with_suffix(".temp")
+
         try:
-            session = SQLiteSession(os.path.join(BASE_DIR, "her.session"))
-            session.set_dc(
+            temp_session = SQLiteSession(temp_session_path)
+            temp_session.set_dc(
                 client.session.dc_id,
                 client.session.server_address,
                 client.session.port,
             )
-            session.auth_key = client.session.auth_key
-            session.save()
-            await asyncio.sleep(0.5)
+            temp_session.auth_key = client.session.auth_key
+            temp_session.save()
 
-            client.session = session
+            await asyncio.sleep(0.1)
+            session_path.unlink(missing_ok=True)
+            temp_session_path.rename(session_path)
+
+            new_session = SQLiteSession(session_path)
+            await client.disconnect()
+            client.session = new_session
+            await self._common_client_setup(client)
+
             client.hikka_db = database.Database(client)
             await client.hikka_db.init()
-            await asyncio.sleep(0.5)
         except (sqlite3.OperationalError, OSError) as e:
-            logging.error(f"⚠️ Critical session error: {e}")
-            logging.info("Please restart the application manually.")
-            sys.exit(1)
+            logging.error(f"⚠️ Session save error: {e}")
+            temp_session_path.unlink(missing_ok=True)
+            raise
+        finally:
+            temp_session_path.unlink(missing_ok=True)
 
     async def _initial_setup(self) -> bool:
         try:
-            client = CustomTelegramClient(
-                MemorySession(),
-                self.api_token.ID,
-                self.api_token.HASH,
-                connection=self.conn,
-                proxy=self.proxy,
-                connection_retries=None,
-                device_model=random.choice(OFFICIAL_CLIENTS),
-                system_version=generate_random_system_version(),
-                app_version=f"{random.randint(8, 10)}.{random.randint(0, 9)}",
-                lang_code="en",
-                system_lang_code="en-US",
+            client = await self._common_client_setup(
+                self._create_client(MemorySession())
             )
-
-            await client.connect()
 
             await client.start(
                 phone=lambda: input("\n📱 Enter phone number: "),
@@ -414,87 +443,36 @@ class Her:
                 code_callback=lambda: input("📳 SMS/Telegram code: "),
             )
 
-            me = await client.get_me()
-            client.tg_id = me.id
-            logging.info("✅ Successfully authorized!")
             await self.save_client_session(client)
-            self.sessions = [client]
+            client.tg_id = (await client.get_me()).id
+            logging.info("✅ Successfully authorized!")
             return True
-        except (
-            PhoneNumberInvalidError,
-            PhoneCodeInvalidError,
-            FloodWaitError,
-            SessionPasswordNeededError,
-            AuthKeyInvalidError,
-            sqlite3.OperationalError,
-        ) as e:
-            logging.error(f"❌ Validation error: {e}")
-            return False
         except Exception as e:
-            logging.error(f"⚠️ Unexpected error: {repr(e)}")
+            logging.error(f"❌ Setup error: {repr(e)}")
             return False
         finally:
-            with contextlib.suppress(Exception):
-                await client.disconnect()
+            await client.disconnect()
 
     async def _init_clients(self) -> bool:
-        """Reads sessions from disk and initializes them as clients."""
-        if not self.sessions:
-            if not await self._initial_setup():
-                logging.error("❌ Authentication failed. Please try again.")
-                sys.exit(1)
-            if not self.sessions:
-                logging.error("❌ Session creation failed.")
-                sys.exit(1)
-        session = self.sessions[0]
-        client = None
+        session_path = Path(BASE_DIR) / "her.session"
 
+        if not session_path.exists():
+            return await self._initial_setup()
         try:
-            client = CustomTelegramClient(
-                session,
-                self.api_token.ID,
-                self.api_token.HASH,
-                connection=self.conn,
-                proxy=self.proxy,
-                connection_retries=None,
-                device_model=random.choice(OFFICIAL_CLIENTS),
-                system_version=generate_random_system_version(),
-                app_version=f"{random.randint(8, 10)}.{random.randint(0, 9)}.{random.randint(0, 9)}",
-                lang_code="en",
-                system_lang_code="en-US",
+            with sqlite3.connect(session_path) as conn:
+                conn.execute("SELECT * FROM sessions")
+            client = await self._common_client_setup(
+                self._create_client(SQLiteSession(session_path))
             )
-            await client.connect()
-            client.phone = "🏴‍☠️ +888###"
-        except (
-            sqlite3.OperationalError,
-            TypeError,
-        ) as e:
-            logging.error(
-                "⚠️ Session invalidated!"
-            )
-            if hasattr(session, "filename") and session.filename:
-                try:
-                    Path(session.filename).unlink(missing_ok=True)
-                    Path(f"{session.filename}.journal").unlink(missing_ok=True)
-                except Exception as cleanup_err:
-                    logging.error(f"Failed to cleanup session: {cleanup_err}")
-            sys.exit(1)
-        except (ValueError, ApiIdInvalidError):
-            logging.error("Invalid API ID.")
-            sys.exit(1)
-        except PhoneNumberInvalidError:
-            logging.error("Invalid phone number.")
-            sys.exit(1)
-        except InteractiveAuthRequired:
-            logging.error("Session expired.")
-            sys.exit(1)
-        except Exception as e:
-            logging.error(f"Unexpected error: {str(e)}")
-            sys.exit(1)
-        finally:
-            if client:
-                self.sessions = [client]
-        return True
+
+            if not await client.is_user_authorized():
+                raise AuthKeyInvalidError
+            self.sessions = [client]
+            return True
+        except (sqlite3.DatabaseError, AuthKeyInvalidError):
+            logging.error("⚠️ Invalid session, recreating...")
+            session_path.unlink(missing_ok=True)
+            return await self._init_clients()
 
     async def amain_wrapper(self, client: CustomTelegramClient):
         """Wrapper around amain"""
