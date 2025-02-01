@@ -422,6 +422,9 @@ class Her:
                     code_callback=lambda: input("📳 SMS/Telegram code: "),
                     max_attempts=3,
                 )
+                
+                me = await client.get_me()
+                client.tg_id = me.id
             except (PhoneNumberInvalidError, PhoneCodeInvalidError) as e:
                 logging.error(f"❌ Validation error: {e}")
                 return False
