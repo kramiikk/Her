@@ -404,7 +404,7 @@ class Her:
 
     async def save_client_session(self, client: CustomTelegramClient):
         session_path = Path(BASE_DIR) / "her.session"
-        temp_session_path = session_path.with_name(f"{session_path.name}.temp")
+        temp_session_path = session_path.with_name("her.temp.session")
         
         try:
             session_path.parent.mkdir(parents=True, exist_ok=True)
@@ -416,11 +416,13 @@ class Her:
                 client.session.port,
             )
             temp_session.auth_key = client.session.auth_key
-            temp_session.save()
-
-            temp_session_path.replace(session_path)
             
-            logging.info(f"Session saved: {session_path}")
+            temp_session.save()
+            if not temp_session_path.exists():
+                raise FileNotFoundError(f"Temp file {temp_session_path} not created!")
+                
+            temp_session_path.replace(session_path)
+            logging.info(f"Session rotated: {temp_session_path} → {session_path}")
             
             await client.disconnect()
             client.session = SQLiteSession(str(session_path))
@@ -430,12 +432,13 @@ class Her:
             await client.hikka_db.init()
             
         except Exception as e:
-            logging.error(f"Error: {repr(e)}")
+            logging.error(f"Session save failed: {repr(e)}")
             if temp_session_path.exists():
                 temp_session_path.unlink(missing_ok=True)
             raise
         finally:
-            temp_session_path.unlink(missing_ok=True)
+            if temp_session_path.exists():
+                temp_session_path.unlink(missing_ok=True)
 
     async def _initial_setup(self) -> bool:
         max_attempts = 3
