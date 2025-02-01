@@ -341,7 +341,6 @@ class Her:
             return
 
         try:
-            # Проверка целостности SQLite файла
             with contextlib.closing(sqlite3.connect(session_path)) as conn:
                 integrity_check = conn.execute("PRAGMA quick_check").fetchone()
                 if integrity_check[0] != "ok":
