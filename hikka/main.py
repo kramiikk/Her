@@ -73,6 +73,7 @@ with contextlib.suppress(Exception):
 
 
 
+
 OFFICIAL_CLIENTS = [
     "Telegram Android",
     "Telegram iOS",
@@ -315,10 +316,10 @@ class Her:
         self.proxy, self.conn = None, ConnectionTcpFull
 
     def _read_sessions(self):
-        """Загружаем только одну сессию"""
+        """Load only one session"""
         session_path = os.path.join(BASE_DIR, "her.session")
         if os.path.exists(session_path):
-            self.sessions = [SQLiteSession(session_path)]
+            self.sessions = [SQLiteSession(str(session_path))]
         else:
             self.sessions = []
 
@@ -410,7 +411,7 @@ class Her:
             temp_dir.mkdir(exist_ok=True)
             temp_session_path = temp_dir / "her.session.temp"
 
-            temp_session = SQLiteSession(temp_session_path)
+            temp_session = SQLiteSession(str(temp_session_path))
             temp_session.set_dc(
                 client.session.dc_id,
                 client.session.server_address,
@@ -427,7 +428,7 @@ class Her:
             )
 
             await client.disconnect()
-            client.session = SQLiteSession(session_path)
+            client.session = SQLiteSession(str(session_path))
             await self._common_client_setup(client)
 
             client.hikka_db = database.Database(client)
@@ -472,7 +473,7 @@ class Her:
         if not session_path.exists():
             return await self._initial_setup()
         try:
-            conn = sqlite3.connect(session_path)
+            conn = sqlite3.connect(str(session_path))
             cursor = conn.execute("PRAGMA integrity_check")
             integrity_check = cursor.fetchone()
             if integrity_check[0] != "ok":
@@ -484,7 +485,7 @@ class Her:
             ):
                 raise sqlite3.DatabaseError("Invalid table structure")
             client = await self._common_client_setup(
-                self._create_client(SQLiteSession(session_path))
+                self._create_client(SQLiteSession(str(session_path)))
             )
 
             if not await client.is_user_authorized():
