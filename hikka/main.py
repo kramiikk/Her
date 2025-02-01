@@ -404,7 +404,7 @@ class Her:
 
     async def save_client_session(self, client: CustomTelegramClient):
         session_path = Path(BASE_DIR) / "her.session"
-        temp_session_path = session_path.with_name("her.session.temp")
+        temp_session_path = session_path.with_name(f"{session_path.name}.temp")
         
         try:
             session_path.parent.mkdir(parents=True, exist_ok=True)
@@ -416,17 +416,11 @@ class Her:
                 client.session.port,
             )
             temp_session.auth_key = client.session.auth_key
-            
             temp_session.save()
-            temp_session.conn.commit()
-            temp_session.conn.close()
-            
+
             temp_session_path.replace(session_path)
             
-            logging.info(
-                f"Session saved: {session_path} "
-                f"(size: {session_path.stat().st_size} bytes)"
-            )
+            logging.info(f"Session saved: {session_path}")
             
             await client.disconnect()
             client.session = SQLiteSession(str(session_path))
@@ -434,14 +428,14 @@ class Her:
             
             client.hikka_db = database.Database(client)
             await client.hikka_db.init()
-        except (sqlite3.OperationalError, OSError) as e:
-            logging.error(f"⚠️ Session save error: {e}")
-            if temp_session_path.exists():
-                temp_session_path.unlink()
-            raise
+            
         except Exception as e:
-            logging.error(f"Unexpected error: {e}")
+            logging.error(f"Error: {repr(e)}")
+            if temp_session_path.exists():
+                temp_session_path.unlink(missing_ok=True)
             raise
+        finally:
+            temp_session_path.unlink(missing_ok=True)
 
     async def _initial_setup(self) -> bool:
         max_attempts = 3
