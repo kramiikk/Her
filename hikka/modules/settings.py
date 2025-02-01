@@ -20,20 +20,18 @@ def hash_msg(message):
 async def read_stream(func: callable, stream, delay: float):
     buffer = []
     last_send = time.time()
-    
+
     while True:
         chunk = await stream.read(2048)
         if not chunk:
             break
-            
         decoded = chunk.decode(errors="replace").replace("\r\n", "\n")
         buffer.append(decoded)
-        
+
         if "\n" in decoded or time.time() - last_send > 0.8:
             await func("".join(buffer))
             buffer.clear()
             last_send = time.time()
-    
     if buffer:
         await func("".join(buffer))
 
@@ -243,7 +241,9 @@ class SudoMessageEditor(MessageEditor):
 
 class RawMessageEditor(MessageEditor):
     def __init__(self, message, command, request_message):
-        super().__init__(message=message, command=command, request_message=request_message)
+        super().__init__(
+            message=message, command=command, request_message=request_message
+        )
         self._buffer = []
         self._last_flush = 0
 
@@ -251,7 +251,6 @@ class RawMessageEditor(MessageEditor):
         content = "\n".join(self._buffer).strip()
         if not content:
             return
-            
         if self.rc is None:
             progress = self._get_progress()
             max_len = 4096 - len(progress) - 50
@@ -261,7 +260,6 @@ class RawMessageEditor(MessageEditor):
             max_len = 4096 - 50
             truncated = self._truncate_output(content, max_len, keep_edges=True)
             text = f"<pre>{truncated}</pre>"
-        
         if time.time() - self._last_flush > 1 or self.rc is not None:
             await utils.answer(self.message, text)
             self._last_flush = time.time()
@@ -270,13 +268,12 @@ class RawMessageEditor(MessageEditor):
         text = utils.escape_html(text)
         if len(text) <= max_len:
             return text
-            
         if keep_edges:
             edge_len = max(200, (max_len - 100) // 2)
             return (
-                text[:edge_len].strip() + 
-                "\n\n... 🔻 Output truncated 🔻 ...\n\n" + 
-                text[-edge_len:].strip()
+                text[:edge_len].strip()
+                + "\n\n... 🔻 Output truncated 🔻 ...\n\n"
+                + text[-edge_len:].strip()
             )
         return text[:max_len].strip()
 
@@ -531,13 +528,11 @@ class CoreMod(loader.Module):
 
         await editor.cmd_ended(rc)
         del self.active_processes[hash_msg(editor.message)]
-        
+
     def get_sub(self, mod):
         """Returns a dictionary of module attributes that don't start with _"""
         return {
-            name: getattr(mod, name)
-            for name in dir(mod)
-            if not name.startswith("_")
+            name: getattr(mod, name) for name in dir(mod) if not name.startswith("_")
         }
 
     async def lookup(self, name):
@@ -568,7 +563,7 @@ class CoreMod(loader.Module):
             "m": message,
             "lookup": self.lookup,
             "self": self,
-            "db": self.db
+            "db": self.db,
         }
 
     def get_attrs(self, module, prefix=""):
