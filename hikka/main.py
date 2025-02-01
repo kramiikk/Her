@@ -392,19 +392,6 @@ class Her:
             logging.info("Please restart the application manually.")
             sys.exit(1)
 
-    async def _phone_login(self, client):
-        try:
-            await client.start(
-                phone=lambda: input("Phone: "),
-                password=lambda: getpass("2FA Password: "),
-                code_callback=lambda: input("Code: "),
-                max_attempts=3,
-            )
-            return True
-        except PhoneCodeInvalidError:
-            logging.error("Invalid code")
-        return False
-
     async def _initial_setup(self, attempt: int = 1) -> bool:
         max_attempts = 3
         try:
@@ -434,7 +421,6 @@ class Her:
                     password=lambda: getpass.getpass("🔒 2FA password (if set): "),
                     code_callback=lambda: input("📳 SMS/Telegram code: "),
                     max_attempts=3,
-                    timeout=20,
                 )
             except (PhoneNumberInvalidError, PhoneCodeInvalidError) as e:
                 logging.error(f"❌ Validation error: {e}")
