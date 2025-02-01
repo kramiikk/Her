@@ -25,10 +25,7 @@ from pathlib import Path
 
 import hikkatl
 from hikkatl import events
-from hikkatl.errors import (
-    AuthKeyInvalidError,
-    NetworkError,
-)
+from hikkatl.errors import AuthKeyInvalidError
 from hikkatl.network.connection import (
     ConnectionTcpFull,
     ConnectionTcpMTProxyRandomizedIntermediate,
@@ -399,7 +396,7 @@ class Her:
             await client.connect()
             client.phone = "🏴‍☠️ +888###"
             return client
-        except (OSError, NetworkError) as e:
+        except OSError as e:
             logging.error(f"Connection error: {e}")
             await client.disconnect()
             raise
