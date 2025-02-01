@@ -286,13 +286,34 @@ class Her:
             BASE_DIR = self.arguments.data_root
             BASE_PATH = Path(BASE_DIR)
             CONFIG_PATH = BASE_PATH / "config.json"
-        self.loop = asyncio.get_event_loop()
-
-        self.ready = asyncio.Event()
+        
+        self._init_session_structure()
+        
         self.sessions = []
         self._read_sessions()
+        
+        self.loop = asyncio.get_event_loop()
+        self.ready = asyncio.Event()
         self._get_api_token()
         self._get_proxy()
+        
+    def _init_session_structure(self):
+        """Создаёт необходимую файловую структуру"""
+        session_dir = Path(BASE_DIR)
+        session_dir.mkdir(parents=True, exist_ok=True)
+        
+        session_file = session_dir / "her.session"
+        if not session_file.exists():
+            with contextlib.closing(sqlite3.connect(session_file)) as conn:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS sessions (
+                        dc_id INTEGER PRIMARY KEY,
+                        server_address TEXT,
+                        port INTEGER,
+                        auth_key BLOB
+                    )
+                """)
+                conn.commit()
 
     def _get_proxy(self):
         """
@@ -316,12 +337,24 @@ class Her:
         self.proxy, self.conn = None, ConnectionTcpFull
 
     def _read_sessions(self):
-        """Load only one session"""
-        session_path = os.path.join(BASE_DIR, "her.session")
-        if os.path.exists(session_path):
-            self.sessions = [SQLiteSession(str(session_path))]
-        else:
-            self.sessions = []
+        """Загружает сессии с улучшенной обработкой ошибок"""
+        session_path = Path(BASE_DIR) / "her.session"
+        try:
+            if session_path.exists():
+                with contextlib.closing(sqlite3.connect(session_path)) as conn:
+                    conn.execute("PRAGMA integrity_check")
+                    conn.execute("SELECT * FROM sessions LIMIT 1")
+                
+                self.sessions = [SQLiteSession(str(session_path))]
+                logging.debug(f"Session loaded: {session_path}")
+            else:
+                logging.warning("Session file not found after structure init")
+                self.sessions = []
+        except sqlite3.DatabaseError as e:
+            logging.error(f"Invalid session: {e}, recreating...")
+            session_path.unlink(missing_ok=True)
+            self._init_session_structure()
+            self._read_sessions()
 
     def _get_api_token(self):
         """Get API Token from disk or environment"""
@@ -458,6 +491,8 @@ class Her:
                 client.tg_id = me.id
                 await self.save_client_session(client)
 
+                # Добавляем обновление списка сессий
+                self._read_sessions()  # <-- Важное исправление
                 logging.info("✅ Successfully authorized!")
                 return True
             except Exception as e:
@@ -468,36 +503,23 @@ class Her:
         return False
 
     async def _init_clients(self) -> bool:
-        session_path = Path(BASE_DIR) / "her.session"
-
-        if not session_path.exists():
+        """Инициализация клиентов с защитой от IndexError"""
+        if not self.sessions:
+            logging.info("Starting initial setup...")
             return await self._initial_setup()
+            
         try:
-            conn = sqlite3.connect(str(session_path))
-            cursor = conn.execute("PRAGMA integrity_check")
-            integrity_check = cursor.fetchone()
-            if integrity_check[0] != "ok":
-                raise sqlite3.DatabaseError("Database integrity check failed")
-            cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
-            tables = {row[0] for row in cursor.fetchall()}
-            if not {"sessions", "Entities", "SentFiles", "UpdateState"}.issubset(
-                tables
-            ):
-                raise sqlite3.DatabaseError("Invalid table structure")
             client = await self._common_client_setup(
-                self._create_client(SQLiteSession(str(session_path)))
+                self._create_client(self.sessions[0])
             )
-
+            
             if not await client.is_user_authorized():
                 raise AuthKeyInvalidError
-            self.sessions = [client]
+                
             return True
-        except (sqlite3.DatabaseError, AuthKeyInvalidError) as e:
-            logging.error(f"⚠️ Invalid session ({e}), recreating...")
-            session_path.unlink(missing_ok=True)
-            return await self._init_clients()
-        finally:
-            conn.close()
+        except AuthKeyInvalidError:
+            logging.error("Session expired, starting re-auth...")
+            return await self._initial_setup()
 
     async def amain_wrapper(self, client: CustomTelegramClient):
         """Wrapper around amain"""
