@@ -407,9 +407,7 @@ class Her:
         temp_session_path = session_path.with_suffix(".temp")
 
         try:
-            temp_dir = Path(BASE_DIR) / "temp"
-            temp_dir.mkdir(exist_ok=True)
-            temp_session_path = temp_dir / "her.session.temp"
+            session_path.parent.mkdir(parents=True, exist_ok=True)
 
             temp_session = SQLiteSession(str(temp_session_path))
             temp_session.set_dc(
