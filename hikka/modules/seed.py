@@ -293,10 +293,9 @@ class RawMessageEditor(MessageEditor):
 class CoreMod(loader.Module):
     strings = {
         "name": "AdvancedExecutor",
-        "no_code": "❌ Please provide command: {}cmd [command/code]",
-        "executing": "⚡ Executing...",
-        "python_executing": "🐍 Executing Python code...",
-        "terminal_executing": "💻 Executing terminal command...",
+        "executing": "🧬 Executing...",
+        "python_executing": "🐍 Executing...",
+        "terminal_executing": "💻 Executing...",
     }
 
     def __init__(self):
@@ -454,8 +453,7 @@ class CoreMod(loader.Module):
         command = utils.get_args_raw(message)
         if not command:
             return await utils.answer(
-                message, self.strings["no_code"].format(self.get_prefix())
-            )
+                message, "💬")
         if self.is_shell_command(command):
             await utils.answer(message, self.strings["terminal_executing"])
             await self._run_shell(message, command)
