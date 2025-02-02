@@ -331,7 +331,7 @@ class AdvancedExecutorMod(loader.Module):
         ]
         if any(re.search(pattern, command) for pattern in forbidden_patterns):
             raise ValueError(self.strings["forbidden_command"])
-        if re.match(r"^(?:[\w/-]+\.\w+|\.[/\\]|/|~/)", command):
+        if re.match(r"^(?:[\w/-]+\.\w+|\.[/\\]|/|~/|[\w-]+\s)", command):
             return True
         operators = {"|", "||", "&&", ">", ">>", "<", "<<", "&", ";"}
         in_quote = False
