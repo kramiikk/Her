@@ -62,6 +62,7 @@ with contextlib.suppress(Exception):
 
 
 
+
 OFFICIAL_CLIENTS = [
     "Telegram Android",
     "Telegram Desktop",
@@ -211,6 +212,7 @@ class Her:
             self.loop = asyncio.get_event_loop()
             self.ready = asyncio.Event()
             self._get_api_token()
+            self.clients = []
             if self.arguments.port is None:
                 self.arguments.port = gen_port()
         except Exception as e:
@@ -371,6 +373,7 @@ class Her:
 
             if not await client.is_user_authorized():
                 raise SessionExpiredError  # Use custom exception
+            self.clients.append(client)  # Store the client instance
             return True
         except (AuthKeyInvalidError, SessionExpiredError):
             logging.error("Session invalid or expired, starting re-auth...")
@@ -481,7 +484,7 @@ class Her:
                 return
             self.loop.set_exception_handler(self._exception_handler)
 
-            await self.amain_wrapper(self.sessions[0])
+            await self.amain_wrapper(self.clients[0])
         except Exception as e:
             logging.critical(f"Critical error: {e}")
             sys.exit(1)
