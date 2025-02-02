@@ -61,6 +61,7 @@ with contextlib.suppress(Exception):
 
 
 
+
 OFFICIAL_CLIENTS = [
     "Telegram Android",
     "Telegram Desktop",
@@ -179,6 +180,7 @@ def parse_arguments() -> dict:
     )
     arguments = parser.parse_args()
     return arguments
+
 
 class SessionExpiredError(Exception):
     """Raised when session needs re-authentication"""
@@ -495,8 +497,6 @@ class Her:
     def _shutdown_handler(self):
         """Shutdown handler"""
         logging.info("Bye")
-        if self.sessions:
-            self.sessions[0].disconnect()
         sys.exit(0)
 
     def main(self):
