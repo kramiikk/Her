@@ -26,10 +26,6 @@ from pathlib import Path
 import hikkatl
 from hikkatl import events
 from hikkatl.errors import AuthKeyInvalidError
-from hikkatl.network.connection import (
-    ConnectionTcpFull,
-    ConnectionTcpMTProxyRandomizedIntermediate,
-)
 from hikkatl.sessions import MemorySession, SQLiteSession
 
 
@@ -49,14 +45,8 @@ BASE_DIR = (
 BASE_PATH = Path(BASE_DIR)
 CONFIG_PATH = BASE_PATH / "config.json"
 
-IS_CODESPACES = "CODESPACES" in os.environ
 IS_DOCKER = "DOCKER" in os.environ
 IS_RAILWAY = "RAILWAY" in os.environ
-IS_GOORM = "GOORM" in os.environ
-IS_ORACLE = "ORACLE_OS" in os.environ
-IS_AWS = "AWS_OS" in os.environ
-IS_SERV00 = "serv00" in socket.gethostname()
-IS_AEZA = "aeza" in socket.gethostname()
 IS_USERLAND = "userland" in os.environ.get("USER", "")
 IS_WSL = False
 with contextlib.suppress(Exception):
@@ -68,18 +58,10 @@ with contextlib.suppress(Exception):
 
 
 
-
-
-
-
-
-
 OFFICIAL_CLIENTS = [
     "Telegram Android",
-    "Telegram iOS",
     "Telegram Desktop",
     "Telegram Web",
-    "Telegram macOS",
     "Telegram Win",
     "Telegram Linux",
 ]
@@ -99,19 +81,9 @@ def generate_random_system_version():
             "arm64-v8a",
         ),
         (
-            # iOS
-            lambda: f"{random.randint(15, 17)}.{random.randint(0, 6)}.{random.randint(1, 3)}",
-            "Apple ARM",
-        ),
-        (
             # Windows
-            lambda: f"10 Build {random.randint(19000, 22621)}",
+            lambda: f"11 Build {random.randint(19000, 22621)}",
             "x64",
-        ),
-        (
-            # macOS
-            lambda: f"13.{random.randint(0, 4)}",
-            "x86_64",
         ),
         (
             # Linux
@@ -174,12 +146,10 @@ def gen_port(cfg: str = "port", no8080: bool = False) -> int:
     """Надежная генерация свободного порта"""
     if "DOCKER" in os.environ and not no8080:
         return 8080
-        
     if port := get_config_key(cfg):
         return port
-
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.bind(('', 0))
+    sock.bind(("", 0))
     port = sock.getsockname()[1]
     sock.close()
     return port
@@ -200,60 +170,10 @@ def parse_arguments() -> dict:
     )
     parser.add_argument("--phone", "-p", action="append")
     parser.add_argument(
-        "--data-root",
-        dest="data_root",
-        default="",
-        help="Root path to store session files in",
-    )
-    parser.add_argument(
-        "--no-auth",
-        dest="no_auth",
-        action="store_true",
-        help="Disable authentication and API token input, exitting if needed",
-    )
-    parser.add_argument(
-        "--proxy-host",
-        dest="proxy_host",
-        action="store",
-        help="MTProto proxy host, without port",
-    )
-    parser.add_argument(
-        "--proxy-port",
-        dest="proxy_port",
-        action="store",
-        type=int,
-        help="MTProto proxy port",
-    )
-    parser.add_argument(
-        "--proxy-secret",
-        dest="proxy_secret",
-        action="store",
-        help="MTProto proxy secret",
-    )
-    parser.add_argument(
         "--root",
         dest="disable_root_check",
         action="store_true",
         help="Disable `force_insecure` warning",
-    )
-    parser.add_argument(
-        "--sandbox",
-        dest="sandbox",
-        action="store_true",
-        help="Die instead of restart",
-    )
-    parser.add_argument(
-        "--proxy-pass",
-        dest="proxy_pass",
-        action="store_true",
-        help="Open proxy pass tunnel on start (not needed on setup)",
-    )
-    parser.add_argument(
-        "--no-tty",
-        dest="tty",
-        action="store_false",
-        default=True,
-        help="Do not print colorful output using ANSI escapes",
     )
     arguments = parser.parse_args()
     return arguments
@@ -275,29 +195,23 @@ class Her:
         self.base_dir = self._get_base_dir()
         self.base_path = Path(self.base_dir)
         self.config_path = self.base_path / "config.json"
-        
-        if self.arguments.data_root:
-            self.base_dir = self.arguments.data_root
-            self.base_path = Path(self.base_dir)
-            self.config_path = self.base_path / "config.json"
-        
+
         self._init_session_structure()
-        
+
         self.sessions = []
         self._read_sessions()
-        
+
         self.loop = asyncio.get_event_loop()
         self.ready = asyncio.Event()
         self._get_api_token()
-        self._get_proxy()
-        
+
     def _get_base_dir(self):
         return (
             "/data"
             if "DOCKER" in os.environ
             else os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
         )
-        
+
     def _init_session_structure(self):
         """Инициализация файла сессии через Telethon"""
         session_path = Path(BASE_DIR) / "her.session"
@@ -310,50 +224,27 @@ class Her:
                 logging.error(f"Session init failed: {e}")
                 raise
 
-    def _get_proxy(self):
-        """
-        Get proxy tuple from --proxy-host, --proxy-port and --proxy-secret
-        and connection to use (depends on proxy - provided or not)
-        """
-        if (
-            self.arguments.proxy_host is not None
-            and self.arguments.proxy_port is not None
-            and self.arguments.proxy_secret is not None
-        ):
-            self.proxy, self.conn = (
-                (
-                    self.arguments.proxy_host,
-                    self.arguments.proxy_port,
-                    self.arguments.proxy_secret,
-                ),
-                ConnectionTcpMTProxyRandomizedIntermediate,
-            )
-            return
-        self.proxy, self.conn = None, ConnectionTcpFull
-
     def _read_sessions(self):
         """Улучшенная загрузка сессий с проверкой целостности"""
         session_path = Path(BASE_DIR) / "her.session"
         self.sessions = []
-        
+
         if not session_path.exists():
             logging.warning("Session file not found")
             return
-
         try:
             with contextlib.closing(sqlite3.connect(session_path)) as conn:
                 integrity_check = conn.execute("PRAGMA quick_check").fetchone()
                 if integrity_check[0] != "ok":
-                    raise sqlite3.DatabaseError(f"Database corrupted: {integrity_check[0]}")
-
+                    raise sqlite3.DatabaseError(
+                        f"Database corrupted: {integrity_check[0]}"
+                    )
             session = SQLiteSession(str(session_path))
-            
+
             if not session.auth_key:
                 raise AuthKeyInvalidError("Empty auth key")
-                
             self.sessions.append(session)
             logging.info(f"Loaded session from {session_path}")
-            
         except (sqlite3.DatabaseError, AuthKeyInvalidError) as e:
             logging.error(f"Invalid session: {e}")
             self._handle_corrupted_session(session_path)
@@ -406,8 +297,6 @@ class Her:
     async def _get_token(self):
         """Reads or waits for user to enter API credentials"""
         while self.api_token is None:
-            if self.arguments.no_auth:
-                return
             configurator.api_config()
             importlib.invalidate_caches()
             self._get_api_token()
@@ -465,22 +354,20 @@ class Her:
         try:
             session_path = self.base_path / "her.session"
             session = SQLiteSession(str(session_path))
-            
+
             client = self._create_client(session)
             await client.connect()
-            
+
             if not await client.is_user_authorized():
                 logging.info("Starting authentication...")
                 await client.start(
                     phone=lambda: input("Phone: "),
                     password=lambda: getpass.getpass("2FA: "),
-                    code_callback=lambda: input("Code: ")
+                    code_callback=lambda: input("Code: "),
                 )
-            
             client.session.save()
             self._read_sessions()
             return True
-            
         except Exception as e:
             logging.error(f"Setup failed: {e}")
             return False
@@ -493,15 +380,13 @@ class Her:
         if not self.sessions:
             logging.info("Starting initial setup...")
             return await self._initial_setup()
-            
         try:
             client = await self._common_client_setup(
                 self._create_client(self.sessions[0])
             )
-            
+
             if not await client.is_user_authorized():
                 raise AuthKeyInvalidError
-                
             return True
         except AuthKeyInvalidError:
             logging.error("Session expired, starting re-auth...")
@@ -603,9 +488,8 @@ class Her:
 
             if not await self._init_clients():
                 return
-                
             self.loop.set_exception_handler(self._exception_handler)
-            
+
             await self.amain_wrapper(self.sessions[0])
         except Exception as e:
             logging.critical(f"Critical error: {e}")
@@ -616,7 +500,7 @@ class Her:
         logging.error(
             "Event loop error: %s (message: %s)",
             context.get("exception"),
-            context["message"]
+            context["message"],
         )
 
     def _shutdown_handler(self):
