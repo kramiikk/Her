@@ -198,8 +198,6 @@ class Her:
             self.base_path = Path(self.base_dir)
             self.config_path = self.base_path / "config.json"
 
-            self._init_session_structure()
-
             self.sessions = []
             self._read_sessions()
 
@@ -211,25 +209,12 @@ class Her:
         except Exception as e:
             logging.critical(f"Failed to initialize Her instance: {e}")
             raise
-
     def _get_base_dir(self):
         return (
             "/data"
             if "DOCKER" in os.environ
             else os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
         )
-
-    def _init_session_structure(self):
-        """Инициализация файла сессии через Telethon"""
-        session_path = Path(BASE_DIR) / "her.session"
-        if not session_path.exists():
-            try:
-                session = SQLiteSession(str(session_path))
-                session.save()
-                logging.info("Initialized new session file using Telethon")
-            except Exception as e:
-                logging.error(f"Session init failed: {e}")
-                raise
 
     def _read_sessions(self):
         """Улучшенная загрузка сессий с проверкой целостности"""
@@ -264,7 +249,7 @@ class Her:
         logging.warning("Removing corrupted session...")
         try:
             session_path.unlink(missing_ok=True)
-            self._init_session_structure()
+            # Удален вызов _init_session_structure()
         except Exception as e:
             logging.error(f"Failed to reset session: {e}")
             raise RuntimeError("Session recovery failed") from e
@@ -361,6 +346,9 @@ class Her:
         try:
             session_path = self.base_path / "her.session"
             session = SQLiteSession(str(session_path))
+
+            if not hasattr(self, 'api_token') or not self.api_token:
+                await self._get_token()
 
             client = self._create_client(session)
             await client.connect()
