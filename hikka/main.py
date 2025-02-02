@@ -58,6 +58,7 @@ with contextlib.suppress(Exception):
 
 
 
+
 OFFICIAL_CLIENTS = [
     "Telegram Android",
     "Telegram Desktop",
@@ -143,16 +144,14 @@ def save_config_key(key: str, value: str) -> bool:
 
 
 def gen_port(cfg: str = "port", no8080: bool = False) -> int:
-    """Надежная генерация свободного порта"""
-    if "DOCKER" in os.environ and not no8080:
+    """Генерация порта с проверкой занятости"""
+    if not no8080 and "DOCKER" in os.environ:
         return 8080
-    if port := get_config_key(cfg):
-        return port
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.bind(("", 0))
-    port = sock.getsockname()[1]
-    sock.close()
-    return port
+    if (cfg_port := get_config_key(cfg)) is not None:
+        return int(cfg_port)
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("", 0))
+        return s.getsockname()[1]
 
 
 def parse_arguments() -> dict:
@@ -165,8 +164,9 @@ def parse_arguments() -> dict:
         "--port",
         dest="port",
         action="store",
-        default=gen_port(),
+        default=None,
         type=int,
+        help="Порт для веб-сервера (по умолчанию: автоматический выбор)",
     )
     parser.add_argument("--phone", "-p", action="append")
     parser.add_argument(
@@ -192,18 +192,25 @@ class Her:
     """Main userbot instance, which can handle multiple clients"""
 
     def __init__(self):
-        self.base_dir = self._get_base_dir()
-        self.base_path = Path(self.base_dir)
-        self.config_path = self.base_path / "config.json"
+        try:
+            self.arguments = parse_arguments()
+            self.base_dir = self._get_base_dir()
+            self.base_path = Path(self.base_dir)
+            self.config_path = self.base_path / "config.json"
 
-        self._init_session_structure()
+            self._init_session_structure()
 
-        self.sessions = []
-        self._read_sessions()
+            self.sessions = []
+            self._read_sessions()
 
-        self.loop = asyncio.get_event_loop()
-        self.ready = asyncio.Event()
-        self._get_api_token()
+            self.loop = asyncio.get_event_loop()
+            self.ready = asyncio.Event()
+            self._get_api_token()
+            if self.arguments.port is None:
+                self.arguments.port = gen_port()
+        except Exception as e:
+            logging.critical(f"Failed to initialize Her instance: {e}")
+            raise
 
     def _get_base_dir(self):
         return (
