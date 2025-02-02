@@ -320,7 +320,18 @@ class AdvancedExecutorMod(loader.Module):
         }
 
     def is_shell_command(self, command: str) -> bool:
-        command = command.strip().lower()
+        command = command.strip()
+        if not command:
+            return False
+
+        python_keywords = [
+            "from", "import", "def ", "class ", "async def", 
+            "print(", "return", "if ", "for ", "while ", "try:", 
+            "except", "raise", "with ", "async with", "await "
+        ]
+        if any(command.startswith(keyword) or keyword in command for keyword in python_keywords):
+            return False
+
         forbidden_patterns = [
             r"\brm -rf /\b",
             r"\bdd if=\b",
@@ -331,9 +342,12 @@ class AdvancedExecutorMod(loader.Module):
         ]
         if any(re.search(pattern, command) for pattern in forbidden_patterns):
             raise ValueError(self.strings["forbidden_command"])
+
+        operators = {"|", "||", "&&", ">", ">>", "<", "<<", "&", ";"}
+
         if re.match(r"^(?:[\w/-]+\.\w+|\.[/\\]|/|~/|[\w-]+\s)", command):
             return True
-        operators = {"|", "||", "&&", ">", ">>", "<", "<<", "&", ";"}
+
         in_quote = False
         current_quote = None
         for i, char in enumerate(command):
@@ -354,6 +368,7 @@ class AdvancedExecutorMod(loader.Module):
                     next_char.isalnum() or next_char in " \t"
                 ):
                     return True
+
         return False
 
     @loader.command()
