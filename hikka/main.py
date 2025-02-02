@@ -350,31 +350,40 @@ class Her:
                 )
             client.session.save()
             self._read_sessions()
-            return True
+            return client
         except Exception as e:
             logging.error(f"Setup failed: {e}")
-            return False
+            return None
         finally:
             if client:
                 await client.disconnect()
 
     async def _init_clients(self) -> bool:
-        """Initialize clients with proper exception handling"""
+        """Initialize clients and return success status"""
         if not self.sessions:
             logging.info("Starting initial setup...")
-            return await self._initial_setup()
+            client = await self._initial_setup()
+            if client:
+                self.clients.append(client)
+                return True
+            return False
+
         try:
             client = await self._common_client_setup(
                 self._create_client(self.sessions[0])
             )
-
             if not await client.is_user_authorized():
                 raise SessionExpiredError
+
             self.clients.append(client)
             return True
         except (AuthKeyInvalidError, SessionExpiredError):
-            logging.error("Session invalid or expired, starting re-auth...")
-            return await self._initial_setup()
+            logging.error("Session invalid, attempting re-auth...")
+            client = await self._initial_setup()
+            if client:
+                self.clients.append(client)
+                return True
+            return False
 
     async def amain_wrapper(self, client: CustomTelegramClient):
         """Wrapper around amain"""
@@ -477,9 +486,9 @@ class Her:
             save_config_key("port", self.arguments.port)
             await self._get_token()
 
-            if not await self._init_clients():
-                return
-            self.loop.set_exception_handler(self._exception_handler)
+            if not await self._init_clients() or not self.clients:
+                logging.critical("No valid client initialization")
+                sys.exit(1)
 
             await self.amain_wrapper(self.clients[0])
         except Exception as e:
