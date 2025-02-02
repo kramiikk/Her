@@ -4,7 +4,7 @@ import re
 import time
 import sys
 import traceback
-from .. import loader, utils
+from .. import loader, main, utils
 import hikkatl
 
 from meval import meval
@@ -294,6 +294,31 @@ class AdvancedExecutorMod(loader.Module):
         self.client = client
         self.db = db
 
+    async def _get_ctx(self, message):
+        reply = await message.get_reply_message()
+        return {
+            "message": message,
+            "chat": message.chat,
+            "client": self.client,
+            "reply": reply,
+            "r": reply,
+            **self.get_sub(hikkatl.tl.types),
+            **self.get_sub(hikkatl.tl.functions),
+            "event": message,
+            "chat": message.to_id,
+            "hikkatl": hikkatl,
+            "telethon": hikkatl,
+            "utils": utils,
+            "main": main,
+            "loader": loader,
+            "f": hikkatl.tl.functions,
+            "c": self.client,
+            "m": message,
+            "lookup": self.lookup,
+            "self": self,
+            "db": self.db,
+        }
+
     def is_shell_command(self, command: str) -> bool:
         command = command.strip().lower()
         forbidden_patterns = [
@@ -358,6 +383,7 @@ class AdvancedExecutorMod(loader.Module):
             await utils.answer(message, f"⚠️ Error: {str(e)}")
 
     async def _run_python(self, code, message):
+        original_stdout = sys.stdout
         result = sys.stdout = StringIO()
         try:
             res = await meval(code, globals(), **await self._get_ctx(message))
@@ -367,11 +393,14 @@ class AdvancedExecutorMod(loader.Module):
             return stdout, res, False
         except Exception:
             return traceback.format_exc(), None, True
+        finally:
+            sys.stdout = original_stdout
 
     async def _run_shell(self, message, command):
         is_sudo = command.strip().startswith("sudo ")
         editor = None
         proc = None
+        key = hash_msg(message)
 
         try:
             if is_sudo:
@@ -379,7 +408,6 @@ class AdvancedExecutorMod(loader.Module):
                 editor = SudoMessageEditor(message, command, message)
             else:
                 editor = RawMessageEditor(message, command, message)
-
             proc = await asyncio.create_subprocess_shell(
                 command,
                 stdin=asyncio.subprocess.PIPE,
@@ -387,11 +415,11 @@ class AdvancedExecutorMod(loader.Module):
                 stderr=asyncio.subprocess.PIPE,
                 cwd=utils.get_base_dir(),
             )
-            self.active_processes[hash_msg(message)] = proc
+
+            self.active_processes[key] = proc
 
             if is_sudo:
                 editor.update_process(proc)
-
             await asyncio.wait_for(
                 asyncio.gather(
                     read_stream(editor.update_stdout, proc.stdout),
@@ -399,7 +427,7 @@ class AdvancedExecutorMod(loader.Module):
                     self._wait_process(proc, editor),
                     editor.animate_progress(),
                 ),
-                timeout=300
+                timeout=300,
             )
         except asyncio.TimeoutError:
             if proc:
@@ -409,7 +437,7 @@ class AdvancedExecutorMod(loader.Module):
                 except ProcessLookupError:
                     pass
                 finally:
-                    del self.active_processes[hash_msg(message)]
+                    self.active_processes.pop(key, None)
                     await editor.cmd_ended(-1)
         except asyncio.CancelledError:
             if proc:
@@ -424,20 +452,19 @@ class AdvancedExecutorMod(loader.Module):
                         await proc.stdin.wait_closed()
                     except Exception as e:
                         logger.debug(f"Error closing stdin: {e}")
-
                 try:
                     await proc.wait()
                 except ProcessLookupError:
                     pass
                 except Exception as e:
                     logger.debug(f"Process wait error: {e}")
-
-                del self.active_processes[hash_msg(message)]
+                self.active_processes.pop(key, None)
 
     async def _wait_process(self, proc, editor):
         rc = await proc.wait()
         await editor.cmd_ended(rc)
-        del self.active_processes[hash_msg(editor.message)]
+        key = hash_msg(editor.request_message)
+        self.active_processes.pop(key, None)
 
     async def _format_result(self, message, code, result, output, error):
         duration = time.time() - self.start_time
@@ -470,9 +497,10 @@ class AdvancedExecutorMod(loader.Module):
         return text[: max_len // 2] + "\n... [TRUNCATED] ...\n" + text[-max_len // 2 :]
 
     async def on_unload(self):
-        for proc in self.active_processes.values():
-            try:
-                proc.kill()
-            except ProcessLookupError:
-                pass
-        self.active_processes.clear()
+        for key in list(self.active_processes.keys()):
+            proc = self.active_processes.pop(key, None)
+            if proc and proc.returncode is None:
+                try:
+                    proc.kill()
+                except ProcessLookupError:
+                    pass
