@@ -180,6 +180,9 @@ def parse_arguments() -> dict:
     arguments = parser.parse_args()
     return arguments
 
+class SessionExpiredError(Exception):
+    """Raised when session needs re-authentication"""
+
 
 class InteractiveAuthRequired(Exception):
     """Is being rased by Telethon, if phone is required"""
@@ -220,7 +223,7 @@ class Her:
         )
 
     def _read_sessions(self):
-        """Улучшенная загрузка сессии"""
+        """Load sessions without manual AuthKeyInvalidError check"""
         session_path = Path(BASE_DIR) / "her.session"
         self.sessions = []
 
@@ -229,11 +232,9 @@ class Her:
             return
         try:
             session = SQLiteSession(str(session_path))
-            if not session.auth_key:
-                raise AuthKeyInvalidError("Empty auth key")
             self.sessions.append(session)
             logging.info(f"Loaded session from {session_path}")
-        except (sqlite3.DatabaseError, AuthKeyInvalidError) as e:
+        except sqlite3.DatabaseError as e:
             logging.error(f"Invalid session: {e}")
             self._handle_corrupted_session(session_path)
         except Exception as e:
@@ -357,7 +358,7 @@ class Her:
                 await client.disconnect()
 
     async def _init_clients(self) -> bool:
-        """Инициализация клиентов с защитой от IndexError"""
+        """Initialize clients with proper exception handling"""
         if not self.sessions:
             logging.info("Starting initial setup...")
             return await self._initial_setup()
@@ -367,10 +368,10 @@ class Her:
             )
 
             if not await client.is_user_authorized():
-                raise AuthKeyInvalidError
+                raise SessionExpiredError  # Use custom exception
             return True
-        except AuthKeyInvalidError:
-            logging.error("Session expired, starting re-auth...")
+        except (AuthKeyInvalidError, SessionExpiredError):
+            logging.error("Session invalid or expired, starting re-auth...")
             return await self._initial_setup()
 
     async def amain_wrapper(self, client: CustomTelegramClient):
