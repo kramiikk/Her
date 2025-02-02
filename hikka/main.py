@@ -61,6 +61,7 @@ with contextlib.suppress(Exception):
 
 
 
+
 OFFICIAL_CLIENTS = [
     "Telegram Android",
     "Telegram Desktop",
@@ -211,6 +212,7 @@ class Her:
         except Exception as e:
             logging.critical(f"Failed to initialize Her instance: {e}")
             raise
+
     def _get_base_dir(self):
         return (
             "/data"
@@ -297,7 +299,7 @@ class Her:
             self.api_token.ID,
             self.api_token.HASH,
             connection=ConnectionTcpFull,
-            proxy=self.proxy,
+            proxy=None,
             connection_retries=None,
             device_model=random.choice(OFFICIAL_CLIENTS),
             system_version=generate_random_system_version(),
@@ -342,9 +344,8 @@ class Her:
             session_path = self.base_path / "her.session"
             session = SQLiteSession(str(session_path))
 
-            if not hasattr(self, 'api_token') or not self.api_token:
+            if not hasattr(self, "api_token") or not self.api_token:
                 await self._get_token()
-
             client = self._create_client(session)
             await client.connect()
 
@@ -397,7 +398,11 @@ class Her:
         try:
             repo = git.Repo()
             build = utils.get_git_hash()
-            upd = "Update required" if repo.git.log([f"HEAD..origin/{version.branch}", "--oneline"]) else "Up-to-date"
+            upd = (
+                "Update required"
+                if repo.git.log([f"HEAD..origin/{version.branch}", "--oneline"])
+                else "Up-to-date"
+            )
 
             logging.info(
                 f"\n• Prefix: «{client.hikka_db.get(__name__, 'command_prefix', False) or '.'}»"
