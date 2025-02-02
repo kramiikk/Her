@@ -496,6 +496,12 @@ class AdvancedExecutorMod(loader.Module):
             return text
         return text[: max_len // 2] + "\n... [TRUNCATED] ...\n" + text[-max_len // 2 :]
 
+    def get_sub(self, mod):
+        """Returns a dictionary of module attributes that don't start with _"""
+        return {
+            name: getattr(mod, name) for name in dir(mod) if not name.startswith("_")
+        }
+
     async def on_unload(self):
         for key in list(self.active_processes.keys()):
             proc = self.active_processes.pop(key, None)
