@@ -370,31 +370,28 @@ class AdvancedExecutorMod(loader.Module):
 
     async def _run_shell(self, message, command):
         is_sudo = command.strip().startswith("sudo ")
-        if is_sudo:
-            command = f"LANG=C sudo -S {command[len('sudo '):]}"
-            editor = SudoMessageEditor(
-                message=message,
-                command=command,
-                request_message=message,
-            )
-        else:
-            editor = RawMessageEditor(
-                message=message,
-                command=command,
-                request_message=message,
-            )
-        proc = await asyncio.create_subprocess_shell(
-            command,
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            cwd=utils.get_base_dir(),
-        )
-        self.active_processes[hash_msg(message)] = proc
+        editor = None
+        proc = None
 
-        if is_sudo:
-            editor.update_process(proc)
         try:
+            if is_sudo:
+                command = f"LANG=C sudo -S {command[len('sudo '):]}"
+                editor = SudoMessageEditor(message, command, message)
+            else:
+                editor = RawMessageEditor(message, command, message)
+
+            proc = await asyncio.create_subprocess_shell(
+                command,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=utils.get_base_dir(),
+            )
+            self.active_processes[hash_msg(message)] = proc
+
+            if is_sudo:
+                editor.update_process(proc)
+
             await asyncio.wait_for(
                 asyncio.gather(
                     read_stream(editor.update_stdout, proc.stdout),
@@ -402,29 +399,40 @@ class AdvancedExecutorMod(loader.Module):
                     self._wait_process(proc, editor),
                     editor.animate_progress(),
                 ),
-                timeout=60,
+                timeout=300
             )
         except asyncio.TimeoutError:
-            try:
-                proc.kill()
-                await utils.answer(message, "⏳ Command timed out after 5 minutes")
-            except ProcessLookupError:
-                pass
-            finally:
-                await proc.wait()
-                del self.active_processes[hash_msg(message)]
-                await editor.cmd_ended(-1)
+            if proc:
+                try:
+                    proc.kill()
+                    await utils.answer(message, "⏳ Command timed out after 5 minutes")
+                except ProcessLookupError:
+                    pass
+                finally:
+                    del self.active_processes[hash_msg(message)]
+                    await editor.cmd_ended(-1)
         except asyncio.CancelledError:
-            proc.kill()
-            await utils.answer(message, "❌ Command execution cancelled")
+            if proc:
+                proc.kill()
+                await utils.answer(message, "❌ Command execution cancelled")
             raise
         finally:
-            if proc.stdin:
-                proc.stdin.close()
-            if proc.stdout:
-                proc.stdout.close()
-            if proc.stderr:
-                proc.stderr.close()
+            if proc:
+                if proc.stdin:
+                    try:
+                        proc.stdin.close()
+                        await proc.stdin.wait_closed()
+                    except Exception as e:
+                        logger.debug(f"Error closing stdin: {e}")
+
+                try:
+                    await proc.wait()
+                except ProcessLookupError:
+                    pass
+                except Exception as e:
+                    logger.debug(f"Process wait error: {e}")
+
+                del self.active_processes[hash_msg(message)]
 
     async def _wait_process(self, proc, editor):
         rc = await proc.wait()
