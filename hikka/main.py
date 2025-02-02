@@ -138,10 +138,8 @@ def save_config_key(key: str, value: str) -> bool:
         # we will create new one
 
         config = {}
-    # Assign config value
 
     config[key] = value
-    # And save config
 
     CONFIG_PATH.write_text(json.dumps(config, indent=4))
     return True
@@ -250,7 +248,6 @@ class Her:
         logging.warning("Removing corrupted session...")
         try:
             session_path.unlink(missing_ok=True)
-            # Удален вызов _init_session_structure()
         except Exception as e:
             logging.error(f"Failed to reset session: {e}")
             raise RuntimeError("Session recovery failed") from e
@@ -372,8 +369,8 @@ class Her:
             )
 
             if not await client.is_user_authorized():
-                raise SessionExpiredError  # Use custom exception
-            self.clients.append(client)  # Store the client instance
+                raise SessionExpiredError
+            self.clients.append(client)
             return True
         except (AuthKeyInvalidError, SessionExpiredError):
             logging.error("Session invalid or expired, starting re-auth...")
