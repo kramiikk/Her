@@ -4,7 +4,7 @@ import re
 import time
 import sys
 import traceback
-from .. import loader, utils, main
+from .. import loader, utils
 import hikkatl
 
 from meval import meval
@@ -72,11 +72,12 @@ class MessageEditor:
         await self.redraw()
 
     def _truncate_output(self, text: str, max_len: int) -> str:
-        text = utils.escape_html(text)
         if len(text) <= max_len:
             return text
-        part = max(0, (max_len - 30) // 2)
-        return text[:part] + "\n\n... 🔻 Output truncated 🔻 ...\n\n" + text[-part:]
+        half = max_len // 2
+        first = text[:half].rsplit("\n", 1)[0]
+        last = text[-half:].split("\n", 1)[-1]
+        return f"{first}\n... [... 🔻 [TRUNCATED] 🔻 ...] ...\n{last}"
 
     def _get_progress(self):
         elapsed = time.time() - self.start_time
@@ -274,12 +275,16 @@ class RawMessageEditor(MessageEditor):
         await self._flush_buffer()
 
 
-class CoreMod(loader.Module):
+class AdvancedExecutorMod(loader.Module):
     strings = {
         "name": "AdvancedExecutor",
         "executing": "🧬 Executing...",
         "python_executing": "🐍 Executing...",
         "terminal_executing": "💻 Executing...",
+        "forbidden_command": "🚫 This command is forbidden!",
+        "result_header": "🧮 <b>Result:</b>",
+        "error_header": "❌ <b>Error:</b>",
+        "duration": "⏱ <b>Duration:</b>",
     }
 
     def __init__(self):
@@ -290,145 +295,40 @@ class CoreMod(loader.Module):
         self.db = db
 
     def is_shell_command(self, command: str) -> bool:
-        """
-        Более точное определение shell-команды с проверкой контекста операторов
-        """
-        command = command.strip()
-
-        def tokenize(s):
-            in_quotes = {"'": False, '"': False}
-            tokens = []
-            current = []
-
-            i = 0
-            while i < len(s):
-                char = s[i]
-
-                if char in ['"', "'"]:
-                    in_quotes[char] = not in_quotes[char]
-                    current.append(char)
-                    i += 1
-                    continue
-                if any(in_quotes.values()):
-                    current.append(char)
-                    i += 1
-                    continue
-                if char in "|&><":
-                    if current:
-                        tokens.append("".join(current))
-                        current = []
-                    if i + 1 < len(s) and s[i : i + 2] in ["||", "&&", ">>", "<<"]:
-                        tokens.append(s[i : i + 2])
-                        i += 2
-                    else:
-                        tokens.append(char)
-                        i += 1
-                    continue
-                if char.isspace():
-                    if current:
-                        tokens.append("".join(current))
-                        current = []
-                else:
-                    current.append(char)
-                i += 1
-            if current:
-                tokens.append("".join(current))
-            return tokens
-
-        parts = tokenize(command)
-        if not parts:
-            return False
-        shell_commands = {
-            "git",
-            "ls",
-            "cd",
-            "pwd",
-            "cat",
-            "echo",
-            "rm",
-            "cp",
-            "mv",
-            "mkdir",
-            "rmdir",
-            "touch",
-            "chmod",
-            "chown",
-            "find",
-            "grep",
-            "ps",
-            "kill",
-            "apt",
-            "apt-get",
-            "systemctl",
-            "service",
-            "bash",
-            "sh",
-            "ssh",
-            "scp",
-            "wget",
-            "curl",
-        }
-
-        if parts[0] in shell_commands:
+        command = command.strip().lower()
+        forbidden_patterns = [
+            r"\brm -rf /\b",
+            r"\bdd if=\b",
+            r":\(\)\{:\|:&\};:",
+            r"\bmkfs\b",
+            r"\bmv / /dev/null\b",
+            r"\bchmod -R 777 /\b",
+        ]
+        if any(re.search(pattern, command) for pattern in forbidden_patterns):
+            raise ValueError(self.strings["forbidden_command"])
+        if re.match(r"^(?:[\w/-]+\.\w+|\.[/\\]|/|~/)", command):
             return True
-        python_context = {
-            "if",
-            "else",
-            "elif",
-            "while",
-            "for",
-            "in",
-            "def",
-            "class",
-            "return",
-            "yield",
-            "with",
-            "import",
-            "from",
-            "as",
-            "try",
-            "except",
-            "finally",
-            "raise",
-            "assert",
-            "lambda",
-            "and",
-            "or",
-            "not",
-            "is",
-            "None",
-            "True",
-            "False",
-        }
-
-        def is_python_context(index):
-            """Проверяет, находится ли оператор в контексте Python кода"""
-            if index <= 0 or index >= len(parts) - 1:
-                return False
-            prev_token = parts[index - 1]
-            next_token = parts[index + 1]
-
-            if (
-                prev_token in python_context
-                or next_token in python_context
-                or prev_token.isidentifier()
-                or prev_token.replace(".", "").isdigit()
-                or "=" in prev_token
-                or any(
-                    op in prev_token for op in ["(", "[", "{", "+", "-", "*", "/", "%"]
-                )
-            ):
-                return True
-            return False
-
-        for i, part in enumerate(parts):
-            if part in {"|", "||", "&&", ">", ">>", "<", "<<", "&"}:
-                if not is_python_context(i):
+        operators = {"|", "||", "&&", ">", ">>", "<", "<<", "&", ";"}
+        in_quote = False
+        current_quote = None
+        for i, char in enumerate(command):
+            if char in {"'", '"'}:
+                if not in_quote:
+                    in_quote = True
+                    current_quote = char
+                elif current_quote == char:
+                    in_quote = False
+                    current_quote = None
+                continue
+            if in_quote:
+                continue
+            if char in operators:
+                prev_char = command[i - 1] if i > 0 else " "
+                next_char = command[i + 1] if i < len(command) - 1 else " "
+                if not (prev_char.isalnum() or prev_char in " \t") or not (
+                    next_char.isalnum() or next_char in " \t"
+                ):
                     return True
-        if command.startswith("./") or command.startswith("/"):
-            return True
-        if re.search(r"\$[A-Za-z_][A-Za-z0-9_]*", command):
-            return True
         return False
 
     @loader.command()
@@ -436,24 +336,24 @@ class CoreMod(loader.Module):
         """Execute Python code or shell command"""
         command = utils.get_args_raw(message)
         if not command:
-            return await utils.answer(message, "💬")
-        if self.is_shell_command(command):
-            await utils.answer(message, self.strings["terminal_executing"])
-            await self._run_shell(message, command)
-        else:
-            await self._execute_python(message, command)
+            return await utils.answer(message, "💬 Please provide a command to execute")
+        try:
+            if self.is_shell_command(command):
+                await utils.answer(message, self.strings["terminal_executing"])
+                await self._run_shell(message, command)
+            else:
+                await self._execute_python(message, command)
+        except ValueError as e:
+            await utils.answer(message, str(e))
 
     async def _execute_python(self, message, command):
         self.start_time = time.time()
         await utils.answer(message, self.strings["python_executing"])
         try:
-            result, output, error, err_type = await self._run_python(
+            result, output, error = await self._run_python(
                 code=command, message=message
             )
-            if err_type == "syntax":
-                await self._run_shell(message, command)
-            else:
-                await self._format_result(message, command, result, output, error)
+            await self._format_result(message, command, result, output, error)
         except Exception as e:
             await utils.answer(message, f"⚠️ Error: {str(e)}")
 
@@ -464,11 +364,9 @@ class CoreMod(loader.Module):
             stdout = result.getvalue()
             if not stdout and res is not None:
                 stdout = repr(res)
-            return stdout, res, False, None
-        except SyntaxError:
-            return None, None, True, "syntax"
+            return stdout, res, False
         except Exception:
-            return traceback.format_exc(), None, True, "runtime"
+            return traceback.format_exc(), None, True
 
     async def _run_shell(self, message, command):
         is_sudo = command.strip().startswith("sudo ")
@@ -493,103 +391,80 @@ class CoreMod(loader.Module):
             cwd=utils.get_base_dir(),
         )
         self.active_processes[hash_msg(message)] = proc
+
         if is_sudo:
             editor.update_process(proc)
-        await asyncio.gather(
-            read_stream(editor.update_stdout, proc.stdout),
-            read_stream(editor.update_stderr, proc.stderr),
-            self._wait_process(proc, editor),
-            editor.animate_progress(),
-        )
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(
+                    read_stream(editor.update_stdout, proc.stdout),
+                    read_stream(editor.update_stderr, proc.stderr),
+                    self._wait_process(proc, editor),
+                    editor.animate_progress(),
+                ),
+                timeout=60,
+            )
+        except asyncio.TimeoutError:
+            try:
+                proc.kill()
+                await utils.answer(message, "⏳ Command timed out after 5 minutes")
+            except ProcessLookupError:
+                pass
+            finally:
+                await proc.wait()
+                del self.active_processes[hash_msg(message)]
+                await editor.cmd_ended(-1)
+        except asyncio.CancelledError:
+            proc.kill()
+            await utils.answer(message, "❌ Command execution cancelled")
+            raise
+        finally:
+            if proc.stdin:
+                proc.stdin.close()
+            if proc.stdout:
+                proc.stdout.close()
+            if proc.stderr:
+                proc.stderr.close()
 
     async def _wait_process(self, proc, editor):
         rc = await proc.wait()
-
-        await asyncio.sleep(0.1)
-
         await editor.cmd_ended(rc)
         del self.active_processes[hash_msg(editor.message)]
 
-    def get_sub(self, mod):
-        """Returns a dictionary of module attributes that don't start with _"""
-        return {
-            name: getattr(mod, name) for name in dir(mod) if not name.startswith("_")
-        }
-
-    async def lookup(self, name):
-        """Helper function to lookup objects by name"""
-        try:
-            return eval(name)
-        except Exception:
-            return None
-
-    async def _get_ctx(self, message):
-        reply = await message.get_reply_message()
-        return {
-            "message": message,
-            "client": self.client,
-            "reply": reply,
-            "r": reply,
-            **self.get_sub(hikkatl.tl.types),
-            **self.get_sub(hikkatl.tl.functions),
-            "event": message,
-            "chat": message.to_id,
-            "hikkatl": hikkatl,
-            "telethon": hikkatl,
-            "utils": utils,
-            "main": main,
-            "loader": loader,
-            "f": hikkatl.tl.functions,
-            "c": self.client,
-            "m": message,
-            "lookup": self.lookup,
-            "self": self,
-            "db": self.db,
-        }
-
     async def _format_result(self, message, code, result, output, error):
         duration = time.time() - self.start_time
+        duration_str = f"{duration*1000:.1f}ms" if duration < 1 else f"{duration:.2f}s"
 
-        base_text = (
-            f"<emoji document_id=5431376038628171216>💻</emoji> <b>Код:</b>\n"
-            f"<pre><code class='language-python'>{utils.escape_html(code)}</code></pre>\n"
-            f"<emoji document_id=5451732530048802485>⏳</emoji> <b>Выполнено за:</b> {self.format_duration(duration)}\n\n"
-        )
+        text = [
+            f"<b>{self.strings['duration']} {duration_str}</b>",
+            f"<pre><code>{utils.escape_html(code)}</code></pre>",
+        ]
 
         if error:
-            error_header = "<emoji document_id=5440381017384822513>🚫</emoji> <b>Ошибка выполнения:</b>\n"
-            error_content = f"<pre><code class='language-python'>{utils.escape_html(result)}</code></pre>"
-            text = base_text + error_header + error_content
+            text.append(f"<b>{self.strings['error_header']}</b>")
+            text.append(f"<pre>{utils.escape_html(result)}</pre>")
         else:
-            result_header = (
-                "<emoji document_id=6334758581832779720>✅</emoji> <b>Результат:</b>\n"
-            )
-
-            output_content = ""
+            text.append(f"<b>{self.strings['result_header']}</b>")
             if result.strip():
-                output_content += f"<pre><code class='language-output'>{utils.escape_html(result)}</code></pre>\n"
+                text.append(f"<pre>{utils.escape_html(result)}</pre>")
             if output is not None:
-                output_content += (
-                    "\n<emoji document_id=6334778871258286021>💾</emoji> <b>Возвращаемое значение:</b>\n"
-                    f"<pre><code class='language-python'>{utils.escape_html(str(output))}</code></pre>"
+                text.append(
+                    f"<i>Return value:</i> <code>{utils.escape_html(str(output))}</code>"
                 )
-            text = base_text + result_header + output_content
-        max_length = 4096
-        if len(text) > max_length:
-            truncated = self._truncate_output(text, max_length)
-            text = f"<b>⚠️ Вывод слишком длинный (сокращено):</b>\n\n" f"{truncated}"
-        await utils.answer(message, text)
+        full_text = "\n".join(text)
+        if len(full_text) > 4096:
+            full_text = self._truncate_output(full_text, 4096)
+        await utils.answer(message, full_text)
 
     def _truncate_output(self, text: str, max_len: int) -> str:
-        """Обрезает текст с сохранением важных частей"""
-        text = utils.escape_html(text)
         if len(text) <= max_len:
             return text
-        separator = "\n\n... 🔻 Вывод сокращён 🔻 ...\n\n"
-        part_len = (max_len - len(separator)) // 2
-        return text[:part_len] + separator + text[-part_len:]
+        return text[: max_len // 2] + "\n... [TRUNCATED] ...\n" + text[-max_len // 2 :]
 
-    def format_duration(self, duration: float) -> str:
-        if duration >= 1:
-            return f"{duration:.1f} сек"
-        return f"{duration * 1000:.1f} мс"
+    async def on_unload(self):
+        for proc in self.active_processes.values():
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                pass
+        self.active_processes.clear()
