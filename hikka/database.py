@@ -115,7 +115,7 @@ class Database(dict):
                     if data:
                         self.update(**json.loads(data.decode()))
                     else:
-                        logger.debug("Redis empty, new DB created")
+                        logger.info("Redis empty, new DB created")
                 else:
                     logger.error("Redis connection lost")
             except Exception:
@@ -125,7 +125,7 @@ class Database(dict):
             if self._db_file.exists():
                 self.update(**json.loads(self._db_file.read_text()))
             else:
-                logger.debug("Local DB not found, creating new one")
+                logger.info("Local DB not found, creating new one")
         except json.JSONDecodeError:
             logger.error("DB corrupted, resetting...")
             self._db_file.unlink()

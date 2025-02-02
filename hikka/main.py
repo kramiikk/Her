@@ -63,6 +63,7 @@ with contextlib.suppress(Exception):
 
 
 
+
 OFFICIAL_CLIENTS = [
     "Telegram Android",
     "Telegram Desktop",
@@ -138,7 +139,6 @@ def save_config_key(key: str, value: str) -> bool:
         # we will create new one
 
         config = {}
-
     config[key] = value
 
     CONFIG_PATH.write_text(json.dumps(config, indent=4))
@@ -230,12 +230,11 @@ class Her:
         self.sessions = []
 
         if not session_path.exists():
-            logging.warning("Session file not found")
+            logging.info("Session file not found")
             return
         try:
             session = SQLiteSession(str(session_path))
             self.sessions.append(session)
-            logging.info(f"Loaded session from {session_path}")
         except sqlite3.DatabaseError as e:
             logging.error(f"Invalid session: {e}")
             self._handle_corrupted_session(session_path)
@@ -361,20 +360,17 @@ class Her:
     async def _init_clients(self) -> bool:
         """Initialize clients and return success status"""
         if not self.sessions:
-            logging.info("Starting initial setup...")
             client = await self._initial_setup()
             if client:
                 self.clients.append(client)
                 return True
             return False
-
         try:
             client = await self._common_client_setup(
                 self._create_client(self.sessions[0])
             )
             if not await client.is_user_authorized():
                 raise SessionExpiredError
-
             self.clients.append(client)
             return True
         except (AuthKeyInvalidError, SessionExpiredError):
@@ -416,9 +412,9 @@ class Her:
             )
 
             logging.info(
-                f"\n• Prefix: «{client.hikka_db.get(__name__, 'command_prefix', False) or '.'}»"
-                f"\n• Version: {'.'.join(list(map(str, list(__version__))))} {build[:7]} {upd}"
+                f"\n• Version: {'.'.join(list(map(str, list(__version__))))} {build[:7]} ({upd})"
                 f"\n• For {client.tg_id}"
+                f"\n• Prefix: «{client.hikka_db.get(__name__, 'command_prefix', False)}»"
             )
         except Exception:
             logging.exception("Badge error")
@@ -489,7 +485,6 @@ class Her:
             if not await self._init_clients() or not self.clients:
                 logging.critical("No valid client initialization")
                 sys.exit(1)
-
             await self.amain_wrapper(self.clients[0])
         except Exception as e:
             logging.critical(f"Critical error: {e}")
