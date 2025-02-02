@@ -414,7 +414,7 @@ class Her:
             logging.info(
                 f"\n• Version: {'.'.join(list(map(str, list(__version__))))} {build[:7]} ({upd})"
                 f"\n• For {client.tg_id}"
-                f"\n• Prefix: «{client.hikka_db.get(__name__, 'command_prefix', False)}»"
+                f"\n• Prefix: «.»"
             )
         except Exception:
             logging.exception("Badge error")

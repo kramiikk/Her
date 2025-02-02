@@ -146,7 +146,7 @@ def get_args_html(message: Message) -> str:
     :param message: Message to get arguments from
     :return: String with HTML arguments
     """
-    prefix = message.client.loader.get_prefix()
+    prefix = "."
 
     if not (message := message.text):
         return False

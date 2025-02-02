@@ -95,7 +95,6 @@ class Module:
         self.client = self.allmodules.client
         self._client = self.allmodules.client
         self.lookup = self.allmodules.lookup
-        self.get_prefix = self.allmodules.get_prefix
         self.tg_id = self._client.tg_id
         self._tg_id = self._client.tg_id
 
@@ -124,7 +123,7 @@ class Module:
         if not message and not peer:
             raise ValueError("Either peer or message must be specified")
 
-        cmd = f"{self.get_prefix()}{command} {args or ''}".strip()
+        cmd = f".{command} {args or ''}".strip()
 
         message = (
             (await self._client.send_message(peer, cmd))
@@ -447,7 +446,6 @@ class Library:
         self.tg_id = self._client.tg_id
         self._tg_id = self._client.tg_id
         self.lookup = self.allmodules.lookup
-        self.get_prefix = self.allmodules.get_prefix
 
     def _lib_get(
         self,

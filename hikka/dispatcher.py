@@ -199,7 +199,7 @@ class CommandDispatcher:
                 return False
         if message.sender_id not in self.owner:
             return False
-        prefix = self._db.get(main.__name__, "command_prefix", False) or "."
+        prefix = "."
 
         if not message.message.startswith(prefix):
             return False

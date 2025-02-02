@@ -564,14 +564,6 @@ class CoreMod(loader.Module):
             "db": self.db,
         }
 
-    def get_attrs(self, module, prefix=""):
-        """Возвращает атрибуты модуля с указанным префиксом"""
-        return {
-            f"{prefix}{name}": getattr(module, name)
-            for name in dir(module)
-            if not name.startswith("_") and not callable(getattr(module, name))
-        }
-
     async def _format_result(self, message, code, result, output, error):
         duration = time.time() - self.start_time
 
