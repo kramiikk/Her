@@ -12,6 +12,7 @@ import asyncio
 import contextlib
 import importlib
 import getpass
+import git
 import json
 import logging
 import os
@@ -217,7 +218,7 @@ class Her:
         )
 
     def _read_sessions(self):
-        """Улучшенная загрузка сессий с проверкой целостности"""
+        """Улучшенная загрузка сессии"""
         session_path = Path(BASE_DIR) / "her.session"
         self.sessions = []
 
@@ -225,14 +226,7 @@ class Her:
             logging.warning("Session file not found")
             return
         try:
-            with contextlib.closing(sqlite3.connect(session_path)) as conn:
-                integrity_check = conn.execute("PRAGMA quick_check").fetchone()
-                if integrity_check[0] != "ok":
-                    raise sqlite3.DatabaseError(
-                        f"Database corrupted: {integrity_check[0]}"
-                    )
             session = SQLiteSession(str(session_path))
-
             if not session.auth_key:
                 raise AuthKeyInvalidError("Empty auth key")
             self.sessions.append(session)
@@ -400,20 +394,14 @@ class Her:
     async def _badge(self, client: CustomTelegramClient):
         """Call the badge in shell"""
         try:
-            import git
-
             repo = git.Repo()
-
             build = utils.get_git_hash()
-            diff = repo.git.log([f"HEAD..origin/{version.branch}", "--oneline"])
-            upd = "Update required" if diff else "Up-to-date"
+            upd = "Update required" if repo.git.log([f"HEAD..origin/{version.branch}", "--oneline"]) else "Up-to-date"
 
             logging.info(
-                f"• Build: {build[:7]}\n"
-                f"• Version: {'.'.join(list(map(str, list(__version__))))}\n"
-                f"• {upd}\n"
-                f"• For {client.tg_id}\n"
-                f"• Prefix: «{client.hikka_db.get(__name__, 'command_prefix', False) or '.'}»"
+                f"\n• Prefix: «{client.hikka_db.get(__name__, 'command_prefix', False) or '.'}»"
+                f"\n• Version: {'.'.join(list(map(str, list(__version__))))} {build[:7]} {upd}"
+                f"\n• For {client.tg_id}"
             )
         except Exception:
             logging.exception("Badge error")
