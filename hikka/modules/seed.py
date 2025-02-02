@@ -17,7 +17,7 @@ def hash_msg(message):
     return f"{utils.get_chat_id(message)}/{message.id}"
 
 
-async def read_stream(func: callable, stream, delay: float):
+async def read_stream(func: callable, stream):
     buffer = []
     last_send = time.time()
 
@@ -42,21 +42,6 @@ async def sleep_for_task(func: callable, data: bytes, delay: float):
 
 
 class MessageEditor:
-    PROGRESS_FRAMES = [
-        "🕛",
-        "🕐",
-        "🕑",
-        "🕒",
-        "🕓",
-        "🕔",
-        "🕕",
-        "🕖",
-        "🕗",
-        "🕘",
-        "🕙",
-        "🕚",
-    ]
-
     def __init__(
         self,
         message: hikkatl.tl.types.Message,
@@ -71,7 +56,6 @@ class MessageEditor:
         self.stderr = ""
         self.rc = None
         self.start_time = time.time()
-        self.progress_index = 0
         self.last_update = 0
         self.request_message = request_message
 
@@ -80,11 +64,11 @@ class MessageEditor:
         await self.redraw()
 
     async def update_stdout(self, stdout):
-        self.stdout = stdout
+        self.stdout += stdout
         await self.redraw()
 
     async def update_stderr(self, stderr):
-        self.stderr = stderr
+        self.stderr += stderr
         await self.redraw()
 
     def _truncate_output(self, text: str, max_len: int) -> str:
@@ -96,9 +80,12 @@ class MessageEditor:
 
     def _get_progress(self):
         elapsed = time.time() - self.start_time
-        frame = self.PROGRESS_FRAMES[self.progress_index % len(self.PROGRESS_FRAMES)]
-        self.progress_index += 1
-        return f"{frame} <b>Running for {elapsed:.1f}s</b>\n"
+        frame = "⏳"
+        if elapsed < 1:
+            elapsed_ms = elapsed * 1000
+            return f"{frame} <b>Running for {elapsed_ms:.1f}ms</b>\n"
+        else:
+            return f"{frame} <b>Running for {elapsed:.1f}s</b>\n"
 
     async def redraw(self, force=False):
         if not force and (time.time() - self.last_update < 0.5):
@@ -131,23 +118,20 @@ class MessageEditor:
 
             stdout_max += unused_stderr
             stderr_max += unused_stdout
-        stdout_text = (
-            self._truncate_output(self.stdout, stdout_max) if self.stdout else ""
-        )
-        stderr_text = (
-            self._truncate_output(self.stderr, stderr_max) if self.stderr else ""
-        )
-
-        text = (
-            base_text + f"<b>📤 Stdout ({len(self.stdout)} chars):</b>\n"
-            f"<pre>{stdout_text}</pre>"
-        )
-
-        if stderr_text:
-            text += (
-                f"\n\n<b>📥 Stderr ({len(self.stderr)} chars):</b>\n"
-                f"<pre>{stderr_text}</pre>"
+        sections = []
+        if self.stdout:
+            stdout_text = self._truncate_output(self.stdout, stdout_max)
+            sections.append(
+                f"<b>📤 Stdout ({len(self.stdout)} chars):</b>\n<pre>{stdout_text}</pre>"
             )
+        if self.stderr:
+            stderr_text = self._truncate_output(self.stderr, stderr_max)
+            sections.append(
+                f"<b>📥 Stderr ({len(self.stderr)} chars):</b>\n<pre>{stderr_text}</pre>"
+            )
+        text = base_text
+        if sections:
+            text += "\n\n".join(sections)
         try:
             await utils.answer(self.message, text)
         except hikkatl.errors.rpcerrorlist.MessageTooLongError:
@@ -452,8 +436,7 @@ class CoreMod(loader.Module):
         """Execute Python code or shell command"""
         command = utils.get_args_raw(message)
         if not command:
-            return await utils.answer(
-                message, "💬")
+            return await utils.answer(message, "💬")
         if self.is_shell_command(command):
             await utils.answer(message, self.strings["terminal_executing"])
             await self._run_shell(message, command)
@@ -513,8 +496,8 @@ class CoreMod(loader.Module):
         if is_sudo:
             editor.update_process(proc)
         await asyncio.gather(
-            read_stream(editor.update_stdout, proc.stdout, 1),
-            read_stream(editor.update_stderr, proc.stderr, 1),
+            read_stream(editor.update_stdout, proc.stdout),
+            read_stream(editor.update_stderr, proc.stderr),
             self._wait_process(proc, editor),
             editor.animate_progress(),
         )
