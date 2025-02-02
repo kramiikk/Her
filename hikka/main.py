@@ -36,8 +36,6 @@ from .dispatcher import CommandDispatcher
 from .tl_cache import CustomTelegramClient
 from .version import __version__
 
-web_available = False
-
 BASE_DIR = (
     "/data"
     if "DOCKER" in os.environ
@@ -57,6 +55,7 @@ with contextlib.suppress(Exception):
     if "microsoft-standard" in uname().release:
         IS_WSL = True
 # fmt: off
+
 
 
 
@@ -328,15 +327,6 @@ class Her:
             await client.disconnect()
             raise
 
-    async def save_client_session(self, client: CustomTelegramClient):
-        """Упрощенное сохранение сессии"""
-        try:
-            client.session.save()
-            logging.info("Session saved successfully")
-        except Exception as e:
-            logging.error(f"Session save failed: {e}")
-            raise
-
     async def _initial_setup(self) -> bool:
         """Исправленный процесс начальной настройки"""
         client = None
@@ -385,13 +375,22 @@ class Her:
 
     async def amain_wrapper(self, client: CustomTelegramClient):
         """Wrapper around amain"""
-        async with client:
+        try:
+            await client.start()
             first = True
             me = await client.get_me()
             client.tg_id = me.id
             client.hikka_me = me
-            while await self.amain(first, client):
-                first = False
+
+            while True:
+                try:
+                    await self.amain(first, client)
+                    first = False
+                except (ConnectionError, AuthKeyInvalidError):
+                    break
+        finally:
+            await client.disconnect()
+            client.session.save()
 
     async def _badge(self, client: CustomTelegramClient):
         """Call the badge in shell"""
