@@ -28,6 +28,7 @@ import hikkatl
 from hikkatl import events
 from hikkatl.errors import AuthKeyInvalidError
 from hikkatl.sessions import MemorySession, SQLiteSession
+from hikkatl.network.connection import ConnectionTcpFull
 
 
 from . import configurator, database, loader, utils, version
@@ -295,7 +296,7 @@ class Her:
             session,
             self.api_token.ID,
             self.api_token.HASH,
-            connection=self.conn,
+            connection=ConnectionTcpFull,
             proxy=self.proxy,
             connection_retries=None,
             device_model=random.choice(OFFICIAL_CLIENTS),
