@@ -5,7 +5,7 @@ preview = true
 name = "hikka"
 version = "1.7.9"
 description = "Telegram userbot"
-authors = ["kramiikk"]
+authors = ["Friendly Telegram, Dan Gazizullin, codrago, kramiikk"]
 license = "GNU AGPLv3"
 readme = "README.md"
 

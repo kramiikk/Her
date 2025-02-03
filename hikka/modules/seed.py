@@ -1,3 +1,6 @@
+# ©️ Friendly Telegram, Dan Gazizullin, codrago 2018-2024
+# 🌐 https://github.com/hikariatama/Hikka
+
 import asyncio
 import logging
 import re

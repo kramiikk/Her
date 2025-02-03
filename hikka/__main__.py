@@ -1,9 +1,6 @@
 """Entry point. Checks for user and starts main script"""
 
-# Friendly Telegram (telegram userbot)
-# Copyright (C) 2018-2019 The Authors
-# ©️ Dan Gazizullin, codrago 2021-2024
-# This file is a part of Her
+# ©️ Friendly Telegram, Dan Gazizullin, codrago 2018-2024
 # 🌐 https://github.com/hikariatama/Hikka
 
 import getpass

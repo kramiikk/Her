@@ -1,9 +1,6 @@
 """Just a placeholder to do relative imports"""
 
-# Friendly Telegram (telegram userbot)
-# Copyright (C) 2018-2019 The Authors
-# ©️ Dan Gazizullin, codrago 2021-2024
-# This file is a part of Her
+# ©️ Friendly Telegram, Dan Gazizullin, codrago 2018-2024
 # 🌐 https://github.com/hikariatama/Hikka
 
 # Do not delete this file, it will cause errors.
