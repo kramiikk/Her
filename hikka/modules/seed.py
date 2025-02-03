@@ -326,79 +326,75 @@ class AdvancedExecutorMod(loader.Module):
     def is_shell_command(self, command: str) -> bool:
         """
         Determines if input should be treated as shell command or Python code.
-        Returns shell commands or Python code.
+        More accurately detects Python expressions and statements.
         """
         command = command.strip()
         if not command:
             return False
-        # Common Python patterns that should definitely be treated as Python code
 
+        if command.startswith(('r.', 'reply.', 'message.', 'event.', 'self.', 'await ')):
+            return False
+
+        # Common Python patterns
         python_patterns = [
-            r"^\s*[\w.]+\s*\([^)]*\)",  # Function calls like r.reply("text")
-            r"^\s*[\w.]+\s*=",  # Assignments
-            r"^\s*print\s*\(",  # Print statements
-            r"^\s*import\s+",  # Import statements
-            r"^\s*from\s+\w+\s+import",  # From imports
-            r"^\s*def\s+",  # Function definitions
-            r"^\s*class\s+",  # Class definitions
-            r"^\s*async\s+def",  # Async function definitions
-            r"^\s*await\s+",  # Await statements
-            r"^\s*try\s*:",  # Try blocks
-            r"^\s*if\s+",  # If statements
-            r"^\s*for\s+",  # For loops
-            r"^\s*while\s+",  # While loops
+            r'^\s*[\w.]+\s*\(',  # Function calls
+            r'^\s*[\w.]+\s*=',  # Assignments
+            r'^\s*print\s*\(',  # Print statements
+            r'^\s*import\s+',  # Import statements
+            r'^\s*from\s+\w+\s+import',  # From imports
+            r'^\s*def\s+',  # Function definitions
+            r'^\s*class\s+',  # Class definitions
+            r'^\s*async\s+def',  # Async function definitions
+            r'^\s*await\s+',  # Await statements
+            r'^\s*try\s*:',  # Try blocks
+            r'^\s*if\s+.*:',  # If statements
+            r'^\s*for\s+.*:',  # For loops
+            r'^\s*while\s+.*:',  # While loops
+            r'^\s*\[.*\]',  # List literals
+            r'^\s*\{.*\}',  # Dict/Set literals
+            r'^\s*lambda\s+',  # Lambda expressions
+            r'^[a-zA-Z_]\w*\.[a-zA-Z_]\w*',  # Object attribute access
         ]
 
         if any(re.match(pattern, command) for pattern in python_patterns):
             return False
-        # Common shell command patterns
+
+        if re.search(r'["\'].*["\']', command):
+            if not any(cmd in command.lower() for cmd in ['echo', 'printf', 'cat']):
+                return False
 
         shell_patterns = [
-            r"^\s*cd\s+",  # Change directory
-            r"^\s*ls\s*",  # List directory
-            r"^\s*cat\s+",  # Cat command
-            r"^\s*echo\s+",  # Echo command
-            r"^\s*sudo\s+",  # Sudo command
-            r"^\s*apt\s+",  # Apt package manager
-            r"^\s*git\s+",  # Git commands
-            r"^\s*rm\s+",  # Remove files
-            r"^\s*cp\s+",  # Copy files
-            r"^\s*mv\s+",  # Move files
-            r"^\s*chmod\s+",  # Change permissions
-            r"^\s*chown\s+",  # Change ownership
-            r"^\.\/|^\.\.",  # Relative paths
-            r"^\/\w+",  # Absolute paths
+            r'^\s*cd\s+',  # Change directory
+            r'^\s*ls(\s+|$)',  # List directory
+            r'^\s*cat\s+',  # Cat command
+            r'^\s*echo\s+',  # Echo command
+            r'^\s*sudo\s+',  # Sudo command
+            r'^\s*apt\s+',  # Apt package manager
+            r'^\s*git\s+',  # Git commands
+            r'^\s*rm\s+',  # Remove files
+            r'^\s*cp\s+',  # Copy files
+            r'^\s*mv\s+',  # Move files
+            r'^\s*chmod\s+',  # Change permissions
+            r'^\s*chown\s+',  # Change ownership
+            r'^\.\/|^\.\.',  # Relative paths
+            r'^\/\w+',  # Absolute paths
+            r'^\s*grep\s+',  # Grep command
+            r'^\s*ps\s+',  # Process status
+            r'^\s*kill\s+',  # Kill process
+            r'^\s*ping\s+',  # Ping command
         ]
 
         if any(re.match(pattern, command) for pattern in shell_patterns):
             return True
-        shell_operators = ["|", "||", "&&", ">", ">>", "<", "<<", "&", ";", "*"]
+
+        shell_operators = ['|', '||', '&&', '>', '>>', '<', '<<', '&', ';', '*', '2>', '2>&1']
         if any(op in command for op in shell_operators):
             return True
-        if re.match(r"^\s*[\w.-]+\s*$", command):
+
+        if re.match(r'^\s*[\w.-]+(\s+[\w.-]+)*\s*$', command):
             return True
-        python_operators = [
-            "=",
-            "==",
-            "!=",
-            ">=",
-            "<=",
-            "+",
-            "-",
-            "*",
-            "/",
-            "**",
-            "in",
-            "is",
-            "not",
-            "and",
-            "or",
-        ]
-        if any(f" {op} " in f" {command} " for op in python_operators):
-            return False
-        if "(" in command or ")" in command:
-            return False
-        return True
+
+        return False
 
     @loader.command()
     async def c(self, message):
