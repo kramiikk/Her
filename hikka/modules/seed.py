@@ -331,69 +331,97 @@ class AdvancedExecutorMod(loader.Module):
         command = command.strip()
         if not command:
             return False
-
-        if command.startswith(('r.', 'reply.', 'message.', 'event.', 'self.', 'await ')):
+        if command.startswith(
+            ("r.", "reply.", "message.", "event.", "self.", "await ")
+        ):
             return False
+        shell_commands = {
+            "wget",
+            "curl",
+            "cd",
+            "ls",
+            "cat",
+            "echo",
+            "sudo",
+            "apt",
+            "git",
+            "rm",
+            "cp",
+            "mv",
+            "chmod",
+            "chown",
+            "grep",
+            "ps",
+            "kill",
+            "ping",
+            "tar",
+            "unzip",
+            "zip",
+            "ssh",
+            "scp",
+            "rsync",
+            "systemctl",
+            "service",
+            "docker",
+            "python",
+            "python3",
+            "pip",
+            "npm",
+            "yarn",
+            "node",
+        }
 
-        # Common Python patterns
+        first_word = command.split()[0].lower()
+        if first_word in shell_commands:
+            return True
         python_patterns = [
-            r'^\s*[\w.]+\s*\(',  # Function calls
-            r'^\s*[\w.]+\s*=',  # Assignments
-            r'^\s*print\s*\(',  # Print statements
-            r'^\s*import\s+',  # Import statements
-            r'^\s*from\s+\w+\s+import',  # From imports
-            r'^\s*def\s+',  # Function definitions
-            r'^\s*class\s+',  # Class definitions
-            r'^\s*async\s+def',  # Async function definitions
-            r'^\s*await\s+',  # Await statements
-            r'^\s*try\s*:',  # Try blocks
-            r'^\s*if\s+.*:',  # If statements
-            r'^\s*for\s+.*:',  # For loops
-            r'^\s*while\s+.*:',  # While loops
-            r'^\s*\[.*\]',  # List literals
-            r'^\s*\{.*\}',  # Dict/Set literals
-            r'^\s*lambda\s+',  # Lambda expressions
-            r'^[a-zA-Z_]\w*\.[a-zA-Z_]\w*',  # Object attribute access
+            r"^\s*[\w.]+\s*\(",
+            r"^\s*[\w.]+\s*=",
+            r"^\s*print\s*\(",
+            r"^\s*import\s+",
+            r"^\s*from\s+\w+\s+import",
+            r"^\s*def\s+",
+            r"^\s*class\s+",
+            r"^\s*async\s+def",
+            r"^\s*await\s+",
         ]
 
         if any(re.match(pattern, command) for pattern in python_patterns):
             return False
-
-        if re.search(r'["\'].*["\']', command):
-            if not any(cmd in command.lower() for cmd in ['echo', 'printf', 'cat']):
-                return False
-
         shell_patterns = [
-            r'^\s*cd\s+',  # Change directory
-            r'^\s*ls(\s+|$)',  # List directory
-            r'^\s*cat\s+',  # Cat command
-            r'^\s*echo\s+',  # Echo command
-            r'^\s*sudo\s+',  # Sudo command
-            r'^\s*apt\s+',  # Apt package manager
-            r'^\s*git\s+',  # Git commands
-            r'^\s*rm\s+',  # Remove files
-            r'^\s*cp\s+',  # Copy files
-            r'^\s*mv\s+',  # Move files
-            r'^\s*chmod\s+',  # Change permissions
-            r'^\s*chown\s+',  # Change ownership
-            r'^\.\/|^\.\.',  # Relative paths
-            r'^\/\w+',  # Absolute paths
-            r'^\s*grep\s+',  # Grep command
-            r'^\s*ps\s+',  # Process status
-            r'^\s*kill\s+',  # Kill process
-            r'^\s*ping\s+',  # Ping command
+            r"^\s*\/\w+",
+            r"^\.\/|^\.\.",
+            r".*\|\s*\w+",
+            r".*>\s*\w+",
+            r".*\>\>",
+            r".*\&\&",
+            r".*\|\|",
+            r".*\$\(",
+            r".*`.*`",
+            r"^\s*\w+\s+-\w+",
+            r"^\s*\w+\s+--\w+",
         ]
 
         if any(re.match(pattern, command) for pattern in shell_patterns):
             return True
-
-        shell_operators = ['|', '||', '&&', '>', '>>', '<', '<<', '&', ';', '*', '2>', '2>&1']
+        if re.search(r"https?://\S+", command):
+            return True
+        shell_operators = [
+            "|",
+            "||",
+            "&&",
+            ">",
+            ">>",
+            "<",
+            "<<",
+            "&",
+            ";",
+            "*",
+            "2>",
+            "2>&1",
+        ]
         if any(op in command for op in shell_operators):
             return True
-
-        if re.match(r'^\s*[\w.-]+(\s+[\w.-]+)*\s*$', command):
-            return True
-
         return False
 
     @loader.command()
