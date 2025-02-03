@@ -214,13 +214,9 @@ class SudoMessageEditor(MessageEditor):
         try:
             user = lastline.split()[-1][:-1]
 
-            # Cancel previous auth event if exists
-
             if self._auth_event:
                 self._auth_event.set()
             self._auth_event = asyncio.Event()
-
-            # Send auth request message
 
             self.authmsg = await self.message.client.send_message(
                 "me",
@@ -229,7 +225,6 @@ class SudoMessageEditor(MessageEditor):
             )
 
             try:
-                # Set up event handler for password input
 
                 password_future = asyncio.create_task(
                     self.message.client.wait_event(
@@ -242,8 +237,6 @@ class SudoMessageEditor(MessageEditor):
                         timeout=60,
                     )
                 )
-
-                # Wait for either password input or cancellation
 
                 done, pending = await asyncio.wait(
                     [password_future, self._auth_event.wait()],
@@ -261,8 +254,6 @@ class SudoMessageEditor(MessageEditor):
                 response = await password_future
                 if not response:
                     raise asyncio.TimeoutError()
-                # Process the password
-
                 password = response.message.raw_text.split("\n", 1)[0].encode() + b"\n"
 
                 if self.process and self.process.stdin:
