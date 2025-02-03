@@ -524,7 +524,7 @@ class AdvancedExecutorMod(loader.Module):
                 text.append(f"<pre>{utils.escape_html(result)}</pre>")
             if output is not None:
                 text.append(
-                    f"<i>Return value:</i> <code>{utils.escape_html(str(output))}</code>"
+                    f"<i>Return value:</i> <pre>{utils.escape_html(str(output))}</pre>"
                 )
         full_text = "\n".join(text)
         if len(full_text) > 4096:
