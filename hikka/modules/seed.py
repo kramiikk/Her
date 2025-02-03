@@ -330,78 +330,41 @@ class AdvancedExecutorMod(loader.Module):
         command = command.strip()
         if not command:
             return False
-        python_starters = [
-            "print",
-            "import",
-            "from",
-            "def",
-            "class",
-            "async",
-            "await",
-            "with",
-            "if",
-            "for",
-            "while",
-            "try:",
-        ]
-        if any(command.startswith(keyword) for keyword in python_starters):
-            return False
-        python_indicators = [
-            "=",
-            "==",
-            "!=",
-            ">=",
-            "<=",
-            "+",
-            "-",
-            "*",
-            "/",
-            "**",
-            "in ",
-            "not ",
-            "is ",
-            "lambda",
-            "yield",
-            "return",
-        ]
-        if any(indicator in command for indicator in python_indicators):
-            return False
-        shell_indicators = [
-            "|",
-            "||",
-            "&&",
-            ">",
-            ">>",
-            "<",
-            "<<",
-            "&",
-            ";",
-            "cd ",
-            "ls ",
-            "cat ",
-            "echo ",
-            "sudo ",
-            "apt ",
-            "git ",
-            "./",
-            "../",
-            "~/",
-            "/",
-            "\\",
-        ]
 
+        if re.match(r'^[a-zA-Z0-9_.-]+$', command):
+            return True
+
+        if re.match(r'^[a-zA-Z0-9_.-]+\s+', command):
+            return True
+
+        shell_indicators = [
+            "|", "||", "&&", ">", ">>", "<", "<<", "&", ";",
+            "cd ", "ls ", "cat ", "echo ", "sudo ", "apt ", "git ",
+            "./", "../", "~/", "/", "\\", "'", '"', "`",
+        ]
+        
         if any(indicator in command for indicator in shell_indicators):
             return True
-        if re.match(r"^[a-zA-Z0-9_-]+(\s|/)", command):
-            return True
-        return False
+
+        python_indicators = [
+            "print", "import", "from", "def", "class", "async",
+            "await", "with", "if", "for", "while", "try:",
+            "=", "==", "!=", ">=", "<=", "+", "-", "*", "/",
+            "**", "in ", "not ", "is ", "lambda", "yield", "return",
+        ]
+        
+        if any(command.startswith(kw) for kw in python_indicators) or any(op in command for op in python_indicators):
+            return False
+            
+        return True
 
     @loader.command()
-    async def ccmd(self, message):
+    async def c(self, message):
         """Execute Python code or shell command"""
         command = utils.get_args_raw(message)
         if not command:
             return await utils.answer(message, "💬 Please provide a command to execute")
+            
         try:
             if self.is_shell_command(command):
                 await utils.answer(message, self.strings["terminal_executing"])
