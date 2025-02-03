@@ -1,6 +1,7 @@
 # ©️ Friendly Telegram, Dan Gazizullin, codrago 2018-2024
 # 🌐 https://github.com/hikariatama/Hikka
 
+
 import asyncio
 import logging
 import re
@@ -325,37 +326,78 @@ class AdvancedExecutorMod(loader.Module):
     def is_shell_command(self, command: str) -> bool:
         """
         Determines if input should be treated as shell command or Python code.
-        Returns True for shell commands, False for Python code.
+        Returns shell commands or Python code.
         """
         command = command.strip()
         if not command:
             return False
+        # Common Python patterns that should definitely be treated as Python code
 
-        if re.match(r'^[a-zA-Z0-9_.-]+$', command):
-            return True
-
-        if re.match(r'^[a-zA-Z0-9_.-]+\s+', command):
-            return True
-
-        shell_indicators = [
-            "|", "||", "&&", ">", ">>", "<", "<<", "&", ";",
-            "cd ", "ls ", "cat ", "echo ", "sudo ", "apt ", "git ",
-            "./", "../", "~/", "/", "\\", "'", '"', "`",
+        python_patterns = [
+            r"^\s*[\w.]+\s*\([^)]*\)",  # Function calls like r.reply("text")
+            r"^\s*[\w.]+\s*=",  # Assignments
+            r"^\s*print\s*\(",  # Print statements
+            r"^\s*import\s+",  # Import statements
+            r"^\s*from\s+\w+\s+import",  # From imports
+            r"^\s*def\s+",  # Function definitions
+            r"^\s*class\s+",  # Class definitions
+            r"^\s*async\s+def",  # Async function definitions
+            r"^\s*await\s+",  # Await statements
+            r"^\s*try\s*:",  # Try blocks
+            r"^\s*if\s+",  # If statements
+            r"^\s*for\s+",  # For loops
+            r"^\s*while\s+",  # While loops
         ]
-        
-        if any(indicator in command for indicator in shell_indicators):
-            return True
 
-        python_indicators = [
-            "print", "import", "from", "def", "class", "async",
-            "await", "with", "if", "for", "while", "try:",
-            "=", "==", "!=", ">=", "<=", "+", "-", "*", "/",
-            "**", "in ", "not ", "is ", "lambda", "yield", "return",
-        ]
-        
-        if any(command.startswith(kw) for kw in python_indicators) or any(op in command for op in python_indicators):
+        if any(re.match(pattern, command) for pattern in python_patterns):
             return False
-            
+        # Common shell command patterns
+
+        shell_patterns = [
+            r"^\s*cd\s+",  # Change directory
+            r"^\s*ls\s*",  # List directory
+            r"^\s*cat\s+",  # Cat command
+            r"^\s*echo\s+",  # Echo command
+            r"^\s*sudo\s+",  # Sudo command
+            r"^\s*apt\s+",  # Apt package manager
+            r"^\s*git\s+",  # Git commands
+            r"^\s*rm\s+",  # Remove files
+            r"^\s*cp\s+",  # Copy files
+            r"^\s*mv\s+",  # Move files
+            r"^\s*chmod\s+",  # Change permissions
+            r"^\s*chown\s+",  # Change ownership
+            r"^\.\/|^\.\.",  # Relative paths
+            r"^\/\w+",  # Absolute paths
+        ]
+
+        if any(re.match(pattern, command) for pattern in shell_patterns):
+            return True
+        shell_operators = ["|", "||", "&&", ">", ">>", "<", "<<", "&", ";", "*"]
+        if any(op in command for op in shell_operators):
+            return True
+        if re.match(r"^\s*[\w.-]+\s*$", command):
+            return True
+        python_operators = [
+            "=",
+            "==",
+            "!=",
+            ">=",
+            "<=",
+            "+",
+            "-",
+            "*",
+            "/",
+            "**",
+            "in",
+            "is",
+            "not",
+            "and",
+            "or",
+        ]
+        if any(f" {op} " in f" {command} " for op in python_operators):
+            return False
+        if "(" in command or ")" in command:
+            return False
         return True
 
     @loader.command()
@@ -364,7 +406,6 @@ class AdvancedExecutorMod(loader.Module):
         command = utils.get_args_raw(message)
         if not command:
             return await utils.answer(message, "💬 Please provide a command to execute")
-            
         try:
             if self.is_shell_command(command):
                 await utils.answer(message, self.strings["terminal_executing"])
