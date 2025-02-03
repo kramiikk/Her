@@ -81,7 +81,7 @@ class MessageEditor:
         half = max_len // 2
         first = text[:half].rsplit("\n", 1)[0]
         last = text[-half:].split("\n", 1)[-1]
-        return f"{first}\n... [... 🔻 [TRUNCATED] 🔻 ...] ...\n{last}"
+        return f"{first}\n... 🔻 [TRUNCATED] 🔻 ...\n{last}"
 
     def _get_progress(self):
         elapsed = time.time() - self.start_time
@@ -167,6 +167,7 @@ class SudoMessageEditor(MessageEditor):
         self.process = None
         self.state = 0
         self.authmsg = None
+        self._auth_event = None
 
     def _get_progress(self):
         progress = super()._get_progress()
@@ -189,43 +190,112 @@ class SudoMessageEditor(MessageEditor):
         if self.state == 1 and any(
             re.fullmatch(self.WRONG_PASS, line) for line in lines
         ):
-            await utils.answer(self.authmsg, "❌ Authentication failed, try again")
+            if self.authmsg:
+                await utils.answer(self.authmsg, "❌ Authentication failed, try again")
             self.state = 0
             handled = True
             self.stderr = ""
-        if not handled and re.search(self.PASS_REQ, lastline) and self.state == 0:
+            await self._handle_auth_request(lastline)
+        elif not handled and re.search(self.PASS_REQ, lastline) and self.state == 0:
             await self._handle_auth_request(lastline)
             handled = True
-        if not handled and any(
+        elif not handled and any(
             re.fullmatch(self.TOO_MANY_TRIES, line) for line in lines
         ):
             await utils.answer(self.message, "❌ Too many failed attempts")
+            if self.process:
+                self.process.kill()
             self.state = 2
             handled = True
         if not handled:
             await self.redraw()
 
     async def _handle_auth_request(self, lastline):
-        user = lastline.split()[-1][:-1]
-        self.authmsg = await self.message.client.send_message(
-            "me",
-            f"🔐 Enter password for {utils.escape_html(user)} to run:\n"
-            f"<code>{utils.escape_html(self.command)}</code>",
-        )
         try:
-            response = await self.message.client.wait_for(
-                hikkatl.events.NewMessage(chats=["me"], from_users="me"),
-                timeout=60,
+            user = lastline.split()[-1][:-1]
+
+            # Cancel previous auth event if exists
+
+            if self._auth_event:
+                self._auth_event.set()
+            self._auth_event = asyncio.Event()
+
+            # Send auth request message
+
+            self.authmsg = await self.message.client.send_message(
+                "me",
+                f"🔐 Enter password for {utils.escape_html(user)} to run:\n"
+                f"<code>{utils.escape_html(self.command)}</code>",
             )
-            password = response.raw_text.split("\n", 1)[0].encode() + b"\n"
-            self.process.stdin.write(password)
-            await self.process.stdin.drain()
-            await utils.answer(response, "🔒 Processing...")
-            self.state = 1
-        except asyncio.TimeoutError:
-            await utils.answer(self.authmsg, "❌ Timeout waiting for password")
-            self.process.kill()
+
+            try:
+                # Set up event handler for password input
+
+                password_future = asyncio.create_task(
+                    self.message.client.wait_event(
+                        hikkatl.events.NewMessage(
+                            chats=["me"],
+                            from_users="me",
+                            func=lambda e: e.raw_text
+                            and not e.raw_text.startswith("🔐"),
+                        ),
+                        timeout=60,
+                    )
+                )
+
+                # Wait for either password input or cancellation
+
+                done, pending = await asyncio.wait(
+                    [password_future, self._auth_event.wait()],
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+
+                for task in pending:
+                    task.cancel()
+                if self._auth_event.is_set():
+                    await utils.answer(self.authmsg, "🚫 Authentication cancelled")
+                    if self.process:
+                        self.process.kill()
+                    self.state = 2
+                    return
+                response = await password_future
+                if not response:
+                    raise asyncio.TimeoutError()
+                # Process the password
+
+                password = response.message.raw_text.split("\n", 1)[0].encode() + b"\n"
+
+                if self.process and self.process.stdin:
+                    try:
+                        self.process.stdin.write(password)
+                        await self.process.stdin.drain()
+                        await utils.answer(response.message, "🔒 Processing...")
+                        self.state = 1
+                    except (BrokenPipeError, ConnectionResetError):
+                        await utils.answer(self.authmsg, "❌ Process terminated")
+                        self.state = 2
+            except asyncio.TimeoutError:
+                await utils.answer(self.authmsg, "❌ Timeout waiting for password")
+                if self.process:
+                    self.process.kill()
+                self.state = 2
+        except Exception as e:
+            logger.error(f"Error in _handle_auth_request: {str(e)}")
+            await utils.answer(
+                self.message, f"❌ Authentication error: {utils.escape_html(str(e))}"
+            )
+            if self.process:
+                self.process.kill()
             self.state = 2
+
+    async def cleanup(self):
+        if self._auth_event:
+            self._auth_event.set()
+        if self.process:
+            try:
+                self.process.kill()
+            except ProcessLookupError:
+                pass
 
 
 class RawMessageEditor(MessageEditor):
@@ -261,7 +331,7 @@ class RawMessageEditor(MessageEditor):
             edge_len = max(200, (max_len - 100) // 2)
             return (
                 text[:edge_len].strip()
-                + "\n\n... 🔻 Output truncated 🔻 ...\n\n"
+                + "\n\n... 🔻 [TRUNCATED] 🔻 ...\n\n"
                 + text[-edge_len:].strip()
             )
         return text[:max_len].strip()
@@ -472,7 +542,6 @@ class AdvancedExecutorMod(loader.Module):
 
         try:
             if is_sudo:
-                command = f"LANG=C sudo -S {command[len('sudo '):]}"
                 editor = SudoMessageEditor(message, command, message)
             else:
                 editor = RawMessageEditor(message, command, message)
@@ -513,6 +582,8 @@ class AdvancedExecutorMod(loader.Module):
                 await utils.answer(message, "❌ Command execution cancelled")
             raise
         finally:
+            if isinstance(editor, SudoMessageEditor):
+                await editor.cleanup()
             if proc:
                 if proc.stdin:
                     try:
@@ -562,7 +633,11 @@ class AdvancedExecutorMod(loader.Module):
     def _truncate_output(self, text: str, max_len: int) -> str:
         if len(text) <= max_len:
             return text
-        return text[: max_len // 2] + "\n... [TRUNCATED] ...\n" + text[-max_len // 2 :]
+        return (
+            text[: max_len // 2]
+            + "\n... 🔻 [TRUNCATED] 🔻 ...\n"
+            + text[-max_len // 2 :]
+        )
 
     def get_sub(self, mod):
         """Returns a dictionary of module attributes that don't start with _"""
