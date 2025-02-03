@@ -10,16 +10,17 @@ license = "GNU AGPLv3"
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.8"
-gitpython = "^3.1.44"
-meval = "^2.5"
-requests = "^2.32.3"
-grapheme = "^0.6.0"
+aiohttp=="^3.11.11"
 emoji = "^2.1.0"
-psutil = "^6.1.1"
-tgcrypto = "^1.2.5"
+GitPython = "^3.1.44"
+grapheme = "^0.6.0"
 hikka-tl-new = "^2.0.8"
+meval = "^2.5"
+psutil = "^6.1.1"
+requests = "^2.32.3"
 rsa = "^4.9"
+Telethon = "^1.38.1"
+tgcrypto = "^1.2.5"
 
 [build-system]
 requires = ["poetry-core"]
