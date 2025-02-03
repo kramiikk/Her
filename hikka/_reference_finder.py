@@ -7,7 +7,7 @@
 import gc as _gc
 import inspect
 import logging
-import types as _types
+import types
 import typing
 
 logger = logging.getLogger(__name__)
@@ -30,7 +30,7 @@ def replace_all_refs(replace_from: typing.Any, replace_to: typing.Any) -> typing
     hit = False
     for referrer in _gc.get_referrers(replace_from):
         # FRAMES -- PASS THEM UP
-        if isinstance(referrer, _types.FrameType):
+        if isinstance(referrer, types.FrameType):
             continue
 
         # DICTS
@@ -95,14 +95,14 @@ def replace_all_refs(replace_from: typing.Any, replace_to: typing.Any) -> typing
             newcell = proxy.__closure__[0]
             replace_all_refs(referrer, newcell)
 
-        elif isinstance(referrer, _types.FunctionType):
+        elif isinstance(referrer, types.FunctionType):
             localsmap = {}
             for key in ["code", "globals", "name", "defaults", "closure"]:
                 orgattr = getattr(referrer, f"__{key}__")
                 localsmap[key] = replace_to if orgattr is replace_from else orgattr
             localsmap["argdefs"] = localsmap["defaults"]
             del localsmap["defaults"]
-            newfn = _types.FunctionType(**localsmap)
+            newfn = types.FunctionType(**localsmap)
             replace_all_refs(referrer, newfn)
 
         else:
