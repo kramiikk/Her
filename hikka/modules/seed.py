@@ -320,55 +320,77 @@ class AdvancedExecutorMod(loader.Module):
         }
 
     def is_shell_command(self, command: str) -> bool:
+        """
+        Determines if input should be treated as shell command or Python code.
+        Returns True for shell commands, False for Python code.
+        """
         command = command.strip()
         if not command:
             return False
-
-        python_keywords = [
-            "from", "import", "def ", "class ", "async def", 
-            "print(", "return", "if ", "for ", "while ", "try:", 
-            "except", "raise", "with ", "async with", "await "
+        python_starters = [
+            "print",
+            "import",
+            "from",
+            "def",
+            "class",
+            "async",
+            "await",
+            "with",
+            "if",
+            "for",
+            "while",
+            "try:",
         ]
-        if any(command.startswith(keyword) or keyword in command for keyword in python_keywords):
+        if any(command.startswith(keyword) for keyword in python_starters):
             return False
-
-        forbidden_patterns = [
-            r"\brm -rf /\b",
-            r"\bdd if=\b",
-            r":\(\)\{:\|:&\};:",
-            r"\bmkfs\b",
-            r"\bmv / /dev/null\b",
-            r"\bchmod -R 777 /\b",
+        python_indicators = [
+            "=",
+            "==",
+            "!=",
+            ">=",
+            "<=",
+            "+",
+            "-",
+            "*",
+            "/",
+            "**",
+            "in ",
+            "not ",
+            "is ",
+            "lambda",
+            "yield",
+            "return",
         ]
-        if any(re.search(pattern, command) for pattern in forbidden_patterns):
-            raise ValueError(self.strings["forbidden_command"])
+        if any(indicator in command for indicator in python_indicators):
+            return False
+        shell_indicators = [
+            "|",
+            "||",
+            "&&",
+            ">",
+            ">>",
+            "<",
+            "<<",
+            "&",
+            ";",
+            "cd ",
+            "ls ",
+            "cat ",
+            "echo ",
+            "sudo ",
+            "apt ",
+            "git ",
+            "./",
+            "../",
+            "~/",
+            "/",
+            "\\",
+        ]
 
-        operators = {"|", "||", "&&", ">", ">>", "<", "<<", "&", ";"}
-
-        if re.match(r"^(?:[\w/-]+\.\w+|\.[/\\]|/|~/|[\w-]+\s)", command):
+        if any(indicator in command for indicator in shell_indicators):
             return True
-
-        in_quote = False
-        current_quote = None
-        for i, char in enumerate(command):
-            if char in {"'", '"'}:
-                if not in_quote:
-                    in_quote = True
-                    current_quote = char
-                elif current_quote == char:
-                    in_quote = False
-                    current_quote = None
-                continue
-            if in_quote:
-                continue
-            if char in operators:
-                prev_char = command[i - 1] if i > 0 else " "
-                next_char = command[i + 1] if i < len(command) - 1 else " "
-                if not (prev_char.isalnum() or prev_char in " \t") or not (
-                    next_char.isalnum() or next_char in " \t"
-                ):
-                    return True
-
+        if re.match(r"^[a-zA-Z0-9_-]+(\s|/)", command):
+            return True
         return False
 
     @loader.command()
