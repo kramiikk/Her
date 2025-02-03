@@ -8,6 +8,8 @@ import re
 import time
 import sys
 import traceback
+from typing import Dict, Any
+import aiohttp
 from .. import loader, main, utils
 import hikkatl
 
@@ -487,10 +489,34 @@ class AdvancedExecutorMod(loader.Module):
 
     @loader.command()
     async def c(self, message):
-        """Execute Python code or shell command"""
+        """Execute Python code, shell command or GPT-4o request"""
         command = utils.get_args_raw(message)
         if not command:
             return await utils.answer(message, "💬 Please provide a command to execute")
+        if command.startswith("-i"):
+            args = command[2:].strip()
+            reply_message = await message.get_reply_message()
+            if not reply_message or not reply_message.raw_text:
+                return await utils.answer(message, "❌ Please reply to a message.")
+            payload = {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": (
+                            f"Сгенерируй ответ {args or 'в стиле Камю и Кьеркегора, меньше пафоса больше эмпатии, но все также реальное и правдоподобное отношения к миру'}. "
+                            f"Текст для ответа: {reply_message.raw_text}"
+                        ),
+                    }
+                ]
+            }
+
+            try:
+                generated_reply = await self._process_api_request(payload)
+                await utils.answer(message, generated_reply)
+            except Exception as e:
+                logger.error(f"GPT error: {e}")
+                await utils.answer(message, "❌ Error generating response")
+            return
         try:
             if self.is_shell_command(command):
                 await utils.answer(message, self.strings["terminal_executing"])
@@ -524,6 +550,19 @@ class AdvancedExecutorMod(loader.Module):
             return traceback.format_exc(), None, True
         finally:
             sys.stdout = original_stdout
+
+    async def _process_api_request(self, payload: Dict[str, Any]) -> str:
+        async with asyncio.timeout(13):
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    "https://api.paxsenix.biz.id/ai/gpt4o",
+                    json=payload,
+                    headers={"Content-Type": "application/json"},
+                ) as resp:
+                    data = await resp.json()
+                    if resp.status == 200 and "message" in data:
+                        return data["message"]
+                    raise Exception(f"API error: {data.get('error', 'Unknown error')}")
 
     async def _run_shell(self, message, command):
         is_sudo = command.strip().startswith("sudo ")
