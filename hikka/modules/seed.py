@@ -286,7 +286,7 @@ class AdvancedExecutorMod(loader.Module):
         "python_executing": "🐍 Executing...",
         "terminal_executing": "💻 Executing...",
         "forbidden_command": "🚫 This command is forbidden!",
-        "result_header": "🧮 <b>Result:</b>",
+        "result_header": "🎟 <b>Result:</b>",
         "error_header": "❌ <b>Error:</b>",
         "duration": "⏱ <b>Duration:</b>",
     }
