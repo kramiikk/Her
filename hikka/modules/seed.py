@@ -359,7 +359,6 @@ class AdvancedExecutorMod(loader.Module):
         "forbidden_command": "🚫 This command is forbidden!",
         "result_header": "🎟 <b><i>Result:</i></b>",
         "error_header": "❌ <b>Error:</b>",
-        "duration": "⏱ <b>Duration:</b>",
     }
 
     def __init__(self):
@@ -653,7 +652,7 @@ class AdvancedExecutorMod(loader.Module):
         duration_str = f"{duration*1000:.1f}ms" if duration < 1 else f"{duration:.2f}s"
 
         text = [
-            f"<b>{self.strings['duration']} {duration_str}</b>",
+            f"<b>⏱ {duration_str}</b>",
             f"<pre><code>{utils.escape_html(code)}</code></pre>",
         ]
 
