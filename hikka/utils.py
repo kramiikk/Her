@@ -1286,14 +1286,4 @@ def get_git_info() -> typing.Tuple[str, str]:
     )
 
 
-def get_version_raw() -> str:
-    """
-    Get the version of the userbot
-    :return: Version in format %s.%s.%s
-    """
-    from . import version
-
-    return ".".join(map(str, list(version.__version__)))
-
-
 get_platform_name = get_named_platform

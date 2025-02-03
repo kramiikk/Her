@@ -8,7 +8,6 @@ import asyncio
 import contextlib
 import importlib
 import getpass
-import git
 import json
 import logging
 import os
@@ -27,10 +26,9 @@ from hikkatl.sessions import MemorySession, SQLiteSession
 from hikkatl.network.connection import ConnectionTcpFull
 
 
-from . import configurator, database, loader, utils, version
+from . import configurator, database, loader, utils
 from .dispatcher import CommandDispatcher
 from .tl_cache import CustomTelegramClient
-from .version import __version__
 
 BASE_DIR = (
     "/data"
@@ -399,16 +397,10 @@ class Her:
     async def _badge(self, client: CustomTelegramClient):
         """Call the badge in shell"""
         try:
-            repo = git.Repo()
             build = utils.get_git_hash()
-            upd = (
-                "Update required"
-                if repo.git.log([f"HEAD..origin/{version.branch}", "--oneline"])
-                else "Up-to-date"
-            )
 
             logging.info(
-                f"\n• Version: {'.'.join(list(map(str, list(__version__))))} {build[:7]} ({upd})"
+                f"\n• Version: 1.7.9 {build[:7]}"
                 f"\n• For {client.tg_id}"
                 f"\n• Prefix: «.»"
             )

@@ -26,7 +26,7 @@ from hikkatl.tl.types import (
     UserFull,
 )
 
-from . import version, utils
+from . import utils
 from ._reference_finder import replace_all_refs
 from .pointers import PointerDict, PointerList
 
@@ -269,13 +269,6 @@ class Module:
                     ),
                 )
             )
-
-            if version.__version__ < ver:
-                _raise(
-                    RuntimeError(
-                        f"Library requires Her version {'{}.{}.{}'.format(*ver)}+"
-                    )
-                )
 
         module = f"hikka.libraries.{url.replace('%', '%%').replace('.', '%d')}"
         origin = f"<library {url}>"
@@ -529,20 +522,6 @@ class ModuleConfig(dict):
         super().__init__(
             {option: config.value for option, config in self._config.items()}
         )
-
-    def getdoc(self, key: str, message: typing.Optional[Message] = None) -> str:
-        """Get the documentation by key"""
-        ret = self._config[key].doc
-
-        if callable(ret):
-            try:
-                # Compatibility tweak
-                # does nothing in Her
-                ret = ret(message)
-            except Exception:
-                ret = ret()
-
-        return ret
 
     def getdef(self, key: str) -> str:
         """Get the default value by key"""

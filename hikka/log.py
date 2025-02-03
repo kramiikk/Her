@@ -138,6 +138,5 @@ def init():
     logging.getLogger("git.cmd").setLevel(logging.WARNING)
     logging.getLogger("asyncio").setLevel(logging.WARNING)
     logging.getLogger("matplotlib").setLevel(logging.WARNING)
-    logging.getLogger("PIL.PngImagePlugin").setLevel(logging.INFO)
     logging.getLogger("urllib3.connectionpool").setLevel(logging.WARNING)
     logging.captureWarnings(True)
