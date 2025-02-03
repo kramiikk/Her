@@ -286,7 +286,7 @@ class AdvancedExecutorMod(loader.Module):
         "python_executing": "🐍 Executing...",
         "terminal_executing": "💻 Executing...",
         "forbidden_command": "🚫 This command is forbidden!",
-        "result_header": "🎟 <b>Result:</b>",
+        "result_header": "🎟 <b><i>Result:</i></b>",
         "error_header": "❌ <b>Error:</b>",
         "duration": "⏱ <b>Duration:</b>",
     }
@@ -552,7 +552,7 @@ class AdvancedExecutorMod(loader.Module):
                 text.append(f"<pre>{utils.escape_html(result)}</pre>")
             if output is not None:
                 text.append(
-                    f"<i>Return value:</i> <pre>{utils.escape_html(str(output))}</pre>"
+                    f"<i>↷ Return value:</i> <pre>{utils.escape_html(str(output))}</pre>"
                 )
         full_text = "\n".join(text)
         if len(full_text) > 4096:
