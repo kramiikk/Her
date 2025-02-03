@@ -26,20 +26,23 @@ def hash_msg(message):
 async def read_stream(func: callable, stream):
     buffer = []
     last_send = time.time()
+    try:
+        while True:
+            chunk = await stream.read(2048)
+            if not chunk:
+                if buffer:
+                    await func("".join(buffer))
+                break
+            decoded = chunk.decode(errors="replace").replace("\r\n", "\n")
+            buffer.append(decoded)
 
-    while True:
-        chunk = await stream.read(2048)
-        if not chunk:
-            break
-        decoded = chunk.decode(errors="replace").replace("\r\n", "\n")
-        buffer.append(decoded)
-
-        if "\n" in decoded or time.time() - last_send > 0.8:
+            if "\n" in decoded or time.time() - last_send > 0.5:
+                await func("".join(buffer))
+                buffer.clear()
+                last_send = time.time()
+    finally:
+        if buffer:
             await func("".join(buffer))
-            buffer.clear()
-            last_send = time.time()
-    if buffer:
-        await func("".join(buffer))
 
 
 async def sleep_for_task(func: callable, data: bytes, delay: float):
@@ -67,7 +70,7 @@ class MessageEditor:
 
     async def cmd_ended(self, rc):
         self.rc = rc
-        await self.redraw()
+        await self.redraw(force=True)
 
     async def update_stdout(self, stdout):
         self.stdout += stdout
@@ -80,10 +83,10 @@ class MessageEditor:
     def _truncate_output(self, text: str, max_len: int) -> str:
         if len(text) <= max_len:
             return text
+        if self.rc is not None:
+            return text[: max_len - 100] + "\n... 🔻 [TRUNCATED] 🔻 ..."
         half = max_len // 2
-        first = text[:half].rsplit("\n", 1)[0]
-        last = text[-half:].split("\n", 1)[-1]
-        return f"{first}\n... 🔻 [TRUNCATED] 🔻 ...\n{last}"
+        return f"{text[:half]}\n... 🔻 [TRUNCATED] 🔻 ...\n{text[-half:]}"
 
     def _get_progress(self):
         elapsed = time.time() - self.start_time
@@ -108,7 +111,7 @@ class MessageEditor:
             f"{status}"
         )
 
-        max_total = 4096 - len(base_text) - 100
+        max_total = 4096 - len(utils.escape_html(base_text)) - 100
 
         if not self.stderr:
             stdout_max = min(len(self.stdout), max_total)
@@ -126,12 +129,12 @@ class MessageEditor:
             stdout_max += unused_stderr
             stderr_max += unused_stdout
         sections = []
-        if self.stdout:
+        if self.stdout.strip():
             stdout_text = self._truncate_output(self.stdout, stdout_max)
             sections.append(
                 f"<b>📤 Stdout ({len(self.stdout)} chars):</b>\n<pre>{stdout_text}</pre>"
             )
-        if self.stderr:
+        if self.stderr.strip():
             stderr_text = self._truncate_output(self.stderr, stderr_max)
             sections.append(
                 f"<b>📥 Stderr ({len(self.stderr)} chars):</b>\n<pre>{stderr_text}</pre>"
@@ -140,7 +143,11 @@ class MessageEditor:
         if sections:
             text += "\n\n".join(sections)
         try:
-            await utils.answer(self.message, text)
+            full_text = utils.escape_html(text)
+            if len(full_text) <= 4096:
+                await utils.answer(self.message, text)
+            else:
+                raise hikkatl.errors.rpcerrorlist.MessageTooLongError
         except hikkatl.errors.rpcerrorlist.MessageTooLongError:
             await utils.answer(
                 self.message,
@@ -152,7 +159,10 @@ class MessageEditor:
     async def animate_progress(self):
         while self.rc is None:
             await self.redraw(force=True)
-            await asyncio.sleep(1)
+            try:
+                await asyncio.wait_for(asyncio.sleep(1), timeout=1)
+            except asyncio.TimeoutError:
+                pass
 
 
 class SudoMessageEditor(MessageEditor):
@@ -303,18 +313,16 @@ class RawMessageEditor(MessageEditor):
         content = "\n".join(self._buffer).strip()
         if not content:
             return
-        if self.rc is None:
+        if self.rc is not None:
+            truncated = self._truncate_output(content, 4096 - 50, keep_edges=False)
+            text = f"<pre>{truncated}</pre>"
+        else:
             progress = self._get_progress()
             max_len = 4096 - len(progress) - 50
             truncated = self._truncate_output(content, max_len, keep_edges=True)
             text = f"{progress}<pre>{truncated}</pre>"
-        else:
-            max_len = 4096 - 50
-            truncated = self._truncate_output(content, max_len, keep_edges=True)
-            text = f"<pre>{truncated}</pre>"
-        if time.time() - self._last_flush > 1 or self.rc is not None:
-            await utils.answer(self.message, text)
-            self._last_flush = time.time()
+        await utils.answer(self.message, text)
+        self._last_flush = time.time()
 
     def _truncate_output(self, text: str, max_len: int, keep_edges=True) -> str:
         text = utils.escape_html(text)
@@ -612,6 +620,8 @@ class AdvancedExecutorMod(loader.Module):
                 await utils.answer(message, "❌ Command execution cancelled")
             raise
         finally:
+            if editor and editor.rc is None:
+                await editor.cmd_ended(proc.returncode)
             if isinstance(editor, SudoMessageEditor):
                 await editor.cleanup()
             if proc:
@@ -631,9 +641,12 @@ class AdvancedExecutorMod(loader.Module):
 
     async def _wait_process(self, proc, editor):
         rc = await proc.wait()
+
+        for _ in range(5):
+            if proc.stdout.at_eof() and proc.stderr.at_eof():
+                break
+            await asyncio.sleep(0.1)
         await editor.cmd_ended(rc)
-        key = hash_msg(editor.request_message)
-        self.active_processes.pop(key, None)
 
     async def _format_result(self, message, code, result, output, error):
         duration = time.time() - self.start_time
@@ -663,11 +676,10 @@ class AdvancedExecutorMod(loader.Module):
     def _truncate_output(self, text: str, max_len: int) -> str:
         if len(text) <= max_len:
             return text
-        return (
-            text[: max_len // 2]
-            + "\n... 🔻 [TRUNCATED] 🔻 ...\n"
-            + text[-max_len // 2 :]
-        )
+        if self.rc is not None:
+            return text[: max_len - 100] + "\n... 🔻 [TRUNCATED] 🔻 ..."
+        half = max_len // 2
+        return f"{text[:half]}\n... 🔻 [TRUNCATED] 🔻 ...\n{text[-half:]}"
 
     def get_sub(self, mod):
         """Returns a dictionary of module attributes that don't start with _"""
