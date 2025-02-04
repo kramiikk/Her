@@ -526,9 +526,7 @@ class AdvancedExecutorMod(loader.Module):
                     },
                     {
                         "role": "user",
-                        "content": (
-                            "Сообщение: {reply_message.raw_text}."
-                        ),
+                        "content": ("Сообщение: {reply_message.raw_text}."),
                     },
                 ]
             }
@@ -680,9 +678,7 @@ class AdvancedExecutorMod(loader.Module):
             if result.strip():
                 text.append(f"<pre>{utils.escape_html(result)}</pre>")
             if output is not None:
-                text.append(
-                    f" ↷Return: <pre>{utils.escape_html(str(output))}</pre>"
-                )
+                text.append(f" ↷Return: <pre>{utils.escape_html(str(output))}</pre>")
         full_text = "\n".join(text)
         if len(full_text) > 4096:
             full_text = self._truncate_output(full_text, 4096)
