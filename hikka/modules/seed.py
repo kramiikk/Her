@@ -22,31 +22,29 @@ logger = logging.getLogger(__name__)
 def hash_msg(message):
     return f"{utils.get_chat_id(message)}/{message.id}"
 
-
 async def read_stream(func: callable, stream):
     buffer = []
     last_send = time.time()
     try:
-        async for chunk in stream:
+        while True:
             chunk = await stream.read(4096)
             if not chunk:
-                if buffer:
-                    await func("".join(buffer))
                 break
             decoded = chunk.decode(errors="replace").replace("\r\n", "\n")
             buffer.append(decoded)
-
-            if "\n" in decoded or time.time() - last_send > 1.0:
+            current_time = time.time()
+            if "\n" in decoded or current_time - last_send >= 0.5:
                 await func("".join(buffer))
                 buffer.clear()
-                last_send = time.time()
+                last_send = current_time
+        if buffer:
+            await func("".join(buffer))
+    except Exception as e:
+        logger.error(f"Error in read_stream: {e}")
     finally:
-        try:
-            if buffer:
-                await func("".join(buffer))
-        finally:
+        if buffer:
+            await func("".join(buffer))
             buffer.clear()
-
 
 async def sleep_for_task(func: callable, data: bytes, delay: float):
     await asyncio.sleep(delay)
@@ -356,24 +354,17 @@ class RawMessageEditor(BaseMessageEditor):
     async def _flush_buffer(self):
         async with self._update_lock:
             try:
-                content = "\n".join(self._buffer).strip()
-                if not content:
+                if not self._buffer:
                     return
-                if self.rc is not None:
-                    truncated = self._truncate_output(content, 4096 - 50, keep_edges=False)
-                    text = f"<pre>{truncated}</pre>"
-                else:
-                    progress = self._get_progress()
-                    max_len = 4096 - len(progress) - 50
-                    truncated = self._truncate_output(content, max_len, keep_edges=True)
-                    text = f"{progress}<pre>{truncated}</pre>"
+                
+                content = "".join(self._buffer)
+                content = content.replace("\r\n", "\n").strip()
+                
+                text = (f"<pre>{utils.escape_html(content)}</pre>\n"
+                        f"💫 Status: {self.rc if self.rc is not None else 'Running'}")
+                
                 await utils.answer(self.message, text)
-                self._last_flush = time.time()
-                self._buffer.clear()
-            except Exception as e:
-                logger.error(f"Failed to flush buffer: {e}")
             finally:
-                self._last_flush = time.time()
                 self._buffer.clear()
 
     async def update_stdout(self, stdout):
@@ -704,29 +695,42 @@ class AdvancedExecutorMod(loader.Module):
                     self.active_processes.pop(key, None)
 
     async def _wait_process(self, proc, editor):
-        """Wait for process completion and cleanup streams properly"""
-        rc = await proc.wait()
+        try:
+            rc = await proc.wait()
+            
+            try:
+                while True:
+                    chunk = await proc.stdout.read(4096)
+                    if not chunk:
+                        break
+                    await editor.update_stdout(
+                            chunk.decode(errors="replace")
+                        )
+            except (BrokenPipeError, ConnectionResetError):
+                pass
 
-        try:
-            remaining_stdout = await proc.stdout.read()
-            if remaining_stdout:
-                await editor.update_stdout(remaining_stdout.decode(errors="replace"))
-        except IOError as e:
-            if "closed" not in str(e).lower():
-                raise
-        except Exception as e:
-            logger.debug(f"Unexpected stdout error: {e}")
-        try:
-            remaining_stderr = await proc.stderr.read()
-            if remaining_stderr:
-                await editor.update_stderr(remaining_stderr.decode(errors="replace"))
-        except IOError as e:
-            if "closed" not in str(e).lower():
-                raise
-        except Exception as e:
-            logger.debug(f"Unexpected stderr error: {e}")
-        await editor.cmd_ended(rc)
-        await asyncio.sleep(0.5)
+            try:
+                while True:
+                    chunk = await proc.stderr.read(4096)
+                    if not chunk:
+                        break
+                    await editor.update_stderr(
+                            chunk.decode(errors="replace")
+                        )
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+
+        finally:
+            await editor.cmd_ended(rc if 'rc' in locals() else -1)
+            await asyncio.sleep(0.2)
+            
+            for stream in [proc.stdout, proc.stderr, proc.stdin]:
+                if stream:
+                    try:
+                        stream.close()
+                        await stream.wait_closed()
+                    except Exception:
+                        pass
 
     async def _format_result(self, message, code, result, output, error):
         duration = time.time() - self.start_time
@@ -745,7 +749,7 @@ class AdvancedExecutorMod(loader.Module):
             if result.strip():
                 text.append(f"<pre>{utils.escape_html(result)}</pre>")
             if output is not None:
-                text.append(f" ↷Return: <pre>{utils.escape_html(str(output))}</pre>")
+                text.append(f" ↷ Return: <pre>{utils.escape_html(str(output))}</pre>")
         full_text = "\n".join(text)
         if len(full_text) > 4096:
             full_text = self._truncate_output(full_text, 4096, editor=self.editor)
