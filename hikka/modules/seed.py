@@ -41,8 +41,11 @@ async def read_stream(func: callable, stream):
                 buffer.clear()
                 last_send = time.time()
     finally:
-        if buffer:
-            await func("".join(buffer))
+        try:
+            if buffer:
+                await func("".join(buffer))
+        finally:
+            buffer.clear()
 
 
 async def sleep_for_task(func: callable, data: bytes, delay: float):
@@ -50,7 +53,7 @@ async def sleep_for_task(func: callable, data: bytes, delay: float):
     await func(data.decode())
 
 
-class MessageEditor:
+class BaseMessageEditor:
     def __init__(
         self,
         message: hikkatl.tl.types.Message,
@@ -69,21 +72,14 @@ class MessageEditor:
         self.request_message = request_message
         self._is_updating = False
 
-    async def cmd_ended(self, rc):
-        self.rc = rc
-        self.last_update = 0
-        await self.redraw()
-        await asyncio.sleep(0.5)
-        await self.redraw()
-
-    async def update_stdout(self, stdout):
-        stdout = stdout.replace("\r\n", "\n").replace("\r", "\n")
-        self.stdout += stdout
-        await self.redraw()
-
-    async def update_stderr(self, stderr):
-        self.stderr += stderr
-        await self.redraw()
+    def _get_progress(self):
+        elapsed = time.time() - self.start_time
+        frame = "⏳"
+        if elapsed < 1:
+            elapsed_ms = elapsed * 1000
+            return f"{frame} <b>Running for {elapsed_ms:.1f}ms</b>\n"
+        else:
+            return f"{frame} <b>Running for {elapsed:.1f}s</b>\n"
 
     def _truncate_output(self, text: str, max_len: int) -> str:
         text = text.replace("\r\n", "\n").replace("\r", "\n")
@@ -99,14 +95,33 @@ class MessageEditor:
 
         return text[:part_len].strip() + separator + text[-part_len:].strip()
 
-    def _get_progress(self):
-        elapsed = time.time() - self.start_time
-        frame = "⏳"
-        if elapsed < 1:
-            elapsed_ms = elapsed * 1000
-            return f"{frame} <b>Running for {elapsed_ms:.1f}ms</b>\n"
-        else:
-            return f"{frame} <b>Running for {elapsed:.1f}s</b>\n"
+    async def cmd_ended(self, rc):
+        pass
+
+    async def update_stdout(self, stdout):
+        pass
+
+    async def update_stderr(self, stderr):
+        pass
+
+    async def redraw(self):
+        pass
+
+
+class MessageEditor(BaseMessageEditor):
+    async def cmd_ended(self, rc):
+        self.rc = rc
+        self.last_update = 0
+        await self.redraw()
+
+    async def update_stdout(self, stdout):
+        stdout = stdout.replace("\r\n", "\n").replace("\r", "\n")
+        self.stdout += stdout
+        await self.redraw()
+
+    async def update_stderr(self, stderr):
+        self.stderr += stderr
+        await self.redraw()
 
     async def redraw(self):
         if self._is_updating:
@@ -185,6 +200,7 @@ class SudoMessageEditor(MessageEditor):
         self.state = 0
         self.authmsg = None
         self._auth_event = None
+        self.attempts = 0
 
     def _get_progress(self):
         progress = super()._get_progress()
@@ -235,6 +251,8 @@ class SudoMessageEditor(MessageEditor):
             await self.redraw()
 
     async def _handle_auth_request(self, lastline):
+        if self.state >= 2:
+            return
         try:
             user = lastline.split()[-1][:-1]
 
@@ -313,7 +331,7 @@ class SudoMessageEditor(MessageEditor):
                 pass
 
 
-class RawMessageEditor(MessageEditor):
+class RawMessageEditor(BaseMessageEditor):
     def __init__(self, message, command, request_message):
         super().__init__(
             message=message, command=command, request_message=request_message
@@ -321,6 +339,19 @@ class RawMessageEditor(MessageEditor):
         self._buffer = []
         self._last_flush = 0
         self._update_lock = asyncio.Lock()
+
+    def _truncate_output(self, text: str, max_len: int, keep_edges=True) -> str:
+        text = text.replace("\r\n", "\n").replace("\r", "\n").strip()
+        text = utils.escape_html(text)
+
+        if len(text) <= max_len:
+            return text
+        if self.rc is not None:
+            return "..." + text[-max_len + 3 :]
+        if keep_edges:
+            edge = (max_len - len("\n... 🔻 [TRUNCATED] 🔻 ...\n")) // 2
+            return text[:edge] + "\n... 🔻 [TRUNCATED] 🔻 ...\n" + text[-edge:]
+        return text[:max_len]
 
     async def _flush_buffer(self):
         async with self._update_lock:
@@ -338,19 +369,6 @@ class RawMessageEditor(MessageEditor):
             await utils.answer(self.message, text)
             self._last_flush = time.time()
             self._buffer.clear()
-
-    def _truncate_output(self, text: str, max_len: int, keep_edges=True) -> str:
-        text = text.replace("\r\n", "\n").replace("\r", "\n").strip()
-        text = utils.escape_html(text)
-
-        if len(text) <= max_len:
-            return text
-        if self.rc is not None:
-            return "..." + text[-max_len + 3 :]
-        if keep_edges:
-            edge = (max_len - len("\n... 🔻 [TRUNCATED] 🔻 ...\n")) // 2
-            return text[:edge] + "\n... 🔻 [TRUNCATED] 🔻 ...\n" + text[-edge:]
-        return text[:max_len]
 
     async def update_stdout(self, stdout):
         stdout = stdout.replace("\r\n", "\n").replace("\r", "\n")
@@ -643,29 +661,44 @@ class AdvancedExecutorMod(loader.Module):
                         await editor.cmd_ended(-1)
         except asyncio.CancelledError:
             if proc:
-                proc.kill()
-                await utils.answer(message, "❌ Command execution cancelled")
-            raise
-        finally:
-            if editor and editor.rc is None:
-                await editor.cmd_ended(proc.returncode if proc else -1)
-                await asyncio.sleep(0.5)
-            if isinstance(editor, SudoMessageEditor):
-                await editor.cleanup()
-            if proc:
-                if proc.stdout:
-                    await proc.stdout.close()
-                if proc.stderr:
-                    await proc.stderr.close()
-                if proc.stdin:
-                    await proc.stdin.close()
                 try:
-                    await proc.wait()
+                    proc.kill()
+                    await utils.answer(message, "❌ Command execution cancelled")
                 except ProcessLookupError:
                     pass
-                except Exception as e:
-                    logger.debug(f"Process wait error: {e}")
-                self.active_processes.pop(key, None)
+            raise
+        finally:
+            try:
+                if editor:
+                    if editor.rc is None:
+                        rc = (
+                            proc.returncode
+                            if proc and proc.returncode is not None
+                            else -1
+                        )
+                        await editor.cmd_ended(rc)
+                        await asyncio.sleep(0.5)
+                    if isinstance(editor, SudoMessageEditor):
+                        await editor.cleanup()
+            finally:
+                if proc:
+                    try:
+                        if proc.stdin:
+                            proc.stdin.close()
+                            await proc.stdin.wait_closed()
+                        if proc.stdout:
+                            proc.stdout.close()
+                        if proc.stderr:
+                            proc.stderr.close()
+                    except Exception as e:
+                        logger.debug(f"Stream close error: {e}")
+                    try:
+                        await proc.wait()
+                    except (ProcessLookupError, AttributeError):
+                        pass
+                    except Exception as e:
+                        logger.debug(f"Process wait error: {e}")
+                    self.active_processes.pop(key, None)
 
     async def _wait_process(self, proc, editor):
         """Wait for process completion and cleanup streams properly"""
@@ -712,13 +745,15 @@ class AdvancedExecutorMod(loader.Module):
                 text.append(f" ↷Return: <pre>{utils.escape_html(str(output))}</pre>")
         full_text = "\n".join(text)
         if len(full_text) > 4096:
-            full_text = self._truncate_output(full_text, 4096)
+            full_text = self._truncate_output(full_text, 4096, editor=self.editor)
         await utils.answer(message, full_text)
 
-    def _truncate_output(self, text: str, max_len: int) -> str:
+    def _truncate_output(
+        self, text: str, max_len: int, editor: BaseMessageEditor
+    ) -> str:
         if len(text) <= max_len:
             return text
-        if self.rc is not None:
+        if editor.rc is not None:
             return text[: max_len - 100] + "\n... 🔻 [TRUNCATED] 🔻 ..."
         half = max_len // 2
         return f"{text[:half]}\n... 🔻 [TRUNCATED] 🔻 ...\n{text[-half:]}"
