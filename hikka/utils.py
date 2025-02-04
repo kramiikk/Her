@@ -676,118 +676,17 @@ def get_platform_emoji() -> str:
     return BASE.format(5393588431026674882)
 
 
-def uptime() -> int:
-    """
-    Returns userbot uptime in seconds
-    """
-    current_uptime = round(time.perf_counter() - init_ts)
-    return current_uptime
-
-
-def formatted_uptime() -> str:
+def uptime() -> str:
     """
     Returns formatted uptime including days if applicable.
     :return: Formatted uptime
     """
-    total_seconds = uptime()
+    total_seconds = round(time.perf_counter() - init_ts)
     days, remainder = divmod(total_seconds, 86400)
     time_formatted = str(timedelta(seconds=remainder))
     if days > 0:
         return f"{days} day(s), {time_formatted}"
     return time_formatted
-
-def add_uptime(minutes: int) -> None:
-    """
-    Adds a custom uptime in minutes to the current uptime.
-    :param minutes: The custom uptime in minutes to add
-    """
-    global init_ts
-    seconds = minutes * 60
-    init_ts -= seconds
-
-def set_uptime(minutes: int) -> None:
-    """
-    Sets a custom uptime in minutes. This will adjust the init_ts accordingly.
-    :param minutes: The custom uptime in minutes to set
-    """
-    global init_ts
-    seconds = minutes * 60 
-    init_ts = time.perf_counter() - seconds
-    
-def ascii_face() -> str:
-    """
-    Returnes cute ASCII-art face
-    :return: ASCII-art face
-    """
-    return escape_html(
-        random.choice(
-            [
-                "ヽ(๑◠ܫ◠๑)ﾉ",
-                "(◕ᴥ◕ʋ)",
-                "ᕙ(`▽´)ᕗ",
-                "(✿◠‿◠)",
-                "(▰˘◡˘▰)",
-                "(˵ ͡° ͜ʖ ͡°˵)",
-                "ʕっ•ᴥ•ʔっ",
-                "( ͡° ᴥ ͡°)",
-                "(๑•́ ヮ •̀๑)",
-                "٩(^‿^)۶",
-                "(っˆڡˆς)",
-                "ψ(｀∇´)ψ",
-                "⊙ω⊙",
-                "٩(^ᴗ^)۶",
-                "(´・ω・)っ由",
-                "( ͡~ ͜ʖ ͡°)",
-                "✧♡(◕‿◕✿)",
-                "โ๏௰๏ใ ื",
-                "∩｡• ᵕ •｡∩ ♡",
-                "(♡´౪`♡)",
-                "(◍＞◡＜◍)⋈。✧♡",
-                "╰(✿´⌣`✿)╯♡",
-                "ʕ•ᴥ•ʔ",
-                "ᶘ ◕ᴥ◕ᶅ",
-                "▼・ᴥ・▼",
-                "ฅ^•ﻌ•^ฅ",
-                "(΄◞ิ౪◟ิ‵)",
-                "٩(^ᴗ^)۶",
-                "ᕴｰᴥｰᕵ",
-                "ʕ￫ᴥ￩ʔ",
-                "ʕᵕᴥᵕʔ",
-                "ʕᵒᴥᵒʔ",
-                "ᵔᴥᵔ",
-                "(✿╹◡╹)",
-                "(๑￫ܫ￩)",
-                "ʕ·ᴥ·　ʔ",
-                "(ﾉ≧ڡ≦)",
-                "(≖ᴗ≖✿)",
-                "（〜^∇^ )〜",
-                "( ﾉ･ｪ･ )ﾉ",
-                "~( ˘▾˘~)",
-                "(〜^∇^)〜",
-                "ヽ(^ᴗ^ヽ)",
-                "(´･ω･`)",
-                "₍ᐢ•ﻌ•ᐢ₎*･ﾟ｡",
-                "(。・・)_且",
-                "(=｀ω´=)",
-                "(*•‿•*)",
-                "(*ﾟ∀ﾟ*)",
-                "(☉⋆‿⋆☉)",
-                "ɷ◡ɷ",
-                "ʘ‿ʘ",
-                "(。-ω-)ﾉ",
-                "( ･ω･)ﾉ",
-                "(=ﾟωﾟ)ﾉ",
-                "(・ε・`*) …",
-                "ʕっ•ᴥ•ʔっ",
-                "(*˘︶˘*)",
-                "ಥ_ಥ",
-                "･ﾟ･(｡>д<｡)･ﾟ･",
-                "(┬┬＿┬┬)",
-                "(◞‸◟ㆀ)",
-                " ˚‧º·(˚ ˃̣̣̥⌓˂̣̣̥ )‧º·˚",
-            ]
-        )
-    )
 
 
 def array_sum(
@@ -989,18 +888,6 @@ def get_git_hash() -> typing.Union[str, bool]:
         return git.Repo().head.commit.hexsha
     except Exception:
         return False
-
-
-def get_commit_url() -> str:
-    """
-    Get current Her git commit url
-    :return: Git commit url
-    """
-    try:
-        hash_ = get_git_hash()
-        return f'<a href="https://github.com/kramiikk/Her/commit/{hash_}">#{hash_[:7]}</a>'
-    except Exception:
-        return "Unknown"
 
 
 def is_serializable(x: typing.Any, /) -> bool:
@@ -1256,34 +1143,4 @@ def get_ram_usage() -> float:
     except Exception:
         return 0
 
-
-def get_cpu_usage() -> float:
-    """Returns current process tree CPU usage in %"""
-    try:
-        import psutil
-
-        current_process = psutil.Process(os.getpid())
-        cpu = current_process.cpu_percent()
-        for child in current_process.children(recursive=True):
-            cpu += child.cpu_percent()
-
-        return round(cpu, 1)
-    except Exception:
-        return 0
-
-
 init_ts = time.perf_counter()
-
-def get_git_info() -> typing.Tuple[str, str]:
-    """
-    Get git info
-    :return: Git info
-    """
-    hash_ = get_git_hash()
-    return (
-        hash_,
-        f"https://github.com/kramiikk/Her/commit/{hash_}" if hash_ else "",
-    )
-
-
-get_platform_name = get_named_platform
