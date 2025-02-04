@@ -627,7 +627,8 @@ class AdvancedExecutorMod(loader.Module):
                     pass
                 finally:
                     self.active_processes.pop(key, None)
-                    await editor.cmd_ended(-1)
+                    if editor:
+                        await editor.cmd_ended(-1)
         except asyncio.CancelledError:
             if proc:
                 proc.kill()
@@ -643,7 +644,6 @@ class AdvancedExecutorMod(loader.Module):
                 if proc.stdin:
                     try:
                         proc.stdin.close()
-                        await proc.stdin.wait_closed()
                     except Exception as e:
                         logger.debug(f"Error closing stdin: {e}")
                 try:
@@ -655,14 +655,19 @@ class AdvancedExecutorMod(loader.Module):
                 self.active_processes.pop(key, None)
 
     async def _wait_process(self, proc, editor):
+        """Wait for process completion and cleanup streams properly"""
         rc = await proc.wait()
         try:
-            await asyncio.wait_for(
-                asyncio.gather(proc.stdout.wait_closed(), proc.stderr.wait_closed()),
-                timeout=0.3,
-            )
-        except asyncio.TimeoutError:
-            pass
+            if not proc.stdout.at_eof():
+                remaining_stdout = await proc.stdout.read()
+                if remaining_stdout:
+                    await editor.update_stdout(remaining_stdout.decode())
+            if not proc.stderr.at_eof():
+                remaining_stderr = await proc.stderr.read()
+                if remaining_stderr:
+                    await editor.update_stderr(remaining_stderr.decode())
+        except Exception as e:
+            logger.debug(f"Error draining streams: {e}")
         await editor.cmd_ended(rc)
 
     async def _format_result(self, message, code, result, output, error):
