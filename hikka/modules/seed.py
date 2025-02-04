@@ -70,6 +70,7 @@ class MessageEditor:
 
     async def cmd_ended(self, rc):
         self.rc = rc
+        self.last_update = 0
         await self.redraw(force=True)
 
     async def update_stdout(self, stdout):
@@ -103,7 +104,7 @@ class MessageEditor:
         self.last_update = time.time()
 
         progress = self._get_progress()
-        status = f"<b>Exit code:</b> <code>{self.rc or 'Running...'}</code>\n\n"
+        status = f"<b>Exit code:</b> <code>{self.rc if self.rc is not None else 'Running...'}</code>\n\n"
 
         base_text = (
             f"{progress}"
@@ -634,7 +635,8 @@ class AdvancedExecutorMod(loader.Module):
             raise
         finally:
             if editor and editor.rc is None:
-                await editor.cmd_ended(proc.returncode)
+                await editor.cmd_ended(proc.returncode if proc else -1)
+                await asyncio.sleep(0.2)
             if isinstance(editor, SudoMessageEditor):
                 await editor.cleanup()
             if proc:
@@ -654,11 +656,13 @@ class AdvancedExecutorMod(loader.Module):
 
     async def _wait_process(self, proc, editor):
         rc = await proc.wait()
-
-        for _ in range(5):
-            if proc.stdout.at_eof() and proc.stderr.at_eof():
-                break
-            await asyncio.sleep(0.1)
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(proc.stdout.wait_closed(), proc.stderr.wait_closed()),
+                timeout=0.3,
+            )
+        except asyncio.TimeoutError:
+            pass
         await editor.cmd_ended(rc)
 
     async def _format_result(self, message, code, result, output, error):
