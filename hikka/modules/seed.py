@@ -207,6 +207,13 @@ class SudoMessageEditor(MessageEditor):
             self.state = 0
             handled = True
             self.stderr = ""
+            if self.attempts >= 3:
+                await utils.answer(self.message, "❌ Too many authentication attempts")
+                if self.process:
+                    self.process.kill()
+                self.state = 2
+                return
+            self.attempts += 1
             await self._handle_auth_request(lastline)
         elif not handled and re.search(self.PASS_REQ, lastline) and self.state == 0:
             await self._handle_auth_request(lastline)
