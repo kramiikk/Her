@@ -68,18 +68,11 @@ class MessageEditor:
         self.last_update = 0
         self.request_message = request_message
         self._is_updating = False
-        self._animation_task = None
 
     async def cmd_ended(self, rc):
         self.rc = rc
         self.last_update = 0
-        if self._animation_task and not self._animation_task.done():
-            self._animation_task.cancel()
-            try:
-                await self._animation_task
-            except asyncio.CancelledError:
-                pass
-        await self.redraw(force=True)
+        await self.redraw()
 
     async def update_stdout(self, stdout):
         self.stdout += stdout
@@ -106,21 +99,17 @@ class MessageEditor:
         else:
             return f"{frame} <b>Running for {elapsed:.1f}s</b>\n"
 
-    async def redraw(self, force=False):
-        if self._is_updating and not force:
+    async def redraw(self):
+        if self._is_updating:
             return
-        if not force and (time.time() - self.last_update < 0.5):
-            return
+        self._is_updating = True
         try:
-            self._is_updating = True
-            self.last_update = time.time()
-
-            progress = self._get_progress()
-            status = f"<b>Exit code:</b> <code>{self.rc if self.rc is not None else 'Running...'}</code>\n\n"
-
+            status = ""
+            if self.rc is not None:
+                status = f"<b>Exit code:</b> <code>{self.rc}</code>\n\n"
             base_text = (
-                f"{progress}"
-                f"<emoji document_id=5472111548572900003>⌨️</emoji> <b>Command:</b> <code>{utils.escape_html(self.command)}</code>\n"
+                f"<emoji document_id=5472111548572900003>⌨️</emoji> "
+                f"<b>Command:</b> <code>{utils.escape_html(self.command)}</code>\n"
                 f"{status}"
             )
 
@@ -170,15 +159,6 @@ class MessageEditor:
                 )
         finally:
             self._is_updating = False
-
-    async def animate_progress(self):
-        try:
-            while self.rc is None:
-                if not self._is_updating:
-                    await self.redraw(force=True)
-                await asyncio.sleep(1)
-        except asyncio.CancelledError:
-            pass
 
 
 class SudoMessageEditor(MessageEditor):
@@ -528,7 +508,7 @@ class AdvancedExecutorMod(loader.Module):
         command = utils.get_args_raw(message)
         if not command:
             return await utils.answer(message, "💬 Please provide a command to execute")
-        if command.startswith("i") and (command[1] == " " or len(command) == 1):
+        if command.startswith("i") and (len(command) == 1 or command[1] == " "):
             args = command[2:].strip()
             reply_message = await message.get_reply_message()
             if not reply_message or not reply_message.raw_text:
@@ -538,7 +518,7 @@ class AdvancedExecutorMod(loader.Module):
                     {
                         "role": "system",
                         "content": (
-                            f"Ты — здравомыслящий человек, который отвечает на сообщение {args or 'используя стиль Камю и Кьеркегора'} в интернете."
+                            f"Ты — здравомыслящий человек, который в переписке  отвечает на сообщение{', контекст: ' + args or ' используя стиль Камю и Кьеркегора'}."
                             "Твой стиль общения — естественный, без пафоса, с эмпатией и реалистичным подходом к теме."
                             "Твои ответы всегда логичны, связаны с контекстом и компактные (не более 3-5 предложений)."
                             "Если нужно стилизация текста, то используй HTML теги: <code>, <pre>, <b>, <i>, <s>, <u>."
@@ -547,7 +527,7 @@ class AdvancedExecutorMod(loader.Module):
                     },
                     {
                         "role": "user",
-                        "content": ("Сообщение: {reply_message.raw_text}."),
+                        "content": (f"Сообщение: {reply_message.raw_text}."),
                     },
                 ]
             }
@@ -617,7 +597,6 @@ class AdvancedExecutorMod(loader.Module):
                 editor = SudoMessageEditor(message, command, message)
             else:
                 editor = RawMessageEditor(message, command, message)
-
             proc = await asyncio.create_subprocess_shell(
                 command,
                 stdin=asyncio.subprocess.PIPE,
@@ -630,13 +609,11 @@ class AdvancedExecutorMod(loader.Module):
 
             if is_sudo:
                 editor.update_process(proc)
-            editor._animation_task = asyncio.create_task(editor.animate_progress())
             await asyncio.wait_for(
                 asyncio.gather(
                     read_stream(editor.update_stdout, proc.stdout),
                     read_stream(editor.update_stderr, proc.stderr),
                     self._wait_process(proc, editor),
-                    editor._animation_task,
                 ),
                 timeout=300,
             )
