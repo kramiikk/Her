@@ -68,10 +68,17 @@ class MessageEditor:
         self.last_update = 0
         self.request_message = request_message
         self._is_updating = False
+        self._animation_task = None
 
     async def cmd_ended(self, rc):
         self.rc = rc
         self.last_update = 0
+        if self._animation_task and not self._animation_task.done():
+            self._animation_task.cancel()
+            try:
+                await self._animation_task
+            except asyncio.CancelledError:
+                pass
         await self.redraw(force=True)
 
     async def update_stdout(self, stdout):
@@ -165,13 +172,13 @@ class MessageEditor:
             self._is_updating = False
 
     async def animate_progress(self):
-        while self.rc is None:
-            if not self._is_updating:
-                await self.redraw(force=True)
-            try:
+        try:
+            while self.rc is None:
+                if not self._is_updating:
+                    await self.redraw(force=True)
                 await asyncio.sleep(1)
-            except asyncio.CancelledError:
-                break
+        except asyncio.CancelledError:
+            pass
 
 
 class SudoMessageEditor(MessageEditor):
@@ -610,6 +617,7 @@ class AdvancedExecutorMod(loader.Module):
                 editor = SudoMessageEditor(message, command, message)
             else:
                 editor = RawMessageEditor(message, command, message)
+
             proc = await asyncio.create_subprocess_shell(
                 command,
                 stdin=asyncio.subprocess.PIPE,
@@ -622,12 +630,13 @@ class AdvancedExecutorMod(loader.Module):
 
             if is_sudo:
                 editor.update_process(proc)
+            editor._animation_task = asyncio.create_task(editor.animate_progress())
             await asyncio.wait_for(
                 asyncio.gather(
                     read_stream(editor.update_stdout, proc.stdout),
                     read_stream(editor.update_stderr, proc.stderr),
                     self._wait_process(proc, editor),
-                    editor.animate_progress(),
+                    editor._animation_task,
                 ),
                 timeout=300,
             )
