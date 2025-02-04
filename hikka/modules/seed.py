@@ -364,7 +364,7 @@ class AdvancedExecutorMod(loader.Module):
         "python_executing": "🐍 Executing...",
         "terminal_executing": "💻 Executing...",
         "forbidden_command": "🚫 This command is forbidden!",
-        "result_header": "🎟 <b><i>Result:</i></b>",
+        "result_header": "🎟 <b>Result:</b>",
         "error_header": "❌ <b>Error:</b>",
     }
 
@@ -507,7 +507,7 @@ class AdvancedExecutorMod(loader.Module):
         command = utils.get_args_raw(message)
         if not command:
             return await utils.answer(message, "💬 Please provide a command to execute")
-        if command.startswith("i "):
+        if command.startswith("i") and (command[1] == " " or len(command) == 1):
             args = command[2:].strip()
             reply_message = await message.get_reply_message()
             if not reply_message or not reply_message.raw_text:
@@ -519,7 +519,7 @@ class AdvancedExecutorMod(loader.Module):
                         "content": (
                             "Ты — здравомыслящий человек, который отвечает на вопросы в интернете. "
                             "Твой стиль общения — естественный, без пафоса, с эмпатией и реалистичным подходом к теме. "
-                            "Используй современный сленг и эмодзи, если это уместно. "
+                            "Используй современный сленг и эмодзи, только если это уместно."
                             "Твои ответы всегда логичны, связаны с контекстом и короткие (не более 3-5 предложений)."
                         ),
                     },
@@ -527,7 +527,7 @@ class AdvancedExecutorMod(loader.Module):
                         "role": "user",
                         "content": (
                             f"Напиши ответ {args or 'в стиле Камю и Кьеркегора'} на следующий текст: {reply_message.raw_text}. "
-                            "При стилизации текста используй HTML."
+                            "Если нужно стилизация текста, то используй HTML теги: <code>, <pre>, <b>, <i>, <s>, <u>."
                         ),
                     },
                 ]
@@ -681,7 +681,7 @@ class AdvancedExecutorMod(loader.Module):
                 text.append(f"<pre>{utils.escape_html(result)}</pre>")
             if output is not None:
                 text.append(
-                    f" ↷ <i>Return:</i> <pre>{utils.escape_html(str(output))}</pre>"
+                    f" ↷Return: <pre>{utils.escape_html(str(output))}</pre>"
                 )
         full_text = "\n".join(text)
         if len(full_text) > 4096:
