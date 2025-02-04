@@ -1,4 +1,4 @@
-# ✨ Her ModSuite
+# ✨ Her UserBot
 
 > **⚠️ Disclaimer**  
 > This software is provided "as is" without warranties. Use at your own risk.

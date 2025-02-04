@@ -27,8 +27,8 @@ async def read_stream(func: callable, stream):
     buffer = []
     last_send = time.time()
     try:
-        while True:
-            chunk = await stream.read(2048)
+        async for chunk in stream:
+            chunk = await stream.read(4096)
             if not chunk:
                 if buffer:
                     await func("".join(buffer))
@@ -36,7 +36,7 @@ async def read_stream(func: callable, stream):
             decoded = chunk.decode(errors="replace").replace("\r\n", "\n")
             buffer.append(decoded)
 
-            if "\n" in decoded or time.time() - last_send > 0.5:
+            if "\n" in decoded or time.time() - last_send > 1.0:
                 await func("".join(buffer))
                 buffer.clear()
                 last_send = time.time()
@@ -73,8 +73,11 @@ class MessageEditor:
         self.rc = rc
         self.last_update = 0
         await self.redraw()
+        await asyncio.sleep(0.5)
+        await self.redraw()
 
     async def update_stdout(self, stdout):
+        stdout = stdout.replace("\r\n", "\n").replace("\r", "\n")
         self.stdout += stdout
         await self.redraw()
 
@@ -83,12 +86,18 @@ class MessageEditor:
         await self.redraw()
 
     def _truncate_output(self, text: str, max_len: int) -> str:
+        text = text.replace("\r\n", "\n").replace("\r", "\n")
+        text = utils.escape_html(text)
+
         if len(text) <= max_len:
             return text
         if self.rc is not None:
-            return text[: max_len - 100] + "\n... 🔻 [TRUNCATED] 🔻 ..."
-        half = max_len // 2
-        return f"{text[:half]}\n... 🔻 [TRUNCATED] 🔻 ...\n{text[-half:]}"
+            return "..." + text[-max_len + 3 :]
+        separator = "\n... 🔻 [TRUNCATED] 🔻 ...\n"
+        available_len = max_len - len(separator)
+        part_len = available_len // 2
+
+        return text[:part_len].strip() + separator + text[-part_len:].strip()
 
     def _get_progress(self):
         elapsed = time.time() - self.start_time
@@ -331,24 +340,26 @@ class RawMessageEditor(MessageEditor):
             self._buffer.clear()
 
     def _truncate_output(self, text: str, max_len: int, keep_edges=True) -> str:
+        text = text.replace("\r\n", "\n").replace("\r", "\n").strip()
         text = utils.escape_html(text)
+
         if len(text) <= max_len:
             return text
+        if self.rc is not None:
+            return "..." + text[-max_len + 3 :]
         if keep_edges:
-            edge_len = max(200, (max_len - 100) // 2)
-            return (
-                text[:edge_len].strip()
-                + "\n\n... 🔻 [TRUNCATED] 🔻 ...\n\n"
-                + text[-edge_len:].strip()
-            )
-        return text[:max_len].strip()
+            edge = (max_len - len("\n... 🔻 [TRUNCATED] 🔻 ...\n")) // 2
+            return text[:edge] + "\n... 🔻 [TRUNCATED] 🔻 ...\n" + text[-edge:]
+        return text[:max_len]
 
     async def update_stdout(self, stdout):
+        stdout = stdout.replace("\r\n", "\n").replace("\r", "\n")
         self._buffer.append(stdout)
         if time.time() - self._last_flush > 0.5:
             await self._flush_buffer()
 
     async def update_stderr(self, stderr):
+        stderr = stderr.replace("\r\n", "\n").replace("\r", "\n")
         self._buffer.append(stderr)
         if time.time() - self._last_flush > 0.5:
             await self._flush_buffer()
@@ -527,7 +538,9 @@ class AdvancedExecutorMod(loader.Module):
                     },
                     {
                         "role": "user",
-                        "content": (f"[{args.upper()}] \n\nСообщение:\n{reply_message.raw_text}"),
+                        "content": (
+                            f"[{args.upper()}] \n\nСообщение:\n{reply_message.raw_text}"
+                        ),
                     },
                 ]
             }
@@ -636,15 +649,16 @@ class AdvancedExecutorMod(loader.Module):
         finally:
             if editor and editor.rc is None:
                 await editor.cmd_ended(proc.returncode if proc else -1)
-                await asyncio.sleep(0.2)
+                await asyncio.sleep(0.5)
             if isinstance(editor, SudoMessageEditor):
                 await editor.cleanup()
             if proc:
+                if proc.stdout:
+                    await proc.stdout.close()
+                if proc.stderr:
+                    await proc.stderr.close()
                 if proc.stdin:
-                    try:
-                        proc.stdin.close()
-                    except Exception as e:
-                        logger.debug(f"Error closing stdin: {e}")
+                    await proc.stdin.close()
                 try:
                     await proc.wait()
                 except ProcessLookupError:
@@ -656,18 +670,27 @@ class AdvancedExecutorMod(loader.Module):
     async def _wait_process(self, proc, editor):
         """Wait for process completion and cleanup streams properly"""
         rc = await proc.wait()
+
         try:
-            if not proc.stdout.at_eof():
-                remaining_stdout = await proc.stdout.read()
-                if remaining_stdout:
-                    await editor.update_stdout(remaining_stdout.decode())
-            if not proc.stderr.at_eof():
-                remaining_stderr = await proc.stderr.read()
-                if remaining_stderr:
-                    await editor.update_stderr(remaining_stderr.decode())
+            remaining_stdout = await proc.stdout.read()
+            if remaining_stdout:
+                await editor.update_stdout(remaining_stdout.decode(errors="replace"))
+        except IOError as e:
+            if "closed" not in str(e).lower():
+                raise
         except Exception as e:
-            logger.debug(f"Error draining streams: {e}")
+            logger.debug(f"Unexpected stdout error: {e}")
+        try:
+            remaining_stderr = await proc.stderr.read()
+            if remaining_stderr:
+                await editor.update_stderr(remaining_stderr.decode(errors="replace"))
+        except IOError as e:
+            if "closed" not in str(e).lower():
+                raise
+        except Exception as e:
+            logger.debug(f"Unexpected stderr error: {e}")
         await editor.cmd_ended(rc)
+        await asyncio.sleep(0.5)
 
     async def _format_result(self, message, code, result, output, error):
         duration = time.time() - self.start_time
