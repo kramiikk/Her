@@ -67,6 +67,7 @@ class MessageEditor:
         self.start_time = time.time()
         self.last_update = 0
         self.request_message = request_message
+        self._is_updating = False
 
     async def cmd_ended(self, rc):
         self.rc = rc
@@ -99,71 +100,78 @@ class MessageEditor:
             return f"{frame} <b>Running for {elapsed:.1f}s</b>\n"
 
     async def redraw(self, force=False):
+        if self._is_updating and not force:
+            return
         if not force and (time.time() - self.last_update < 0.5):
             return
-        self.last_update = time.time()
-
-        progress = self._get_progress()
-        status = f"<b>Exit code:</b> <code>{self.rc if self.rc is not None else 'Running...'}</code>\n\n"
-
-        base_text = (
-            f"{progress}"
-            f"<emoji document_id=5472111548572900003>⌨️</emoji> <b>Command:</b> <code>{utils.escape_html(self.command)}</code>\n"
-            f"{status}"
-        )
-
-        max_total = 4096 - len(utils.escape_html(base_text)) - 100
-
-        if not self.stderr:
-            stdout_max = min(len(self.stdout), max_total)
-            stderr_max = 0
-        else:
-            initial_stdout = int(max_total * 0.7)
-            initial_stderr = max_total - initial_stdout
-
-            stdout_max = min(len(self.stdout), initial_stdout)
-            stderr_max = min(len(self.stderr), initial_stderr)
-
-            unused_stdout = initial_stdout - stdout_max
-            unused_stderr = initial_stderr - stderr_max
-
-            stdout_max += unused_stderr
-            stderr_max += unused_stdout
-        sections = []
-        if self.stdout.strip():
-            stdout_text = self._truncate_output(self.stdout, stdout_max)
-            sections.append(
-                f"<b>📤 Stdout ({len(self.stdout)} chars):</b>\n<pre>{stdout_text}</pre>"
-            )
-        if self.stderr.strip():
-            stderr_text = self._truncate_output(self.stderr, stderr_max)
-            sections.append(
-                f"<b>📥 Stderr ({len(self.stderr)} chars):</b>\n<pre>{stderr_text}</pre>"
-            )
-        text = base_text
-        if sections:
-            text += "\n\n".join(sections)
         try:
-            full_text = utils.escape_html(text)
-            if len(full_text) <= 4096:
-                await utils.answer(self.message, text)
-            else:
-                raise hikkatl.errors.rpcerrorlist.MessageTooLongError
-        except hikkatl.errors.rpcerrorlist.MessageTooLongError:
-            await utils.answer(
-                self.message,
-                "❌ Output is too large to display ("
-                f"stdout: {len(self.stdout)}, "
-                f"stderr: {len(self.stderr)})",
+            self._is_updating = True
+            self.last_update = time.time()
+
+            progress = self._get_progress()
+            status = f"<b>Exit code:</b> <code>{self.rc if self.rc is not None else 'Running...'}</code>\n\n"
+
+            base_text = (
+                f"{progress}"
+                f"<emoji document_id=5472111548572900003>⌨️</emoji> <b>Command:</b> <code>{utils.escape_html(self.command)}</code>\n"
+                f"{status}"
             )
+
+            max_total = 4096 - len(utils.escape_html(base_text)) - 100
+
+            if not self.stderr:
+                stdout_max = min(len(self.stdout), max_total)
+                stderr_max = 0
+            else:
+                initial_stdout = int(max_total * 0.7)
+                initial_stderr = max_total - initial_stdout
+
+                stdout_max = min(len(self.stdout), initial_stdout)
+                stderr_max = min(len(self.stderr), initial_stderr)
+
+                unused_stdout = initial_stdout - stdout_max
+                unused_stderr = initial_stderr - stderr_max
+
+                stdout_max += unused_stderr
+                stderr_max += unused_stdout
+            sections = []
+            if self.stdout.strip():
+                stdout_text = self._truncate_output(self.stdout, stdout_max)
+                sections.append(
+                    f"<b>📤 Stdout ({len(self.stdout)} chars):</b>\n<pre>{stdout_text}</pre>"
+                )
+            if self.stderr.strip():
+                stderr_text = self._truncate_output(self.stderr, stderr_max)
+                sections.append(
+                    f"<b>📥 Stderr ({len(self.stderr)} chars):</b>\n<pre>{stderr_text}</pre>"
+                )
+            text = base_text
+            if sections:
+                text += "\n\n".join(sections)
+            try:
+                full_text = utils.escape_html(text)
+                if len(full_text) <= 4096:
+                    await utils.answer(self.message, text)
+                else:
+                    raise hikkatl.errors.rpcerrorlist.MessageTooLongError
+            except hikkatl.errors.rpcerrorlist.MessageTooLongError:
+                await utils.answer(
+                    self.message,
+                    "❌ Output is too large to display ("
+                    f"stdout: {len(self.stdout)}, "
+                    f"stderr: {len(self.stderr)})",
+                )
+        finally:
+            self._is_updating = False
 
     async def animate_progress(self):
         while self.rc is None:
-            await self.redraw(force=True)
+            if not self._is_updating:
+                await self.redraw(force=True)
             try:
-                await asyncio.wait_for(asyncio.sleep(1), timeout=1)
-            except asyncio.TimeoutError:
-                pass
+                await asyncio.sleep(1)
+            except asyncio.CancelledError:
+                break
 
 
 class SudoMessageEditor(MessageEditor):
@@ -316,21 +324,24 @@ class RawMessageEditor(MessageEditor):
         )
         self._buffer = []
         self._last_flush = 0
+        self._update_lock = asyncio.Lock()
 
     async def _flush_buffer(self):
-        content = "\n".join(self._buffer).strip()
-        if not content:
-            return
-        if self.rc is not None:
-            truncated = self._truncate_output(content, 4096 - 50, keep_edges=False)
-            text = f"<pre>{truncated}</pre>"
-        else:
-            progress = self._get_progress()
-            max_len = 4096 - len(progress) - 50
-            truncated = self._truncate_output(content, max_len, keep_edges=True)
-            text = f"{progress}<pre>{truncated}</pre>"
-        await utils.answer(self.message, text)
-        self._last_flush = time.time()
+        async with self._update_lock:
+            content = "\n".join(self._buffer).strip()
+            if not content:
+                return
+            if self.rc is not None:
+                truncated = self._truncate_output(content, 4096 - 50, keep_edges=False)
+                text = f"<pre>{truncated}</pre>"
+            else:
+                progress = self._get_progress()
+                max_len = 4096 - len(progress) - 50
+                truncated = self._truncate_output(content, max_len, keep_edges=True)
+                text = f"{progress}<pre>{truncated}</pre>"
+            await utils.answer(self.message, text)
+            self._last_flush = time.time()
+            self._buffer.clear()
 
     def _truncate_output(self, text: str, max_len: int, keep_edges=True) -> str:
         text = utils.escape_html(text)
@@ -347,11 +358,13 @@ class RawMessageEditor(MessageEditor):
 
     async def update_stdout(self, stdout):
         self._buffer.append(stdout)
-        await self._flush_buffer()
+        if time.time() - self._last_flush > 0.5:
+            await self._flush_buffer()
 
     async def update_stderr(self, stderr):
         self._buffer.append(stderr)
-        await self._flush_buffer()
+        if time.time() - self._last_flush > 0.5:
+            await self._flush_buffer()
 
     async def cmd_ended(self, rc):
         self.rc = rc
