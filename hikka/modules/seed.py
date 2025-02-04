@@ -355,20 +355,26 @@ class RawMessageEditor(BaseMessageEditor):
 
     async def _flush_buffer(self):
         async with self._update_lock:
-            content = "\n".join(self._buffer).strip()
-            if not content:
-                return
-            if self.rc is not None:
-                truncated = self._truncate_output(content, 4096 - 50, keep_edges=False)
-                text = f"<pre>{truncated}</pre>"
-            else:
-                progress = self._get_progress()
-                max_len = 4096 - len(progress) - 50
-                truncated = self._truncate_output(content, max_len, keep_edges=True)
-                text = f"{progress}<pre>{truncated}</pre>"
-            await utils.answer(self.message, text)
-            self._last_flush = time.time()
-            self._buffer.clear()
+            try:
+                content = "\n".join(self._buffer).strip()
+                if not content:
+                    return
+                if self.rc is not None:
+                    truncated = self._truncate_output(content, 4096 - 50, keep_edges=False)
+                    text = f"<pre>{truncated}</pre>"
+                else:
+                    progress = self._get_progress()
+                    max_len = 4096 - len(progress) - 50
+                    truncated = self._truncate_output(content, max_len, keep_edges=True)
+                    text = f"{progress}<pre>{truncated}</pre>"
+                await utils.answer(self.message, text)
+                self._last_flush = time.time()
+                self._buffer.clear()
+            except Exception as e:
+                logger.error(f"Failed to flush buffer: {e}")
+            finally:
+                self._last_flush = time.time()
+                self._buffer.clear()
 
     async def update_stdout(self, stdout):
         stdout = stdout.replace("\r\n", "\n").replace("\r", "\n")
