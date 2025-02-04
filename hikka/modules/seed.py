@@ -692,10 +692,7 @@ class AdvancedExecutorMod(loader.Module):
                         if proc.stdin:
                             proc.stdin.close()
                             await proc.stdin.wait_closed()
-                        if proc.stdout:
-                            proc.stdout.close()
-                        if proc.stderr:
-                            proc.stderr.close()
+                        # Removed manual closure of stdout/stderr streams
                     except Exception as e:
                         logger.debug(f"Stream close error: {e}")
                     try:
