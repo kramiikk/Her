@@ -1,8 +1,4 @@
 """Just a placeholder to do relative imports"""
-
-# ©️ Friendly Telegram, Dan Gazizullin, codrago 2018-2024
-# 🌐 https://github.com/hikariatama/Hikka
-
 # Do not delete this file, it will cause errors.
 
 __author__ = "Dan Gazizullin"

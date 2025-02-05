@@ -105,11 +105,6 @@ except Exception:
 
 
 def get_config_key(key: str) -> typing.Union[str, bool]:
-    """
-    Parse and return key from config
-    :param key: Key name in config
-    :return: Value of config key or `False`, if it doesn't exist
-    """
     try:
         return json.loads(CONFIG_PATH.read_text()).get(key, False)
     except FileNotFoundError:
@@ -117,21 +112,9 @@ def get_config_key(key: str) -> typing.Union[str, bool]:
 
 
 def save_config_key(key: str, value: str) -> bool:
-    """
-    Save `key` with `value` to config
-    :param key: Key name in config
-    :param value: Desired value in config
-    :return: `True` on success, otherwise `False`
-    """
     try:
-        # Try to open our newly created json config
-
         config = json.loads(CONFIG_PATH.read_text())
     except FileNotFoundError:
-        # If it doesn't exist, just default config to none
-        # It won't cause problems, bc after new save
-        # we will create new one
-
         config = {}
     config[key] = value
 
@@ -140,14 +123,16 @@ def save_config_key(key: str, value: str) -> bool:
 
 
 def gen_port(cfg: str = "port", no8080: bool = False) -> int:
-    """Генерация порта с проверкой занятости"""
     if not no8080 and "DOCKER" in os.environ:
         return 8080
     if (cfg_port := get_config_key(cfg)) is not None:
         return int(cfg_port)
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind(("", 0))
-        return s.getsockname()[1]
+        port = s.getsockname()[1]
+        if port == 0:
+            raise RuntimeError("OS failed to assign a valid port")
+        return port
 
 
 def parse_arguments() -> dict:

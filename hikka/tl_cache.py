@@ -199,14 +199,6 @@ class CustomTelegramClient(TelegramClient):
         exp: int = 5 * 60,
         force: bool = False,
     ):
-        """
-        Gets the entity and cache it
-
-        :param entity: Entity to fetch
-        :param exp: Expiration time of the cache record and maximum time of already cached record
-        :param force: Whether to force refresh the cache (make API request)
-        :return: :obj:`Entity`
-        """
 
         if not hashable(entity):
             try:
@@ -251,15 +243,6 @@ class CustomTelegramClient(TelegramClient):
         exp: int = 5 * 60,
         force: bool = False,
     ):
-        """
-        Gets the permissions of the user in the entity and cache it
-
-        :param entity: Entity to fetch
-        :param user: User to fetch
-        :param exp: Expiration time of the cache record and maximum time of already cached record
-        :param force: Whether to force refresh the cache (make API request)
-        :return: :obj:`ChatPermissions`
-        """
 
         # Will be used to determine, which client caused logging messages
 
@@ -342,14 +325,6 @@ class CustomTelegramClient(TelegramClient):
         exp: int = 300,
         force: bool = False,
     ) -> ChannelFull:
-        """
-        Gets the FullChannelRequest and cache it
-
-        :param entity: Channel to fetch ChannelFull of
-        :param exp: Expiration time of the cache record and maximum time of already cached record
-        :param force: Whether to force refresh the cache (make API request)
-        :return: :obj:`ChannelFull`
-        """
         if not hashable(entity):
             try:
                 hashable_entity = next(
@@ -384,14 +359,6 @@ class CustomTelegramClient(TelegramClient):
         exp: int = 300,
         force: bool = False,
     ) -> UserFull:
-        """
-        Gets the FullUserRequest and cache it
-
-        :param entity: User to fetch UserFull of
-        :param exp: Expiration time of the cache record and maximum time of already cached record
-        :param force: Whether to force refresh the cache (make API request)
-        :return: :obj:`UserFull`
-        """
         if not hashable(entity):
             try:
                 hashable_entity = next(

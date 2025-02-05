@@ -106,14 +106,6 @@ class Module:
         message: typing.Optional[Message] = None,
         edit: bool = False,
     ) -> Message:
-        """
-        Invoke another command
-        :param command: Command to invoke
-        :param args: Arguments to pass to command
-        :param peer: Peer to send the command to. If not specified, will send to the current chat
-        :param edit: Whether to edit the message
-        :returns Message:
-        """
         if command not in self.allmodules.commands:
             raise ValueError(f"Command {command} not found")
 
@@ -231,18 +223,6 @@ class Module:
         suspend_on_error: typing.Optional[bool] = False,
         _did_requirements: bool = False,
     ) -> "Library":
-        """
-        Import library from url and register it in :obj:`Modules`
-        :param url: Url to import
-        :param suspend_on_error: Will raise :obj:`loader.SelfSuspend` if library can't be loaded
-        :return: :obj:`Library`
-        :raise: SelfUnload if :attr:`suspend_on_error` is True and error occurred
-        :raise: HTTPError if library is not found
-        :raise: ImportError if library doesn't have any class which is a subclass of :obj:`loader.Library`
-        :raise: ImportError if library name doesn't end with `Lib`
-        :raise: RuntimeError if library throws in :method:`init`
-        :raise: RuntimeError if library classname exists in :obj:`Modules`.libraries
-        """
 
         from . import utils  # Avoiding circular import
         from .loader import USER_INSTALL, VALID_PIP_PACKAGES

@@ -3,6 +3,7 @@
 # ©️ Friendly Telegram, Dan Gazizullin, codrago 2018-2024
 # 🌐 https://github.com/hikariatama/Hikka
 
+
 import asyncio
 import atexit as _atexit
 import contextlib
@@ -104,53 +105,34 @@ logger = logging.getLogger(__name__)
 
 
 def get_args(message: typing.Union[Message, str]) -> typing.List[str]:
-    """
-    Get arguments from message
-    :param message: Message or string to get arguments from
-    :return: List of arguments
-    """
     if not (message := getattr(message, "message", message)):
         return False
-
     if len(message := message.split(maxsplit=1)) <= 1:
         return []
-
     message = message[1]
 
     try:
         split = shlex.split(message)
     except ValueError:
         return message  # Cannot split, let's assume that it's just one long message
-
     return list(filter(lambda x: len(x) > 0, split))
 
 
 def get_args_raw(message: typing.Union[Message, str]) -> str:
-    """
-    Get the parameters to the command as a raw string (not split)
-    :param message: Message or string to get arguments from
-    :return: Raw string of arguments
-    """
+    """Get the parameters to the command as a raw string (not split)"""
     if not (message := getattr(message, "message", message)):
         return False
-
     return args[1] if len(args := message.split(maxsplit=1)) > 1 else ""
 
 
 def get_args_html(message: Message) -> str:
-    """
-    Get the parameters to the command as string with HTML (not split)
-    :param message: Message to get arguments from
-    :return: String with HTML arguments
-    """
+    """Get the parameters to the command as string with HTML (not split)"""
     prefix = "."
 
     if not (message := message.text):
         return False
-
     if prefix not in message:
         return message
-
     raw_text, entities = parser.parse(message)
 
     raw_text = parser._add_surrogate(raw_text)
@@ -161,7 +143,6 @@ def get_args_html(message: Message) -> str:
         ]
     except ValueError:
         return ""
-
     command_len = len(command) + 1
 
     return parser.unparse(
@@ -174,23 +155,14 @@ def get_args_split_by(
     message: typing.Union[Message, str],
     separator: str,
 ) -> typing.List[str]:
-    """
-    Split args with a specific separator
-    :param message: Message or string to get arguments from
-    :param separator: Separator to split by
-    :return: List of arguments
-    """
+    """Split args with a specific separator"""
     return [
         section.strip() for section in get_args_raw(message).split(separator) if section
     ]
 
 
 def get_chat_id(message: Message) -> int:
-    """
-    Get the chat ID, but without -100 if its a channel
-    :param message: Message to get chat ID from
-    :return: Chat ID
-    """
+    """Get the chat ID, but without -100 if its a channel"""
     return hikkatl.utils.resolve_id(
         getattr(message, "chat_id", None)
         or getattr(getattr(message, "chat", None), "id", None)
@@ -198,65 +170,35 @@ def get_chat_id(message: Message) -> int:
 
 
 def get_entity_id(entity: hints.Entity) -> int:
-    """
-    Get entity ID
-    :param entity: Entity to get ID from
-    :return: Entity ID
-    """
+    """Get entity ID"""
     return hikkatl.utils.get_peer_id(entity)
 
 
 def escape_html(text: str, /) -> str:  # sourcery skip
-    """
-    Pass all untrusted/potentially corrupt input here
-    :param text: Text to escape
-    :return: Escaped text
-    """
+    """Pass all untrusted/potentially corrupt input here"""
     return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def escape_quotes(text: str, /) -> str:
-    """
-    Escape quotes to html quotes
-    :param text: Text to escape
-    :return: Escaped text
-    """
+    """Escape quotes to html quotes"""
     return escape_html(text).replace('"', "&quot;")
 
 
 def get_base_dir() -> str:
-    """
-    Get directory of this file
-    :return: Directory of this file
-    """
-    return get_dir(__file__)
-
-
-def get_dir(mod: str) -> str:
-    """
-    Get directory of given module
-    :param mod: Module's `__file__` to get directory of
-    :return: Directory of given module
-    """
-    return os.path.abspath(os.path.dirname(os.path.abspath(mod)))
+    """Get directory of current file"""
+    return os.path.dirname(os.path.abspath(__file__))
 
 
 async def get_user(message: Message) -> typing.Optional[User]:
-    """
-    Get user who sent message, searching if not found easily
-    :param message: Message to get user from
-    :return: User who sent message
-    """
+    """Get user who sent message, searching if not found easily"""
     try:
         await fw_protect()
         return await message.get_sender()
     except ValueError:  # Not in database. Lets go looking for them.
         logger.warning("User not in session cache. Searching...")
-
     if isinstance(message.peer_id, PeerUser):
         await message.client.get_dialogs()
         return await message.get_sender()
-
     if isinstance(message.peer_id, (PeerChannel, PeerChat)):
         await fw_protect()
         async for user in message.client.iter_participants(
@@ -265,20 +207,14 @@ async def get_user(message: Message) -> typing.Optional[User]:
         ):
             if user.id == message.sender_id:
                 return user
-
         logger.error("User isn't in the group where they sent the message")
         return None
-
     logger.error("`peer_id` is not a user, chat or channel")
     return None
 
 
 def run_sync(func, *args, **kwargs):
-    """
-    Run a non-async function in a new thread and return an awaitable
-    :param func: Sync-only function to execute
-    :return: Awaitable coroutine
-    """
+    """Run a non-async function in a new thread and return an awaitable"""
     return asyncio.get_event_loop().run_in_executor(
         None,
         functools.partial(func, *args, **kwargs),
@@ -286,12 +222,7 @@ def run_sync(func, *args, **kwargs):
 
 
 def run_async(loop: asyncio.AbstractEventLoop, coro: typing.Awaitable) -> typing.Any:
-    """
-    Run an async function as a non-async function, blocking till it's done
-    :param loop: Event loop to run the coroutine in
-    :param coro: Coroutine to run
-    :return: Result of the coroutine
-    """
+    """Run an async function as a non-async function, blocking till it's done"""
     return asyncio.run_coroutine_threadsafe(coro, loop).result()
 
 
@@ -300,22 +231,14 @@ def censor(
     to_censor: typing.Optional[typing.Iterable[str]] = None,
     replace_with: str = "redacted_{count}_chars",
 ):
-    """
-    May modify the original object, but don't rely on it
-    :param obj: Object to censor, preferrably telethon
-    :param to_censor: Iterable of strings to censor
-    :param replace_with: String to replace with, {count} will be replaced with the number of characters
-    :return: Censored object
-    """
+    """May modify the original object, but don't rely on it"""
     if to_censor is None:
         to_censor = ["phone"]
-
     for k, v in vars(obj).items():
         if k in to_censor:
             setattr(obj, k, replace_with.format(count=len(v)))
         elif k[0] != "_" and hasattr(v, "__dict__"):
             setattr(obj, k, censor(v, to_censor, replace_with))
-
     return obj
 
 
@@ -324,13 +247,7 @@ def relocate_entities(
     offset: int,
     text: typing.Optional[str] = None,
 ) -> typing.List[FormattingEntity]:
-    """
-    Move all entities by offset (truncating at text)
-    :param entities: List of entities
-    :param offset: Offset to move by
-    :param text: Text to truncate at
-    :return: List of entities
-    """
+    """Move all entities by offset (truncating at text)"""
     length = len(text) if text is not None else 0
 
     for ent in entities.copy() if entities else ():
@@ -342,7 +259,6 @@ def relocate_entities(
             ent.length = length - ent.offset
         if ent.length <= 0:
             entities.remove(ent)
-
     return entities
 
 
@@ -354,11 +270,6 @@ async def answer_file(
 ):
     """
     Use this to answer a message with a document
-    :param message: Message to answer
-    :param file: File to send - url, path or bytes
-    :param caption: Caption to send
-    :param kwargs: Extra kwargs to pass to `send_file`
-    :return: Sent message
 
     :example:
         >>> await utils.answer_file(message, "test.txt")
@@ -370,7 +281,6 @@ async def answer_file(
     """
     if topic := get_topic(message):
         kwargs.setdefault("reply_to", topic)
-
     try:
         response = await message.client.send_file(
             message.peer_id,
@@ -384,9 +294,7 @@ async def answer_file(
                 "Failed to send file, sending plain text instead", exc_info=True
             )
             return await answer(message, caption, **kwargs)
-
         raise
-
     return response
 
 
@@ -399,7 +307,6 @@ async def answer(
 
     if isinstance(message, list) and message:
         message = message[0]
-
     kwargs.setdefault("link_preview", False)
 
     if not (edit := (message.out and not message.fwd_from)):
@@ -409,7 +316,6 @@ async def answer(
         )
     elif "reply_to" in kwargs:
         kwargs.pop("reply_to")
-
     parse_mode = hikkatl.utils.sanitize_parse_mode(
         kwargs.pop(
             "parse_mode",
@@ -454,10 +360,8 @@ async def answer(
             response = io.BytesIO(response)
         elif isinstance(response, str):
             response = io.BytesIO(response.encode("utf-8"))
-
         if name := kwargs.pop("filename", None):
             response.name = name
-
         if message.media is not None and edit:
             await message.edit(file=response, **kwargs)
         else:
@@ -466,17 +370,11 @@ async def answer(
                 getattr(message, "reply_to_msg_id", get_topic(message)),
             )
             result = await message.client.send_file(message.peer_id, response, **kwargs)
-
     return result
 
 
 async def get_target(message: Message, arg_no: int = 0) -> typing.Optional[int]:
-    """
-    Get target from message
-    :param message: Message to get target from
-    :param arg_no: Argument number to get target from
-    :return: Target
-    """
+    """Get target from message"""
 
     if any(
         isinstance(entity, MessageEntityMentionName)
@@ -487,7 +385,6 @@ async def get_target(message: Message, arg_no: int = 0) -> typing.Optional[int]:
             key=lambda x: x.offset,
         )[0]
         return e.user_id
-
     if len(get_args(message)) > arg_no:
         user = get_args(message)[arg_no]
     elif message.is_reply:
@@ -496,7 +393,6 @@ async def get_target(message: Message, arg_no: int = 0) -> typing.Optional[int]:
         user = message.peer_id.user_id
     else:
         return None
-
     try:
         await fw_protect()
         entity = await message.client.get_entity(user)
@@ -508,12 +404,7 @@ async def get_target(message: Message, arg_no: int = 0) -> typing.Optional[int]:
 
 
 def merge(a: dict, b: dict, /) -> dict:
-    """
-    Merge with replace dictionary a to dictionary b
-    :param a: Dictionary to merge
-    :param b: Dictionary to merge to
-    :return: Merged dictionary
-    """
+    """Merge with replace dictionary a to dictionary b"""
     for key in a:
         if key in b:
             if isinstance(a[key], dict) and isinstance(b[key], dict):
@@ -522,9 +413,7 @@ def merge(a: dict, b: dict, /) -> dict:
                 b[key] = list(set(b[key] + a[key]))
             else:
                 b[key] = a[key]
-
         b[key] = a[key]
-
     return b
 
 
@@ -533,13 +422,7 @@ async def set_avatar(
     peer: hints.Entity,
     avatar: str,
 ) -> bool:
-    """
-    Sets an entity avatar
-    :param client: Client to use
-    :param peer: Peer to set avatar to
-    :param avatar: Avatar to set
-    :return: True if avatar was set, False otherwise
-    """
+    """Sets an entity avatar"""
     if isinstance(avatar, str) and check_url(avatar):
         f = (
             await run_sync(
@@ -551,7 +434,6 @@ async def set_avatar(
         f = avatar
     else:
         return False
-
     await fw_protect()
     await client(
         EditPhotoRequest(
@@ -568,12 +450,7 @@ async def dnd(
     peer: hints.Entity,
     archive: bool = True,
 ) -> bool:
-    """
-    Mutes and optionally archives peer
-    :param peer: Anything entity-link
-    :param archive: Archive peer, or just mute?
-    :return: `True` on success, otherwise `False`
-    """
+    """Mutes and optionally archives peer"""
     try:
         await client(
             UpdateNotifySettingsRequest(
@@ -592,16 +469,11 @@ async def dnd(
     except Exception:
         logger.exception("utils.dnd error")
         return False
-
     return True
 
 
 def get_link(user: typing.Union[User, Channel], /) -> str:
-    """
-    Get telegram permalink to entity
-    :param user: User or channel
-    :return: Link to entity
-    """
+    """Get telegram permalink to entity"""
     return (
         f"tg://user?id={user.id}"
         if isinstance(user, User)
@@ -614,20 +486,12 @@ def get_link(user: typing.Union[User, Channel], /) -> str:
 
 
 def chunks(_list: ListLike, n: int, /) -> typing.List[typing.List[typing.Any]]:
-    """
-    Split provided `_list` into chunks of `n`
-    :param _list: List to split
-    :param n: Chunk size
-    :return: List of chunks
-    """
+    """Split provided `_list` into chunks of `n`"""
     return [_list[i : i + n] for i in range(0, len(_list), n)]
 
 
 def get_named_platform() -> str:
-    """
-    Returns formatted platform name
-    :return: Platform name
-    """
+    """Returns formatted platform name"""
     from . import main
 
     with contextlib.suppress(Exception):
@@ -636,26 +500,18 @@ def get_named_platform() -> str:
                 model = f.read()
                 if "Orange" in model:
                     return f"🍊 {model}"
-
                 return f"🍇 {model}" if "Raspberry" in model else f"❓ {model}"
-
     if main.IS_WSL:
         return "🍀 WSL"
-
     if main.IS_RAILWAY:
         return "🚂 Railway"
-
     if main.IS_DOCKER:
         return "🐳 Docker"
-
     return "💎 VDS"
 
 
 def get_platform_emoji() -> str:
-    """
-    Returns custom emoji for current platform
-    :return: Emoji entity in string
-    """
+    """Returns custom emoji for current platform"""
     from . import main
 
     BASE = "".join(
@@ -669,18 +525,13 @@ def get_platform_emoji() -> str:
 
     if main.IS_RAILWAY:
         return BASE.format(5352539534498224966)
-
     if main.IS_DOCKER:
         return BASE.format(5352678227582152630)
-
     return BASE.format(5393588431026674882)
 
 
 def uptime() -> str:
-    """
-    Returns formatted uptime including days if applicable.
-    :return: Formatted uptime
-    """
+    """Returns formatted uptime including days if applicable."""
     total_seconds = round(time.perf_counter() - init_ts)
     days, remainder = divmod(total_seconds, 86400)
     time_formatted = str(timedelta(seconds=remainder))
@@ -692,24 +543,15 @@ def uptime() -> str:
 def array_sum(
     array: typing.List[typing.List[typing.Any]], /
 ) -> typing.List[typing.Any]:
-    """
-    Performs basic sum operation on array
-    :param array: Array to sum
-    :return: Sum of array
-    """
+    """Performs basic sum operation on array"""
     result = []
     for item in array:
         result += item
-
     return result
 
 
 def rand(size: int, /) -> str:
-    """
-    Return random string of len `size`
-    :param size: Length of string
-    :return: Random string
-    """
+    """Return random string of len `size`"""
     return "".join(
         [random.choice("abcdefghijklmnopqrstuvwxyz1234567890") for _ in range(size)]
     )
@@ -726,12 +568,6 @@ def smart_split(
     Split the message into smaller messages.
     A grapheme will never be broken. Entities will be displaced to match the right location. No inputs will be mutated.
     The end of each message except the last one is stripped of characters from [split_on]
-    :param text: the plain text input
-    :param entities: the entities
-    :param length: the maximum length of a single message
-    :param split_on: characters (or strings) which are preferred for a message break
-    :param min_length: ignore any matches on [split_on] strings before this number of characters into each message
-    :return: iterator, which returns strings
 
     :example:
         >>> utils.smart_split(
@@ -756,7 +592,6 @@ def smart_split(
                 list(sorted(pending_entities, key=lambda x: x.offset)),
             )
             break
-
         codepoint_count = len(
             encoded[bytes_offset : bytes_offset + length * 2].decode(
                 "utf-16le",
@@ -774,7 +609,6 @@ def smart_split(
                 break
         else:
             search_index = text_offset + codepoint_count
-
         split_index = grapheme.safe_split_index(text, search_index)
 
         split_offset_utf16 = (
@@ -787,7 +621,6 @@ def smart_split(
             and text[split_index + exclude] in split_on
         ):
             exclude += 1
-
         current_entities = []
         entities = pending_entities.copy()
         pending_entities = []
@@ -798,6 +631,7 @@ def smart_split(
                 and entity.offset + entity.length > split_offset_utf16 + exclude
             ):
                 # spans boundary
+
                 current_entities.append(
                     _copy_tl(
                         entity,
@@ -816,6 +650,7 @@ def smart_split(
                 )
             elif entity.offset < split_offset_utf16 < entity.offset + entity.length:
                 # overlaps boundary
+
                 current_entities.append(
                     _copy_tl(
                         entity,
@@ -824,6 +659,7 @@ def smart_split(
                 )
             elif entity.offset < split_offset_utf16:
                 # wholly left
+
                 current_entities.append(entity)
             elif (
                 entity.offset + entity.length
@@ -831,6 +667,7 @@ def smart_split(
                 > entity.offset
             ):
                 # overlaps right boundary
+
                 pending_entities.append(
                     _copy_tl(
                         entity,
@@ -843,13 +680,13 @@ def smart_split(
                 )
             elif entity.offset + entity.length > split_offset_utf16 + exclude:
                 # wholly right
+
                 pending_entities.append(
                     _copy_tl(
                         entity,
                         offset=entity.offset - split_offset_utf16 - exclude,
                     )
                 )
-
         current_text = text[text_offset:split_index]
         yield parser.unparse(
             current_text,
@@ -868,11 +705,7 @@ def _copy_tl(o, **kwargs):
 
 
 def check_url(url: str) -> bool:
-    """
-    Statically checks url for validity
-    :param url: URL to check
-    :return: True if valid, False otherwise
-    """
+    """Statically checks url for validity"""
     try:
         return bool(urlparse(url).netloc)
     except Exception:
@@ -880,10 +713,7 @@ def check_url(url: str) -> bool:
 
 
 def get_git_hash() -> typing.Union[str, bool]:
-    """
-    Get current Her git hash
-    :return: Git commit hash
-    """
+    """Get current Her git hash"""
     try:
         return git.Repo().head.commit.hexsha
     except Exception:
@@ -891,11 +721,7 @@ def get_git_hash() -> typing.Union[str, bool]:
 
 
 def is_serializable(x: typing.Any, /) -> bool:
-    """
-    Checks if object is JSON-serializable
-    :param x: Object to check
-    :return: True if object is JSON-serializable, False otherwise
-    """
+    """Checks if object is JSON-serializable"""
     try:
         json.dumps(x)
         return True
@@ -904,11 +730,7 @@ def is_serializable(x: typing.Any, /) -> bool:
 
 
 def get_lang_flag(countrycode: str) -> str:
-    """
-    Gets an emoji of specified countrycode
-    :param countrycode: 2-letter countrycode
-    :return: Emoji flag
-    """
+    """Gets an emoji of specified countrycode"""
     if (
         len(
             code := [
@@ -920,7 +742,6 @@ def get_lang_flag(countrycode: str) -> str:
         == 2
     ):
         return "".join([chr(ord(c.upper()) + (ord("🇦") - ord("A"))) for c in code])
-
     return countrycode
 
 
@@ -928,12 +749,7 @@ def get_entity_url(
     entity: typing.Union[User, Channel],
     openmessage: bool = False,
 ) -> str:
-    """
-    Get link to object, if available
-    :param entity: Entity to get url of
-    :param openmessage: Use tg://openmessage link for users
-    :return: Link to object or empty string
-    """
+    """Get link to object, if available"""
     return (
         (
             f"tg://openmessage?id={entity.id}"
@@ -953,21 +769,14 @@ async def get_message_link(
     message: Message,
     chat: typing.Optional[typing.Union[Chat, Channel]] = None,
 ) -> str:
-    """
-    Get link to message
-    :param message: Message to get link of
-    :param chat: Chat, where message was sent
-    :return: Link to message
-    """
+    """Get link to message"""
     if message.is_private:
         return (
             f"tg://openmessage?user_id={get_chat_id(message)}&message_id={message.id}"
         )
-
     if not chat and not (chat := message.chat):
         await fw_protect()
         chat = await message.get_chat()
-
     topic_affix = (
         f"?topic={message.reply_to.reply_to_msg_id}"
         if getattr(message.reply_to, "forum_topic", False)
@@ -982,13 +791,7 @@ async def get_message_link(
 
 
 def remove_html(text: str, escape: bool = False, keep_emojis: bool = False) -> str:
-    """
-    Removes HTML tags from text
-    :param text: Text to remove HTML from
-    :param escape: Escape HTML
-    :param keep_emojis: Keep custom emojis
-    :return: Text without HTML
-    """
+    """Removes HTML tags from text"""
     return (escape_html if escape else str)(
         re.sub(
             (
@@ -1003,20 +806,13 @@ def remove_html(text: str, escape: bool = False, keep_emojis: bool = False) -> s
 
 
 def get_kwargs() -> typing.Dict[str, typing.Any]:
-    """
-    Get kwargs of function, in which is called
-    :return: kwargs
-    """
+    """Get kwargs of function, in which is called"""
     keys, _, _, values = inspect.getargvalues(inspect.currentframe().f_back)
     return {key: values[key] for key in keys if key != "self"}
 
 
 def mime_type(message: Message) -> str:
-    """
-    Get mime type of document in message
-    :param message: Message with document
-    :return: Mime type or empty string if not present
-    """
+    """Get mime type of document in message"""
     return (
         ""
         if not isinstance(message, Message) or not getattr(message, "media", False)
@@ -1027,11 +823,7 @@ def mime_type(message: Message) -> str:
 def find_caller(
     stack: typing.Optional[typing.List[inspect.FrameInfo]] = None,
 ) -> typing.Any:
-    """
-    Attempts to find command in stack
-    :param stack: Stack to search in
-    :return: Command-caller or None
-    """
+    """Attempts to find command in stack"""
     caller = next(
         (
             frame_info
@@ -1061,7 +853,6 @@ def find_caller(
             ),
             None,
         )
-
     return next(
         (
             getattr(cls_, caller.function, None)
@@ -1073,21 +864,13 @@ def find_caller(
 
 
 def validate_html(html: str) -> str:
-    """
-    Removes broken tags from html
-    :param html: HTML to validate
-    :return: Valid HTML
-    """
+    """Removes broken tags from html"""
     text, entities = hikkatl.extensions.html.parse(html)
     return hikkatl.extensions.html.unparse(escape_html(text), entities)
 
 
 def iter_attrs(obj: typing.Any, /) -> typing.List[typing.Tuple[str, typing.Any]]:
-    """
-    Returns list of attributes of object
-    :param obj: Object to iterate over
-    :return: List of attributes and their values
-    """
+    """Returns list of attributes of object"""
     return ((attr, getattr(obj, attr)) for attr in dir(obj))
 
 
@@ -1097,27 +880,15 @@ def atexit(
     *args,
     **kwargs,
 ) -> None:
-    """
-    Calls function on exit
-    :param func: Function to call
-    :param use_signal: If passed, `signal` will be used instead of `atexit`
-    :param args: Arguments to pass to function
-    :param kwargs: Keyword arguments to pass to function
-    :return: None
-    """
+    """Calls function on exit"""
     if use_signal:
         signal.signal(use_signal, lambda *_: func(*args, **kwargs))
         return
-
     _atexit.register(functools.partial(func, *args, **kwargs))
 
 
 def get_topic(message: Message) -> typing.Optional[int]:
-    """
-    Get topic id of message
-    :param message: Message to get topic of
-    :return: int or None if not present
-    """
+    """Get topic id of message"""
     return (
         (message.reply_to.reply_to_top_id or message.reply_to.reply_to_msg_id)
         if (
@@ -1126,7 +897,7 @@ def get_topic(message: Message) -> typing.Optional[int]:
             and message.reply_to.forum_topic
         )
         else None
-        )
+    )
 
 
 def get_ram_usage() -> float:
@@ -1138,9 +909,9 @@ def get_ram_usage() -> float:
         mem = current_process.memory_info()[0] / 2.0**20
         for child in current_process.children(recursive=True):
             mem += child.memory_info()[0] / 2.0**20
-
         return round(mem, 1)
     except Exception:
         return 0
+
 
 init_ts = time.perf_counter()

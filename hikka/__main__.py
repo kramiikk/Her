@@ -85,4 +85,4 @@ else:
     if "HIKKA_DO_NOT_RESTART2" in os.environ:
         del os.environ["HIKKA_DO_NOT_RESTART2"]
 
-    main.hikka.main()  # Execute main function
+    main.hikka.main()
