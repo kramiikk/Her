@@ -1,6 +1,7 @@
 # ©️ Friendly Telegram, Dan Gazizullin, codrago 2018-2024
 # 🌐 https://github.com/hikariatama/Hikka
 
+
 import functools
 import re
 import typing
@@ -71,7 +72,6 @@ class Validator:
 
         if isinstance(doc, str):
             doc = {"en": doc}
-
         self.doc = doc
         self.internal_id = _internal_id
 
@@ -95,17 +95,11 @@ class Boolean(Validator):
         false = ["False", "false", "0", 0, False, "no", "No", "off", "Off", "n", "N"]
         if value not in true + false:
             raise ValidationError("Passed value must be a boolean")
-
         return value in true
 
 
 class Integer(Validator):
-    """
-    Checks whether passed argument is an integer value
-    :param digits: Digits quantity, which must be passed
-    :param minimum: Minimal number to be passed
-    :param maximum: Maximum number to be passed
-    """
+    """Checks whether passed argument is an integer value"""
 
     def __init__(
         self,
@@ -114,35 +108,32 @@ class Integer(Validator):
         minimum: typing.Optional[int] = None,
         maximum: typing.Optional[int] = None,
     ):
-        _signs = {}  # Initialize _signs as a dictionary
+        _signs = {}
         if minimum is not None and minimum == 0:
-            _signs = {"en": "positive"} # Now always assign a dictionary
+            _signs = {"en": "positive"}
         elif maximum is not None and maximum == 0:
-            _signs = {"en": "negative"} # Now always assign a dictionary
+            _signs = {"en": "negative"}
         else:
-            _signs = {} # Explicitly initialize as empty dictionary
-
-        _digits = {} # Initialize _digits as a dictionary
+            _signs = {}
+        _digits = {}
         if digits is not None:
-            _digits = {"en": VALIDATORS_TRANSLATIONS["digits"].format(digits=digits)} # Now always assign a dictionary
+            _digits = {"en": VALIDATORS_TRANSLATIONS["digits"].format(digits=digits)}
         else:
-            _digits = {} # Explicitly initialize as empty dictionary
-
-
+            _digits = {}
         if minimum is not None and minimum != 0:
             doc = (
                 {
                     "en": VALIDATORS_TRANSLATIONS["integer_min"].format(
-                        sign=_signs.get("en", ""), # .get() is now safe, as _signs is a dictionary
-                        digits=_digits.get("en", ""), # .get() is now safe, as _digits is a dictionary
+                        sign=_signs.get("en", ""),
+                        digits=_digits.get("en", ""),
                         minimum=minimum,
                     )
                 }
                 if maximum is None and maximum != 0
                 else {
                     "en": VALIDATORS_TRANSLATIONS["integer_range"].format(
-                        sign=_signs.get("en", ""), # .get() is now safe, as _signs is a dictionary
-                        digits=_digits.get("en", ""), # .get() is now safe, as _digits is a dictionary
+                        sign=_signs.get("en", ""),
+                        digits=_digits.get("en", ""),
                         minimum=minimum,
                         maximum=maximum,
                     )
@@ -151,7 +142,8 @@ class Integer(Validator):
         elif maximum is None and maximum != 0:
             doc = {
                 "en": VALIDATORS_TRANSLATIONS["integer"].format(
-                    sign=_signs.get("en", ""), digits=_digits.get("en", "") # .get() is now safe
+                    sign=_signs.get("en", ""),
+                    digits=_digits.get("en", ""),  # .get() is now safe
                 )
             }
         else:
@@ -162,7 +154,6 @@ class Integer(Validator):
                     maximum=maximum,
                 )
             }
-
         super().__init__(
             functools.partial(
                 self._validate,
@@ -187,19 +178,15 @@ class Integer(Validator):
             value = int(str(value).strip())
         except ValueError:
             raise ValidationError(f"Passed value ({value}) must be a number")
-
         if minimum is not None and value < minimum:
             raise ValidationError(f"Passed value ({value}) is lower than minimum one")
-
         if maximum is not None and value > maximum:
             raise ValidationError(f"Passed value ({value}) is greater than maximum one")
-
         if digits is not None and len(str(value)) != digits:
             raise ValidationError(
                 f"The length of passed value ({value}) is incorrect "
                 f"(Must be exactly {digits} digits)"
             )
-
         return value
 
 
@@ -216,7 +203,11 @@ class Choice(Validator):
     ):
         super().__init__(
             functools.partial(self._validate, possible_values=possible_values),
-            {"en": VALIDATORS_TRANSLATIONS["choice"].format(possible=" / ".join(list(map(str, possible_values))))},
+            {
+                "en": VALIDATORS_TRANSLATIONS["choice"].format(
+                    possible=" / ".join(list(map(str, possible_values)))
+                )
+            },
             _internal_id="Choice",
         )
 
@@ -232,7 +223,6 @@ class Choice(Validator):
                 f"Passed value ({value}) is not one of the following:"
                 f" {' / '.join(list(map(str, possible_values)))}"
             )
-
         return value
 
 
@@ -263,14 +253,12 @@ class MultiChoice(Validator):
     ) -> typing.List[ConfigAllowedTypes]:
         if not isinstance(value, (list, tuple)):
             value = [value]
-
         for item in value:
             if item not in possible_values:
                 raise ValidationError(
                     f"One of passed values ({item}) is not one of the following:"
                     f" {' / '.join(list(map(str, possible_values)))}"
                 )
-
         return list(set(value))
 
 
@@ -285,28 +273,33 @@ class Series(Validator):
         fixed_len: typing.Optional[int] = None,
     ):
         def trans(lang: str) -> str:
-            return validator.doc.get("en", validator.doc["en"]) # changed lang to "en"
+            return validator.doc.get("en", validator.doc["en"])
 
         _each = (
-            {
-                "en": VALIDATORS_TRANSLATIONS["each"].format(each=trans("en"))
-            }
+            {"en": VALIDATORS_TRANSLATIONS["each"].format(each=trans("en"))}
             if validator is not None
             else {}
         )
 
         if fixed_len is not None:
-            _len = {"en": VALIDATORS_TRANSLATIONS["fixed_len"].format(fixed_len=fixed_len)}
+            _len = {
+                "en": VALIDATORS_TRANSLATIONS["fixed_len"].format(fixed_len=fixed_len)
+            }
         elif min_len is None:
             if max_len is None:
                 _len = {}
             else:
-                _len = {"en": VALIDATORS_TRANSLATIONS["max_len"].format(max_len=max_len)}
+                _len = {
+                    "en": VALIDATORS_TRANSLATIONS["max_len"].format(max_len=max_len)
+                }
         elif max_len is not None:
-            _len = {"en": VALIDATORS_TRANSLATIONS["len_range"].format(min_len=min_len, max_len=max_len)}
+            _len = {
+                "en": VALIDATORS_TRANSLATIONS["len_range"].format(
+                    min_len=min_len, max_len=max_len
+                )
+            }
         else:
             _len = {"en": VALIDATORS_TRANSLATIONS["min_len"].format(min_len=min_len)}
-
         super().__init__(
             functools.partial(
                 self._validate,
@@ -316,7 +309,9 @@ class Series(Validator):
                 fixed_len=fixed_len,
             ),
             {
-                "en": VALIDATORS_TRANSLATIONS["series"].format(each=_each.get("en", ""), len=_len.get("en", ""))
+                "en": VALIDATORS_TRANSLATIONS["series"].format(
+                    each=_each.get("en", ""), len=_len.get("en", "")
+                )
             },
             _internal_id="Series",
         )
@@ -333,25 +328,20 @@ class Series(Validator):
     ) -> typing.List[ConfigAllowedTypes]:
         if not isinstance(value, (list, tuple, set)):
             value = str(value).split(",")
-
         if isinstance(value, (tuple, set)):
             value = list(value)
-
         if min_len is not None and len(value) < min_len:
             raise ValidationError(
                 f"Passed value ({value}) contains less than {min_len} items"
             )
-
         if max_len is not None and len(value) > max_len:
             raise ValidationError(
                 f"Passed value ({value}) contains more than {max_len} items"
             )
-
         if fixed_len is not None and len(value) != fixed_len:
             raise ValidationError(
                 f"Passed value ({value}) must contain exactly {fixed_len} items"
             )
-
         value = [item.strip() if isinstance(item, str) else item for item in value]
 
         if isinstance(validator, Validator):
@@ -363,7 +353,6 @@ class Series(Validator):
                         f"Passed value ({value}) contains invalid item"
                         f" ({str(item).strip()}), which must be {validator.doc['en']}"
                     )
-
         value = list(filter(lambda x: x, value))
 
         return value
@@ -386,17 +375,11 @@ class Link(Validator):
                 raise Exception("Invalid URL")
         except Exception:
             raise ValidationError(f"Passed value ({value}) is not a valid URL")
-
         return value
 
 
 class String(Validator):
-    """
-    Checks for length of passed value and automatically converts it to string
-    :param length: Exact length of string
-    :param min_len: Minimal length of string
-    :param max_len: Maximum length of string
-    """
+    """Checks for length of passed value and automatically converts it to string"""
 
     def __init__(
         self,
@@ -405,18 +388,31 @@ class String(Validator):
         max_len: typing.Optional[int] = None,
     ):
         if length is not None:
-            doc = {"en": VALIDATORS_TRANSLATIONS["string_fixed_len"].format(length=length)}
+            doc = {
+                "en": VALIDATORS_TRANSLATIONS["string_fixed_len"].format(length=length)
+            }
         else:
             if min_len is None:
                 if max_len is None:
                     doc = {"en": VALIDATORS_TRANSLATIONS["string"]}
                 else:
-                    doc = {"en": VALIDATORS_TRANSLATIONS["string_max_len"].format(max_len=max_len)}
+                    doc = {
+                        "en": VALIDATORS_TRANSLATIONS["string_max_len"].format(
+                            max_len=max_len
+                        )
+                    }
             elif max_len is not None:
-                doc = {"en": VALIDATORS_TRANSLATIONS["string_len_range"].format(min_len=min_len, max_len=max_len)}
+                doc = {
+                    "en": VALIDATORS_TRANSLATIONS["string_len_range"].format(
+                        min_len=min_len, max_len=max_len
+                    )
+                }
             else:
-                doc = {"en": VALIDATORS_TRANSLATIONS["string_min_len"].format(min_len=min_len)}
-
+                doc = {
+                    "en": VALIDATORS_TRANSLATIONS["string_min_len"].format(
+                        min_len=min_len
+                    )
+                }
         super().__init__(
             functools.partial(
                 self._validate,
@@ -444,7 +440,6 @@ class String(Validator):
             raise ValidationError(
                 f"Passed value ({value}) must be a length of {length}"
             )
-
         if (
             isinstance(min_len, int)
             and len(list(grapheme.graphemes(str(value)))) < min_len
@@ -452,7 +447,6 @@ class String(Validator):
             raise ValidationError(
                 f"Passed value ({value}) must be a length of at least {min_len}"
             )
-
         if (
             isinstance(max_len, int)
             and len(list(grapheme.graphemes(str(value)))) > max_len
@@ -460,17 +454,11 @@ class String(Validator):
             raise ValidationError(
                 f"Passed value ({value}) must be a length of up to {max_len}"
             )
-
         return str(value)
 
 
 class RegExp(Validator):
-    """
-    Checks if value matches the regex
-    :param regex: Regex to match
-    :param flags: Flags to pass to re.compile
-    :param description: Description of regex
-    """
+    """Checks if value matches the regex"""
 
     def __init__(
         self,
@@ -480,12 +468,10 @@ class RegExp(Validator):
     ):
         if not flags:
             flags = 0
-
         try:
             re.compile(regex, flags=flags)
         except re.error as e:
             raise Exception(f"{regex} is not a valid regex") from e
-
         if description is None:
             doc = {"en": VALIDATORS_TRANSLATIONS["regex"].format(regex=regex)}
         else:
@@ -493,7 +479,6 @@ class RegExp(Validator):
                 doc = {"en": description}
             else:
                 doc = description
-
         super().__init__(
             functools.partial(self._validate, regex=regex, flags=flags),
             doc,
@@ -510,35 +495,30 @@ class RegExp(Validator):
     ) -> str:
         if not re.match(regex, str(value), flags=flags):
             raise ValidationError(f"Passed value ({value}) must follow pattern {regex}")
-
         return str(value)
 
 
 class Float(Validator):
-    """
-    Checks whether passed argument is a float value
-    :param minimum: Minimal number to be passed
-    :param maximum: Maximum number to be passed
-    """
+    """Checks whether passed argument is a float value"""
 
     def __init__(
         self,
         minimum: typing.Optional[float] = None,
         maximum: typing.Optional[float] = None,
     ):
-        _signs = {} # Initialize _signs as dictionary
+        _signs = {}
         if minimum is not None and minimum == 0:
-            _signs = {"en": "positive"} # Now always assign a dictionary
+            _signs = {"en": "positive"}
         elif maximum is not None and maximum == 0:
-            _signs = {"en": "negative"} # Now always assign a dictionary
+            _signs = {"en": "negative"}
         else:
-            _signs = {} # Explicitly initialize as empty dictionary
-
-
+            _signs = {}
         if minimum is not None and minimum != 0:
             doc = (
                 {
-                    "en": VALIDATORS_TRANSLATIONS["float_min"].format(sign=_signs.get("en", ""), minimum=minimum)
+                    "en": VALIDATORS_TRANSLATIONS["float_min"].format(
+                        sign=_signs.get("en", ""), minimum=minimum
+                    )
                 }
                 if maximum is None and maximum != 0
                 else {
@@ -547,16 +527,16 @@ class Float(Validator):
                     )
                 }
             )
-
         elif maximum is None and maximum != 0:
             doc = {
                 "en": VALIDATORS_TRANSLATIONS["float"].format(sign=_signs.get("en", ""))
             }
         else:
             doc = {
-                "en": VALIDATORS_TRANSLATIONS["float_max"].format(sign=_signs.get("en", ""), maximum=maximum)
+                "en": VALIDATORS_TRANSLATIONS["float_max"].format(
+                    sign=_signs.get("en", ""), maximum=maximum
+                )
             }
-
         super().__init__(
             functools.partial(
                 self._validate,
@@ -579,13 +559,10 @@ class Float(Validator):
             value = float(str(value).strip().replace(",", "."))
         except ValueError:
             raise ValidationError(f"Passed value ({value}) must be a float")
-
         if minimum is not None and value < minimum:
             raise ValidationError(f"Passed value ({value}) is lower than minimum one")
-
         if maximum is not None and value > maximum:
             raise ValidationError(f"Passed value ({value}) is greater than maximum one")
-
         return value
 
 
@@ -605,13 +582,10 @@ class TelegramID(Validator):
             value = int(str(value).strip())
         except Exception:
             raise e
-
         if str(value).startswith("-100"):
             value = int(str(value)[4:])
-
         if value > 2**64 - 1 or value < 0:
             raise e
-
         return value
 
 
@@ -624,7 +598,6 @@ class Union(Validator):
 
         for validator in validators:
             doc["en"] += f"- {case(validator.doc.get('en', validator.doc['en']))}\n"
-
         doc["en"] = doc["en"].strip()
 
         super().__init__(
@@ -645,7 +618,6 @@ class Union(Validator):
                 return validator.validate(value)
             except ValidationError:
                 pass
-
         raise ValidationError(f"Passed value ({value}) is not valid")
 
 
@@ -659,9 +631,8 @@ class NoneType(Validator):
 
     @staticmethod
     def _validate(value: ConfigAllowedTypes, /) -> None:
-        if value is not None and str(value).strip() != '': # Corrected validation logic for NoneType
-            raise ValidationError(f"Passed value ({value}) is not None or empty string") # Updated error message
-
+        if value is not None and str(value).strip() != "":
+            raise ValidationError(f"Passed value ({value}) is not None or empty string")
         return None
 
 
@@ -669,7 +640,6 @@ class Hidden(Validator):
     def __init__(self, validator: typing.Optional[Validator] = None):
         if not validator:
             validator = String()
-
         super().__init__(
             functools.partial(self._validate, validator=validator),
             validator.doc,
@@ -687,12 +657,7 @@ class Hidden(Validator):
 
 
 class Emoji(Validator):
-    """
-    Checks whether passed argument is a valid emoji
-    :param quantity: Number of emojis to be passed
-    :param min_len: Minimum number of emojis
-    :param max_len: Maximum number of emojis
-    """
+    """Checks whether passed argument is a valid emoji"""
 
     def __init__(
         self,
@@ -701,16 +666,25 @@ class Emoji(Validator):
         max_len: typing.Optional[int] = None,
     ):
         if length is not None:
-            doc = {"en": VALIDATORS_TRANSLATIONS["emoji_fixed_len"].format(length=length)}
+            doc = {
+                "en": VALIDATORS_TRANSLATIONS["emoji_fixed_len"].format(length=length)
+            }
         elif min_len is not None and max_len is not None:
-            doc = {"en": VALIDATORS_TRANSLATIONS["emoji_len_range"].format(min_len=min_len, max_len=max_len)}
+            doc = {
+                "en": VALIDATORS_TRANSLATIONS["emoji_len_range"].format(
+                    min_len=min_len, max_len=max_len
+                )
+            }
         elif min_len is not None:
-            doc = {"en": VALIDATORS_TRANSLATIONS["emoji_min_len"].format(min_len=min_len)}
+            doc = {
+                "en": VALIDATORS_TRANSLATIONS["emoji_min_len"].format(min_len=min_len)
+            }
         elif max_len is not None:
-            doc = {"en": VALIDATORS_TRANSLATIONS["emoji_max_len"].format(max_len=max_len)}
+            doc = {
+                "en": VALIDATORS_TRANSLATIONS["emoji_max_len"].format(max_len=max_len)
+            }
         else:
             doc = {"en": VALIDATORS_TRANSLATIONS["emoji"]}
-
         super().__init__(
             functools.partial(
                 self._validate,
@@ -736,7 +710,6 @@ class Emoji(Validator):
 
         if length is not None and passed_length != length:
             raise ValidationError(f"Passed value ({value}) is not {length} emojis long")
-
         if (
             min_len is not None
             and max_len is not None
@@ -746,22 +719,18 @@ class Emoji(Validator):
                 f"Passed value ({value}) is not between {min_len} and {max_len} emojis"
                 " long"
             )
-
         if min_len is not None and passed_length < min_len:
             raise ValidationError(
                 f"Passed value ({value}) is not at least {min_len} emojis long"
             )
-
         if max_len is not None and passed_length > max_len:
             raise ValidationError(
                 f"Passed value ({value}) is not no more than {max_len} emojis long"
             )
-
         if any(emoji not in ALLOWED_EMOJIS for emoji in grapheme.graphemes(value)):
             raise ValidationError(
                 f"Passed value ({value}) is not a valid string with emojis"
             )
-
         return value
 
 
@@ -785,13 +754,9 @@ class EntityLike(RegExp):
         if value.isdigit():
             if value.startswith("-100"):
                 value = value[4:]
-
             value = int(value)
-
         if value.startswith("https://t.me/"):
             value = value.split("https://t.me/")[1]
-
         if not value.startswith("@"):
             value = f"@{value}"
-
         return value

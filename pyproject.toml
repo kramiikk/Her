@@ -2,7 +2,7 @@
 preview = true
 
 [tool.poetry]
-name = "hikka"
+name = "Her"
 version = "1.7.9"
 description = "Telegram userbot"
 authors = ["Friendly Telegram, Dan Gazizullin, codrago, kramiikk"]
