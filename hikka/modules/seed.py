@@ -26,6 +26,7 @@ def hash_msg(message):
 async def read_stream(func: callable, stream):
     buffer = []
     last_send = time.time()
+
     try:
         while True:
             chunk = await stream.read(4096)
@@ -33,8 +34,9 @@ async def read_stream(func: callable, stream):
                 break
             decoded = chunk.decode(errors="replace").replace("\r\n", "\n")
             buffer.append(decoded)
+
             current_time = time.time()
-            if "\n" in decoded or current_time - last_send >= 0.5:
+            if len("".join(buffer)) > 512 or current_time - last_send >= 0.3:
                 await func("".join(buffer))
                 buffer.clear()
                 last_send = current_time
@@ -339,6 +341,7 @@ class RawMessageEditor(BaseMessageEditor):
         self._buffer = []
         self._last_flush = 0
         self._update_lock = asyncio.Lock()
+        self._complete = False
 
     def _truncate_output(self, text: str, max_len: int, keep_edges=True) -> str:
         text = text.replace("\r\n", "\n").replace("\r", "\n").strip()
@@ -354,57 +357,67 @@ class RawMessageEditor(BaseMessageEditor):
         return text[:max_len]
 
     def _get_status_emoji(self):
-        if self.rc is None:
-            return "⚡"
-        elif self.rc == 0:
-            return "✅"
-        else:
-            return "❌"
+        if self._complete:
+            if self.rc == 0:
+                return "✅"
+            else:
+                return "❌"
+        return "⚡"
 
     def _get_status_text(self):
-        if self.rc is None:
-            return "Running"
-        elif self.rc == 0:
-            return f"Completed (exit code: {self.rc})"
-        else:
-            return f"Failed (exit code: {self.rc})"
+        if self._complete:
+            if self.rc == 0:
+                return f"Completed (exit code: {self.rc})"
+            else:
+                return f"Failed (exit code: {self.rc})"
+        return "Running"
 
     async def _flush_buffer(self):
         async with self._update_lock:
+            if not self._buffer:
+                return
+            content = "".join(self._buffer)
+            content = content.replace("\r\n", "\n").strip()
+
+            if not content and not self._complete:
+                return
+            status_emoji = self._get_status_emoji()
+            status_text = self._get_status_text()
+
+            if hasattr(self, "_last_content"):
+                content = self._last_content + content
+            self._last_content = content
+
+            text = (
+                f"<pre>{utils.escape_html(content)}</pre>\n"
+                f"{status_emoji} Status: {status_text}"
+            )
+
             try:
-                if not self._buffer:
-                    return
-                content = "".join(self._buffer)
-                content = content.replace("\r\n", "\n").strip()
-
-                status_emoji = self._get_status_emoji()
-                status_text = self._get_status_text()
-
-                text = (
-                    f"<pre>{utils.escape_html(content)}</pre>\n"
-                    f"{status_emoji} Status: {status_text}"
-                )
-
                 await utils.answer(self.message, text)
+            except Exception as e:
+                logger.error(f"Error updating message: {e}")
             finally:
                 self._buffer.clear()
 
     async def update_stdout(self, stdout):
         stdout = stdout.replace("\r\n", "\n").replace("\r", "\n")
         self._buffer.append(stdout)
-        if time.time() - self._last_flush > 0.5:
+
+        if len("".join(self._buffer)) > 1024 or time.time() - self._last_flush > 0.5:
             await self._flush_buffer()
             self._last_flush = time.time()
 
     async def update_stderr(self, stderr):
         stderr = stderr.replace("\r\n", "\n").replace("\r", "\n")
         self._buffer.append(stderr)
-        if time.time() - self._last_flush > 0.5:
-            await self._flush_buffer()
-            self._last_flush = time.time()
+
+        await self._flush_buffer()
+        self._last_flush = time.time()
 
     async def cmd_ended(self, rc):
         self.rc = rc
+        self._complete = True
         await self._flush_buffer()
 
 
