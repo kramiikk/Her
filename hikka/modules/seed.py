@@ -752,22 +752,6 @@ class AdvancedExecutorMod(loader.Module):
     async def _wait_process(self, proc, editor):
         try:
             rc = await proc.wait()
-            try:
-                remaining_stdout = await proc.stdout.read()
-                if remaining_stdout:
-                    await editor.update_stdout(
-                        remaining_stdout.decode(errors="replace")
-                    )
-            except Exception:
-                pass
-            try:
-                remaining_stderr = await proc.stderr.read()
-                if remaining_stderr:
-                    await editor.update_stderr(
-                        remaining_stderr.decode(errors="replace")
-                    )
-            except Exception:
-                pass
             await editor.cmd_ended(rc)
         except Exception as e:
             logger.error(f"Error in _wait_process: {e}")
