@@ -1,7 +1,7 @@
 # 🌟 Hikka, Friendly Telegram
 
-# Maintainers  | Dan Gazizullin, codrago 
-# Years Active | 2018 - 2024 
+# Maintainers  | Dan Gazizullin, codrago
+# Years Active | 2018 - 2024
 # Repository   | https://github.com/hikariatama/Hikka
 
 
@@ -346,6 +346,8 @@ class RawMessageEditor(BaseMessageEditor):
         self._update_lock = asyncio.Lock()
         self._complete = False
         self._last_content = ""
+        self._last_update = time.time()
+        self._force_update_interval = 1.0
 
     def _truncate_output(self, text: str, max_len: int, keep_edges=True) -> str:
         text = text.replace("\r\n", "\n").replace("\r", "\n").strip()
@@ -361,12 +363,12 @@ class RawMessageEditor(BaseMessageEditor):
         return text[:max_len]
 
     def _get_status_text(self):
+        elapsed = time.time() - self.start_time
+
         if self._complete:
-            if self.rc == 0:
-                return f"exit code: {self.rc}"
-            else:
-                return f"exit code: {self.rc}"
-        return "Running"
+            status = "Complete" if self.rc == 0 else f"Failed (code: {self.rc})"
+            return f"{status} ({elapsed:.1f}s)"
+        return f"Running ({elapsed:.1f}s)"
 
     def _get_status_emoji(self):
         if self._complete:
@@ -378,30 +380,38 @@ class RawMessageEditor(BaseMessageEditor):
 
     async def _flush_buffer(self):
         async with self._update_lock:
-            if not self._buffer:
-                return
+            current_time = time.time()
+
             content = "\n".join(
                 line.strip() for line in "".join(self._buffer).split("\n")
             )
 
-            if not content and not self._complete:
+            should_update = (
+                self._complete
+                or content.strip()
+                or current_time - self._last_update >= self._force_update_interval
+            )
+
+            if not should_update:
                 return
             status_emoji = self._get_status_emoji()
             status_text = self._get_status_text()
 
             if self._last_content:
-                if not self._last_content.endswith("\n"):
-                    self._last_content += "\n"
-                content = self._last_content + content
-            self._last_content = content
-
+                content = (
+                    f"{self._last_content}\n{content}"
+                    if content
+                    else self._last_content
+                )
+            if content:
+                self._last_content = content
             text = (
-                f"<pre>{utils.escape_html(content)}</pre>\n"
-                f"{status_emoji} {status_text}"
+                f"<pre>{utils.escape_html(content)}</pre>\n{status_emoji} {status_text}"
             )
 
             try:
                 await utils.answer(self.message, text)
+                self._last_update = current_time
             except Exception as e:
                 logger.error(f"Error updating message: {e}")
             finally:
@@ -410,9 +420,13 @@ class RawMessageEditor(BaseMessageEditor):
     async def update_stdout(self, stdout):
         stdout = stdout.replace("\r\n", "\n").replace("\r", "\n")
         self._buffer.append(stdout)
-        if len("".join(self._buffer)) > 512 or time.time() - self._last_flush > 0.3:
+
+        current_time = time.time()
+        buffer_size = len("".join(self._buffer))
+
+        if buffer_size > 256 or current_time - self._last_flush > 0.5:
             await self._flush_buffer()
-            self._last_flush = time.time()
+            self._last_flush = current_time
 
     async def update_stderr(self, stderr):
         stderr = stderr.replace("\r\n", "\n").replace("\r", "\n")
