@@ -35,7 +35,6 @@ async def read_stream(func: callable, stream):
             chunk = await stream.read(4096)
             if not chunk:
                 break
-
             decoded = chunk.decode(errors="replace").replace("\r\n", "\n")
             buffer.append(decoded)
 
@@ -44,7 +43,6 @@ async def read_stream(func: callable, stream):
                 await func("".join(buffer))
                 buffer.clear()
                 last_send = current_time
-
         if buffer:
             await func("".join(buffer))
     except Exception as e:
@@ -101,16 +99,16 @@ class BaseMessageEditor:
 
         return text[:part_len].strip() + separator + text[-part_len:].strip()
 
-    async def cmd_ended(self, rc):
+    async def cmd_ended(self):
         self._finished = True
         pass
 
-    async def update_stdout(self, stdout):
-        if self._finished: 
+    async def update_stdout(self):
+        if self._finished:
             return
         pass
 
-    async def update_stderr(self, stderr):
+    async def update_stderr(self):
         if self._finished:
             return
         pass
@@ -767,6 +765,7 @@ class AdvancedExecutorMod(loader.Module):
             await editor.cmd_ended(-1)
         finally:
             # Закрытие потоков
+
             for stream in [proc.stdout, proc.stderr, proc.stdin]:
                 if stream:
                     try:
