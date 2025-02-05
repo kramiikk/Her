@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 def hash_msg(message):
     return f"{utils.get_chat_id(message)}/{message.id}"
 
+
 async def read_stream(func: callable, stream):
     buffer = []
     last_send = time.time()
@@ -45,6 +46,7 @@ async def read_stream(func: callable, stream):
         if buffer:
             await func("".join(buffer))
             buffer.clear()
+
 
 async def sleep_for_task(func: callable, data: bytes, delay: float):
     await asyncio.sleep(delay)
@@ -351,18 +353,38 @@ class RawMessageEditor(BaseMessageEditor):
             return text[:edge] + "\n... 🔻 [TRUNCATED] 🔻 ...\n" + text[-edge:]
         return text[:max_len]
 
+    def _get_status_emoji(self):
+        if self.rc is None:
+            return "⚡"
+        elif self.rc == 0:
+            return "✅"
+        else:
+            return "❌"
+
+    def _get_status_text(self):
+        if self.rc is None:
+            return "Running"
+        elif self.rc == 0:
+            return f"Completed (exit code: {self.rc})"
+        else:
+            return f"Failed (exit code: {self.rc})"
+
     async def _flush_buffer(self):
         async with self._update_lock:
             try:
                 if not self._buffer:
                     return
-                
                 content = "".join(self._buffer)
                 content = content.replace("\r\n", "\n").strip()
-                
-                text = (f"<pre>{utils.escape_html(content)}</pre>\n"
-                        f"💫 Status: {self.rc if self.rc is not None else 'Running'}")
-                
+
+                status_emoji = self._get_status_emoji()
+                status_text = self._get_status_text()
+
+                text = (
+                    f"<pre>{utils.escape_html(content)}</pre>\n"
+                    f"{status_emoji} Status: {status_text}"
+                )
+
                 await utils.answer(self.message, text)
             finally:
                 self._buffer.clear()
@@ -372,12 +394,14 @@ class RawMessageEditor(BaseMessageEditor):
         self._buffer.append(stdout)
         if time.time() - self._last_flush > 0.5:
             await self._flush_buffer()
+            self._last_flush = time.time()
 
     async def update_stderr(self, stderr):
         stderr = stderr.replace("\r\n", "\n").replace("\r", "\n")
         self._buffer.append(stderr)
         if time.time() - self._last_flush > 0.5:
             await self._flush_buffer()
+            self._last_flush = time.time()
 
     async def cmd_ended(self, rc):
         self.rc = rc
@@ -683,7 +707,6 @@ class AdvancedExecutorMod(loader.Module):
                         if proc.stdin:
                             proc.stdin.close()
                             await proc.stdin.wait_closed()
-                        # Removed manual closure of stdout/stderr streams
                     except Exception as e:
                         logger.debug(f"Stream close error: {e}")
                     try:
@@ -697,33 +720,27 @@ class AdvancedExecutorMod(loader.Module):
     async def _wait_process(self, proc, editor):
         try:
             rc = await proc.wait()
-            
+
             try:
                 while True:
                     chunk = await proc.stdout.read(4096)
                     if not chunk:
                         break
-                    await editor.update_stdout(
-                            chunk.decode(errors="replace")
-                        )
+                    await editor.update_stdout(chunk.decode(errors="replace"))
             except (BrokenPipeError, ConnectionResetError):
                 pass
-
             try:
                 while True:
                     chunk = await proc.stderr.read(4096)
                     if not chunk:
                         break
-                    await editor.update_stderr(
-                            chunk.decode(errors="replace")
-                        )
+                    await editor.update_stderr(chunk.decode(errors="replace"))
             except (BrokenPipeError, ConnectionResetError):
                 pass
-
         finally:
-            await editor.cmd_ended(rc if 'rc' in locals() else -1)
+            await editor.cmd_ended(rc if "rc" in locals() else -1)
             await asyncio.sleep(0.2)
-            
+
             for stream in [proc.stdout, proc.stderr, proc.stdin]:
                 if stream:
                     try:
