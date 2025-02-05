@@ -397,7 +397,7 @@ class RawMessageEditor(BaseMessageEditor):
 
             text = (
                 f"<pre>{utils.escape_html(content)}</pre>\n"
-                f"{status_emoji} Status: {status_text}"
+                f"{status_emoji} {status_text}"
             )
 
             try:
