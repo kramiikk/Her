@@ -35,6 +35,7 @@ async def read_stream(func: callable, stream):
             chunk = await stream.read(4096)
             if not chunk:
                 break
+
             decoded = chunk.decode(errors="replace").replace("\r\n", "\n")
             buffer.append(decoded)
 
@@ -43,14 +44,13 @@ async def read_stream(func: callable, stream):
                 await func("".join(buffer))
                 buffer.clear()
                 last_send = current_time
+
         if buffer:
             await func("".join(buffer))
     except Exception as e:
         logger.error(f"Error in read_stream: {e}")
     finally:
-        if buffer:
-            await func("".join(buffer))
-            buffer.clear()
+        buffer.clear()
 
 
 async def sleep_for_task(func: callable, data: bytes, delay: float):
@@ -76,6 +76,7 @@ class BaseMessageEditor:
         self.last_update = 0
         self.request_message = request_message
         self._is_updating = False
+        self._finished = False
 
     def _get_progress(self):
         elapsed = time.time() - self.start_time
@@ -101,12 +102,17 @@ class BaseMessageEditor:
         return text[:part_len].strip() + separator + text[-part_len:].strip()
 
     async def cmd_ended(self, rc):
+        self._finished = True
         pass
 
     async def update_stdout(self, stdout):
+        if self._finished: 
+            return
         pass
 
     async def update_stderr(self, stderr):
+        if self._finished:
+            return
         pass
 
     async def redraw(self):
@@ -129,7 +135,7 @@ class MessageEditor(BaseMessageEditor):
         await self.redraw()
 
     async def redraw(self):
-        if self._is_updating:
+        if self._is_updating or self._finished:
             return
         self._is_updating = True
         try:
@@ -379,6 +385,8 @@ class RawMessageEditor(BaseMessageEditor):
         return "⚡"
 
     async def _flush_buffer(self):
+        if self._finished:
+            return
         async with self._update_lock:
             current_time = time.time()
 
@@ -438,6 +446,7 @@ class RawMessageEditor(BaseMessageEditor):
         self.rc = rc
         self._complete = True
         await self._flush_buffer()
+        self._buffer.clear()
 
 
 class AdvancedExecutorMod(loader.Module):
@@ -754,9 +763,10 @@ class AdvancedExecutorMod(loader.Module):
             rc = await proc.wait()
             await editor.cmd_ended(rc)
         except Exception as e:
-            logger.error(f"Error in _wait_process: {e}")
+            logger.error(f"Process wait error: {e}")
             await editor.cmd_ended(-1)
         finally:
+            # Закрытие потоков
             for stream in [proc.stdout, proc.stderr, proc.stdin]:
                 if stream:
                     try:
