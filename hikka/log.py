@@ -1,7 +1,11 @@
 """Main logging part"""
 
-# ©️ Friendly Telegram, Dan Gazizullin, codrago 2018-2024
-# 🌐 https://github.com/hikariatama/Hikka
+# 🌟 Hikka, Friendly Telegram
+
+# Maintainers  | Dan Gazizullin, codrago 
+# Years Active | 2018 - 2024 
+# Repository   | https://github.com/hikariatama/Hikka
+
 
 import inspect
 import logging

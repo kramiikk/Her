@@ -4,8 +4,8 @@ preview = true
 [tool.poetry]
 name = "Her"
 version = "1.7.9"
-description = "Telegram userbot"
-authors = ["Friendly Telegram, Dan Gazizullin, codrago, kramiikk"]
+description = "Userbot"
+authors = ["Friendly Telegram, Dan Gazizullin, codrago"]
 license = "GNU AGPLv3"
 readme = "README.md"
 
