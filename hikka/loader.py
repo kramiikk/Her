@@ -8,7 +8,6 @@
 
 
 import asyncio
-import builtins
 import contextlib
 import importlib
 import importlib.machinery
@@ -71,10 +70,6 @@ async def stop_placeholder() -> bool:
     return True
 
 
-class Placeholder:
-    """Placeholder"""
-
-
 VALID_PIP_PACKAGES = re.compile(
     r"^\s*# ?requires:(?: ?)((?:{url} )*(?:{url}))\s*$".format(
         url=r"[-[\]_.~:/?#@!$&'()*+,;%<=>a-zA-Z0-9]+"
@@ -83,17 +78,6 @@ VALID_PIP_PACKAGES = re.compile(
 )
 
 USER_INSTALL = "PIP_TARGET" not in os.environ and "VIRTUAL_ENV" not in os.environ
-
-native_import = builtins.__import__
-
-
-def patched_import(name: str, *args, **kwargs):
-    if name.startswith("telethon"):
-        return native_import("hikkatl" + name[8:], *args, **kwargs)
-    return native_import(name, *args, **kwargs)
-
-
-builtins.__import__ = patched_import
 
 
 class InfiniteLoop:
@@ -175,21 +159,6 @@ def loop(
     return wrapped
 
 
-MODULES_NAME = "modules"
-
-BASE_DIR = (
-    "/data"
-    if "DOCKER" in os.environ
-    else os.path.normpath(os.path.join(utils.get_base_dir(), ".."))
-)
-
-
-def ratelimit(func: Command) -> Command:
-    """Decorator that causes ratelimiting for this command to be enforced more strictly"""
-    func.ratelimit = True
-    return func
-
-
 def tag(*tags, **kwarg_tags):
     """Tag function (esp. watchers) with some tags"""
 
@@ -224,14 +193,6 @@ def command(*args, **kwargs):
     Decorator that marks function as userbot command
     """
     return _mark_method("is_command", *args, **kwargs)
-
-
-def debug_method(*args, **kwargs):
-    """
-    Decorator that marks function as IDM (Internal Debug Method)
-    :param name: Name of the method
-    """
-    return _mark_method("is_debug_method", *args, **kwargs)
 
 
 def watcher(*args, **kwargs):
@@ -283,7 +244,6 @@ class Modules:
         self.watchers = []
         self._log_handlers = []
         self._core_commands = []
-        self.__approve = []
         self.client = client
         self.session = session
         self._db = db
@@ -309,19 +269,15 @@ class Modules:
 
             self.watchers = watchers
 
-    async def register_all(
-        self,
-        mods: typing.Optional[typing.List[str]] = None,
-    ) -> typing.List[Module]:
+    async def register_all(self) -> typing.List[Module]:
         """Load all modules in the module directory"""
-        if not mods:
-            mods = [
-                os.path.join(utils.get_base_dir(), MODULES_NAME, mod)
-                for mod in filter(
-                    lambda x: (x.endswith(".py") and not x.startswith("_")),
-                    os.listdir(os.path.join(utils.get_base_dir(), MODULES_NAME)),
-                )
-            ]
+        mods = [
+            os.path.join(utils.get_base_dir(), "modules", mod)
+            for mod in filter(
+                lambda x: (x.endswith(".py") and not x.startswith("_")),
+                os.listdir(os.path.join(utils.get_base_dir(), "modules")),
+            )
+        ]
         loaded = []
         loaded += await self._register_modules(mods)
 
@@ -337,7 +293,7 @@ class Modules:
         for mod in modules:
             try:
                 mod_shortname = os.path.basename(mod).rsplit(".py", maxsplit=1)[0]
-                module_name = f"{__package__}.{MODULES_NAME}.{mod_shortname}"
+                module_name = f"{__package__}.{"modules"}.{mod_shortname}"
                 user_friendly_origin = (
                     "<core {}>" if origin == "<core>" else "<file {}>"
                 ).format(module_name)
@@ -426,10 +382,6 @@ class Modules:
             False,
         )
 
-    @property
-    def get_approved_channel(self):
-        return self.__approve.pop(0) if self.__approve else None
-
     async def complete_registration(self, instance: Module):
         """Complete registration of instance"""
         instance.allmodules = self
@@ -496,10 +448,10 @@ class Modules:
             logger.exception("Failed to send mod config complete signal due to %s", e)
             raise
 
-    async def send_ready_one_wrapper(self, *args, **kwargs):
+    async def send_ready_one_wrapper(self, mod):
         """Wrapper for send_ready_one"""
         try:
-            await self.send_ready_one(*args, **kwargs)
+            await self.send_ready_one(mod)
         except Exception as e:
             logger.exception("Failed to send mod init complete signal due to %s", e)
 
@@ -512,21 +464,12 @@ class Modules:
     async def send_ready_one(
         self,
         mod: Module,
-        no_self_unload: bool = False,
     ):
         try:
             if len(inspect.signature(mod.client_ready).parameters) == 2:
                 await mod.client_ready(self.client, self._db)
             else:
                 await mod.client_ready()
-        except SelfUnload as e:
-            if no_self_unload:
-                raise e
-            self.modules.remove(mod)
-        except SelfSuspend as e:
-            if no_self_unload:
-                raise e
-            return
         except Exception as e:
             logger.exception(
                 (
@@ -550,21 +493,6 @@ class Modules:
         self.register_commands(mod)
         self.register_watchers(mod)
         self.register_raw_handlers(mod)
-
-    def get_classname(self, name: str) -> str:
-        return next(
-            (
-                module.__class__.__module__
-                for module in reversed(self.modules)
-                if name in (module.name, module.__class__.__module__)
-            ),
-            name,
-        )
-
-    def unregister_loops(self, instance: Module):
-        for _, method in utils.iter_attrs(instance):
-            if isinstance(method, InfiniteLoop):
-                method.stop()
 
     def unregister_commands(self, instance: Module):
         for name, cmd in self.commands.copy().items():

@@ -6,13 +6,13 @@
 
 
 import asyncio
+import httpx
 import logging
 import re
 import time
 import sys
 import traceback
 from typing import Dict, Any
-import aiohttp
 from .. import loader, main, utils
 import hikkatl
 
@@ -194,152 +194,6 @@ class MessageEditor(BaseMessageEditor):
             self._is_updating = False
 
 
-class SudoMessageEditor(MessageEditor):
-    PASS_REQ = r"\[sudo\] password for .+?:"
-    WRONG_PASS = r"\[sudo\] password for (.*): Sorry, try again\."
-    TOO_MANY_TRIES = (
-        r"\[sudo\] password for (.*): sudo: [0-9]+ incorrect password attempts"
-    )
-
-    def __init__(self, message, command, request_message):
-        super().__init__(
-            message=message, command=command, request_message=request_message
-        )
-        self.process = None
-        self.state = 0
-        self.authmsg = None
-        self._auth_event = None
-        self.attempts = 0
-
-    def _get_progress(self):
-        progress = super()._get_progress()
-        states = {
-            0: "🔓 Waiting for authentication...",
-            1: "🔐 Authenticating...",
-            2: "⚡ Processing...",
-        }
-        return progress + f"<b>{states.get(self.state, '⚡ Processing...')}</b>\n"
-
-    def update_process(self, process):
-        self.process = process
-
-    async def update_stderr(self, stderr):
-        self.stderr += stderr
-        lines = self.stderr.strip().split("\n")
-        lastline = lines[-1] if lines else ""
-        handled = False
-
-        if self.state == 1 and any(
-            re.fullmatch(self.WRONG_PASS, line) for line in lines
-        ):
-            if self.authmsg:
-                await utils.answer(self.authmsg, "🙂‍↔️ Authentication failed, try again")
-            self.state = 0
-            handled = True
-            self.stderr = ""
-            if self.attempts >= 3:
-                await utils.answer(self.message, "😵‍💫 Too many authentication attempts")
-                if self.process:
-                    self.process.kill()
-                self.state = 2
-                return
-            self.attempts += 1
-            await self._handle_auth_request(lastline)
-        elif not handled and re.search(self.PASS_REQ, lastline) and self.state == 0:
-            await self._handle_auth_request(lastline)
-            handled = True
-        elif not handled and any(
-            re.fullmatch(self.TOO_MANY_TRIES, line) for line in lines
-        ):
-            await utils.answer(self.message, "😵‍💫 Too many failed attempts")
-            if self.process:
-                self.process.kill()
-            self.state = 2
-            handled = True
-        if not handled:
-            await self.redraw()
-
-    async def _handle_auth_request(self, lastline):
-        if self.state >= 2:
-            return
-        try:
-            user = lastline.split()[-1][:-1]
-
-            if self._auth_event:
-                self._auth_event.set()
-            self._auth_event = asyncio.Event()
-
-            self.authmsg = await self.message.client.send_message(
-                "me",
-                f"🔐 Enter password for {utils.escape_html(user)} to run:\n"
-                f"<code>{utils.escape_html(self.command)}</code>",
-            )
-
-            try:
-
-                password_future = asyncio.create_task(
-                    self.message.client.wait_event(
-                        hikkatl.events.NewMessage(
-                            chats=["me"],
-                            from_users="me",
-                            func=lambda e: e.raw_text
-                            and not e.raw_text.startswith("🔐"),
-                        ),
-                        timeout=60,
-                    )
-                )
-
-                done, pending = await asyncio.wait(
-                    [password_future, self._auth_event.wait()],
-                    return_when=asyncio.FIRST_COMPLETED,
-                )
-
-                for task in pending:
-                    task.cancel()
-                if self._auth_event.is_set():
-                    await utils.answer(self.authmsg, "🚫 Authentication cancelled")
-                    if self.process:
-                        self.process.kill()
-                    self.state = 2
-                    return
-                response = await password_future
-                if not response:
-                    raise asyncio.TimeoutError()
-                password = response.message.raw_text.split("\n", 1)[0].encode() + b"\n"
-
-                if self.process and self.process.stdin:
-                    try:
-                        self.process.stdin.write(password)
-                        await self.process.stdin.drain()
-                        await utils.answer(response.message, "🔒 Processing...")
-                        self.state = 1
-                    except (BrokenPipeError, ConnectionResetError):
-                        await utils.answer(self.authmsg, "🙂‍↔️ Process terminated")
-                        self.state = 2
-            except asyncio.TimeoutError:
-                await utils.answer(self.authmsg, "🙂‍↔️ Timeout waiting for password")
-                if self.process:
-                    self.process.kill()
-                self.state = 2
-        except Exception as e:
-            logger.error(f"Error in _handle_auth_request: {str(e)}")
-            await utils.answer(
-                self.message, f"🙂‍↔️ Authentication error: {utils.escape_html(str(e))}"
-            )
-            if self.process:
-                self.process.kill()
-            self.state = 2
-
-    async def cleanup(self):
-        if self._auth_event:
-            self._auth_event.set()
-        if self.process:
-            try:
-                self.process.kill()
-            except ProcessLookupError:
-                pass
-
-
 class RawMessageEditor(BaseMessageEditor):
     def __init__(self, message, command, request_message):
         super().__init__(
@@ -409,9 +263,7 @@ class RawMessageEditor(BaseMessageEditor):
                 )
             if content:
                 self._last_content = content
-            text = (
-                f"<pre>{utils.escape_html(content)}</pre>{status_emoji}{status_text}"
-            )
+            text = f"<pre>{utils.escape_html(content)}</pre>{status_emoji}{status_text}"
 
             try:
                 await utils.answer(self.message, text)
@@ -604,11 +456,11 @@ class AdvancedExecutorMod(loader.Module):
                     {
                         "role": "system",
                         "content": (
-                            "Ты — здравомыслящий человек, который в переписке  отвечает на сообщение."
-                            "Твой стиль общения как у Камю и Кьеркегора, но естественный, без пафоса, и как у них реалистичным подходом к теме и к миру, указывая в корень проблемы."
-                            "Твои ответы всегда логичны, с эмпатией, связаны с контекстом и компактные (не более 3-5 предложений)."
+                            "Ты — здравомыслящий человек который отвечает на сообщение."
+                            "Твой стиль общения как у Камю и Кьеркегора c реалистичным подходом к теме и к миру указывая в корень проблемы, но естественный, без пафоса."
+                            "Твой ответ логичен, с эмпатией, связан с контекстом и компактный (не более 3-5 предложений)."
                             "Используй современный сленг и эмодзи, только где это уместно."
-                            "Используй HTML теги: <code>, <pre>, <b>, <i>, <s>, <u>."
+                            "Используй HTML (<code>, <pre>, <b>, <i>, <s>, <u>) для оформления и для выделения важных мест в ответе."
                         ),
                     },
                     {
@@ -660,30 +512,28 @@ class AdvancedExecutorMod(loader.Module):
             sys.stdout = original_stdout
 
     async def _process_api_request(self, payload: Dict[str, Any]) -> str:
-        async with asyncio.timeout(13):
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
+        async with httpx.AsyncClient() as client:
+            async with asyncio.timeout(13):
+                response = await client.post(
                     "https://api.paxsenix.biz.id/ai/gpt4o",
                     json=payload,
                     headers={"Content-Type": "application/json"},
-                ) as resp:
-                    data = await resp.json()
-                    if resp.status == 200 and "message" in data:
-                        return data["message"]
-                    raise Exception(f"API error: {data.get('error', 'Unknown error')}")
+                )
+
+                response.raise_for_status()
+                data = response.json()
+
+                if "message" in data:
+                    return data["message"]
+                raise Exception(f"API error: {data.get('error', 'Unknown error')}")
 
     async def _run_shell(self, message, command):
-        is_sudo = command.strip().startswith("sudo ")
         editor = None
         proc = None
         key = hash_msg(message)
 
         try:
-            if is_sudo:
-                command = command.replace("sudo ", "sudo -S ", 1)
-                editor = SudoMessageEditor(message, command, message)
-            else:
-                editor = RawMessageEditor(message, command, message)
+            editor = RawMessageEditor(message, command, message)
             proc = await asyncio.create_subprocess_shell(
                 command,
                 stdin=asyncio.subprocess.PIPE,
@@ -694,8 +544,6 @@ class AdvancedExecutorMod(loader.Module):
 
             self.active_processes[key] = proc
 
-            if is_sudo:
-                editor.update_process(proc)
             await asyncio.wait_for(
                 asyncio.gather(
                     read_stream(editor.update_stdout, proc.stdout),
@@ -734,8 +582,6 @@ class AdvancedExecutorMod(loader.Module):
                         )
                         await editor.cmd_ended(rc)
                         await asyncio.sleep(0.3)
-                    if isinstance(editor, SudoMessageEditor):
-                        await editor.cleanup()
             finally:
                 if proc:
                     try:

@@ -411,7 +411,7 @@ class Her:
 
         await self._add_dispatcher(client, modules, db)
 
-        await modules.register_all(None)
+        await modules.register_all()
         modules.send_config()
         await modules.send_ready()
 
