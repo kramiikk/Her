@@ -2,8 +2,8 @@
 
 # 🌟 Hikka, Friendly Telegram
 
-# Maintainers  | Dan Gazizullin, codrago 
-# Years Active | 2018 - 2024 
+# Maintainers  | Dan Gazizullin, codrago
+# Years Active | 2018 - 2024
 # Repository   | https://github.com/hikariatama/Hikka
 
 
@@ -26,6 +26,7 @@ class HerException:
         self.message = message
         self.full_stack = full_stack
         self.sysinfo = sysinfo
+
 
 class TelegramLogsHandler(logging.Handler):
     """
@@ -85,7 +86,6 @@ class TelegramLogsHandler(logging.Handler):
                 caller = None
         except Exception:
             caller = None
-
         record.hikka_caller = caller
 
         if len(self.buffer) + len(self.handledbuffer) >= self.capacity:
@@ -93,7 +93,6 @@ class TelegramLogsHandler(logging.Handler):
                 del self.handledbuffer[0]
             else:
                 del self.buffer[0]
-
         self.buffer.append(record)
 
         if record.levelno >= self.lvl >= 0:
@@ -103,7 +102,6 @@ class TelegramLogsHandler(logging.Handler):
                     for target in self.targets:
                         if record.levelno >= target.level:
                             target.handle(precord)
-
                 self.handledbuffer = (
                     self.handledbuffer[-(self.capacity - len(self.buffer)) :]
                     + self.buffer
@@ -111,6 +109,7 @@ class TelegramLogsHandler(logging.Handler):
                 self.buffer = []
             finally:
                 self.release()
+
 
 _main_formatter = logging.Formatter(
     fmt="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -128,6 +127,7 @@ rotating_handler = RotatingFileHandler(
 )
 
 rotating_handler.setFormatter(_main_formatter)
+
 
 def init():
     handler = logging.StreamHandler()

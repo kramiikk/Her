@@ -1,7 +1,7 @@
 # 🌟 Hikka, Friendly Telegram
 
-# Maintainers  | Dan Gazizullin, codrago 
-# Years Active | 2018 - 2024 
+# Maintainers  | Dan Gazizullin, codrago
+# Years Active | 2018 - 2024
 # Repository   | https://github.com/hikariatama/Hikka
 
 
@@ -138,7 +138,7 @@ class CommandDispatcher:
         self._last_reset = 0.0
         self._reset_interval = 30.0
         self._reload_rights()
-    
+
     def _reload_rights(self):
         """Internal method to ensure that account owner is always in the owner list"""
         if self._client.tg_id not in self.owner:
@@ -163,27 +163,27 @@ class CommandDispatcher:
         """Обёртка для безопасного вызова API"""
         try:
             await self._api_call_guard()
-            
+
             for _ in range(3):
                 try:
                     return await coro
                 except FloodWaitError as e:
                     wait_time = e.seconds + 5
-                    logger.warning(f"FloodWait detected. Sleeping for {wait_time} seconds")
+                    logger.warning(
+                        f"FloodWait detected. Sleeping for {wait_time} seconds"
+                    )
                     await asyncio.sleep(wait_time)
                 except ChatAdminRequiredError:
                     logger.error("Missing admin rights for operation")
                     raise
                 except RPCError as e:
                     if "CHAT_WRITE_FORBIDDEN" in str(e):
-                        logger.error("Can't write to this chat") 
+                        logger.error("Can't write to this chat")
                         raise
                     logger.error("RPC error: %s", e)
                     await asyncio.sleep(1)
                     continue
-                    
             raise RuntimeError("Failed after 3 retries")
-            
         except Exception as e:
             logger.exception("Error in safe_api_call: %s", e)
             raise
@@ -192,8 +192,8 @@ class CommandDispatcher:
         if not hasattr(event, "message") or not hasattr(event.message, "message"):
             return False
         message = utils.censor(event.message)
-        if not hasattr(message, 'sender_id'):
-            if hasattr(message, 'from_id'):
+        if not hasattr(message, "sender_id"):
+            if hasattr(message, "from_id"):
                 message.sender_id = message.from_id.user_id
             else:
                 return False
@@ -395,8 +395,8 @@ class CommandDispatcher:
     ) -> None:
         """Handle all incoming messages"""
         message = utils.censor(getattr(event, "message", event))
-        if not hasattr(message, 'sender_id'):
-            if hasattr(message, 'from_id'):
+        if not hasattr(message, "sender_id"):
+            if hasattr(message, "from_id"):
                 message.sender_id = message.from_id.user_id
             else:
                 return

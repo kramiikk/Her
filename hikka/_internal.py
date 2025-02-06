@@ -1,15 +1,13 @@
 # 🌟 Hikka, Friendly Telegram
 
-# Maintainers  | Dan Gazizullin, codrago 
-# Years Active | 2018 - 2024 
+# Maintainers  | Dan Gazizullin, codrago
+# Years Active | 2018 - 2024
 # Repository   | https://github.com/hikariatama/Hikka
 
 
-import asyncio
 import atexit
 import logging
 import os
-import random
 import signal
 import sys
 
@@ -31,6 +29,7 @@ def die():
     else:
         # This one is actually better, because it kills all subprocesses
         # but it can't be used inside the Docker
+
         os.killpg(os.getpgid(os.getpid()), signal.SIGTERM)
 
 
@@ -42,7 +41,6 @@ def restart():
             " telethon-mod hikka-tl-new`, then restart Her."
         )
         sys.exit(0)
-
     logging.getLogger().setLevel(logging.CRITICAL)
 
     print("🔄 Restarting...")
@@ -51,12 +49,11 @@ def restart():
         os.environ["HIKKA_DO_NOT_RESTART"] = "1"
     else:
         os.environ["HIKKA_DO_NOT_RESTART2"] = "1"
-
     if "DOCKER" in os.environ:
         atexit.register(get_startup_callback())
     else:
         # This one is requried for better way of killing to work properly,
         # since we kill the process group using unix signals
-        signal.signal(signal.SIGTERM, get_startup_callback())
 
+        signal.signal(signal.SIGTERM, get_startup_callback())
     die()

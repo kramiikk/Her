@@ -1,7 +1,7 @@
 # 🌟 Hikka, Friendly Telegram
 
-# Maintainers  | Dan Gazizullin, codrago 
-# Years Active | 2018 - 2024 
+# Maintainers  | Dan Gazizullin, codrago
+# Years Active | 2018 - 2024
 # Repository   | https://github.com/hikariatama/Hikka
 
 
@@ -26,26 +26,29 @@ _CELLTYPE = type(proxy0(None).__closure__[0])
 
 def replace_all_refs(replace_from: typing.Any, replace_to: typing.Any) -> typing.Any:
     # https://github.com/cart0113/pyjack/blob/dd1f9b70b71f48335d72f53ee0264cf70dbf4e28/pyjack.py
+
     _gc.collect()
 
     hit = False
     for referrer in _gc.get_referrers(replace_from):
         # FRAMES -- PASS THEM UP
+
         if isinstance(referrer, types.FrameType):
             continue
-
         # DICTS
+
         if isinstance(referrer, dict):
             cls = None
 
             # THIS CODE HERE IS TO DEAL WITH DICTPROXY TYPES
+
             if "__dict__" in referrer and "__weakref__" in referrer:
                 for cls in _gc.get_referrers(referrer):
                     if inspect.isclass(cls) and cls.__dict__ == referrer:
                         break
-
             for key, value in referrer.items():
                 # REMEMBER TO REPLACE VALUES ...
+
                 if value is replace_from:
                     hit = True
                     value = replace_to
@@ -53,22 +56,20 @@ def replace_all_refs(replace_from: typing.Any, replace_to: typing.Any) -> typing
                     if cls:  # AGAIN, CLEANUP DICTPROXY PROBLEM
                         setattr(cls, key, replace_to)
                 # AND KEYS.
+
                 if key is replace_from:
                     hit = True
                     del referrer[key]
                     referrer[replace_to] = value
-
         elif isinstance(referrer, list):
             for i, value in enumerate(referrer):
                 if value is replace_from:
                     hit = True
                     referrer[i] = replace_to
-
         elif isinstance(referrer, set):
             referrer.remove(replace_from)
             referrer.add(replace_to)
             hit = True
-
         elif isinstance(
             referrer,
             (
@@ -83,7 +84,6 @@ def replace_all_refs(replace_from: typing.Any, replace_to: typing.Any) -> typing
                 else:
                     new_tuple.append(obj)
             replace_all_refs(referrer, type(referrer)(new_tuple))
-
         elif isinstance(referrer, _CELLTYPE):
 
             def _proxy0(data):
@@ -95,7 +95,6 @@ def replace_all_refs(replace_from: typing.Any, replace_to: typing.Any) -> typing
             proxy = _proxy0(replace_to)
             newcell = proxy.__closure__[0]
             replace_all_refs(referrer, newcell)
-
         elif isinstance(referrer, types.FunctionType):
             localsmap = {}
             for key in ["code", "globals", "name", "defaults", "closure"]:
@@ -105,11 +104,8 @@ def replace_all_refs(replace_from: typing.Any, replace_to: typing.Any) -> typing
             del localsmap["defaults"]
             newfn = types.FunctionType(**localsmap)
             replace_all_refs(referrer, newfn)
-
         else:
             logger.error("%s is not supported.", referrer)
-
     if hit is False:
         raise AttributeError(f"Object '{replace_from}' not found")
-
     return replace_from

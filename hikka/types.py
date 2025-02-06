@@ -1,7 +1,7 @@
 # 🌟 Hikka, Friendly Telegram
 
-# Maintainers  | Dan Gazizullin, codrago 
-# Years Active | 2018 - 2024 
+# Maintainers  | Dan Gazizullin, codrago
+# Years Active | 2018 - 2024
 # Repository   | https://github.com/hikariatama/Hikka
 
 
@@ -112,10 +112,8 @@ class Module:
     ) -> Message:
         if command not in self.allmodules.commands:
             raise ValueError(f"Command {command} not found")
-
         if not message and not peer:
             raise ValueError("Either peer or message must be specified")
-
         cmd = f".{command} {args or ''}".strip()
 
         message = (
@@ -195,11 +193,9 @@ class Module:
                 " floodwaits"
             )
             interval = 0.1
-
         for frame in frames:
             message = await utils.answer(message, frame)
             await asyncio.sleep(interval)
-
         return message
 
     def get(
@@ -234,12 +230,10 @@ class Module:
         def _raise(e: Exception):
             if suspend_on_error:
                 raise SelfSuspend("Required library is not available or is corrupted.")
-
             raise e
 
         if not utils.check_url(url):
             _raise(ValueError("Invalid url for library"))
-
         code = await utils.run_sync(requests.get, url)
         code.raise_for_status()
         code = code.text
@@ -253,7 +247,6 @@ class Module:
                     ),
                 )
             )
-
         module = f"hikka.libraries.{url.replace('%', '%%').replace('.', '%d')}"
         origin = f"<library {url}>"
 
@@ -272,6 +265,7 @@ class Module:
                 e.name,
             )
             # Let's try to reinstall dependencies
+
             try:
                 requirements = list(
                     filter(
@@ -288,10 +282,8 @@ class Module:
                     " installation from error"
                 )
                 requirements = [e.name]
-
             if not requirements or _did_requirements:
                 _raise(e)
-
             pip = await asyncio.create_subprocess_exec(
                 sys.executable,
                 "-m",
@@ -309,14 +301,12 @@ class Module:
 
             if rc != 0:
                 _raise(e)
-
             importlib.invalidate_caches()
 
             kwargs = utils.get_kwargs()
             kwargs["_did_requirements"] = True
 
             return await self._mod_import_lib(**kwargs)  # Try again
-
         lib_obj = next(
             (
                 value()
@@ -328,7 +318,6 @@ class Module:
 
         if not lib_obj:
             _raise(ImportError("Invalid library. No class found"))
-
         if not lib_obj.__class__.__name__.endswith("Lib"):
             _raise(
                 ImportError(
@@ -337,7 +326,6 @@ class Module:
                     )
                 )
             )
-
         if (
             all(
                 line.replace(" ", "") != "#scope:no_stats" for line in code.splitlines()
@@ -348,7 +336,6 @@ class Module:
         ):
             with contextlib.suppress(Exception):
                 await self.lookup("loader")._send_stats(url)
-
         lib_obj.source_url = url.strip("/")
         lib_obj.allmodules = self.allmodules
         lib_obj.internal_init()
@@ -360,22 +347,18 @@ class Module:
                 or old_lib.version >= lib_obj.version
             ):
                 return old_lib
-
         if hasattr(lib_obj, "init"):
             if not callable(lib_obj.init):
                 _raise(ValueError("Library init() must be callable"))
-
             try:
                 await lib_obj.init()
             except Exception:
                 _raise(RuntimeError("Library init() failed"))
-
         if hasattr(lib_obj, "config"):
             if not isinstance(lib_obj.config, LibraryConfig):
                 _raise(
                     RuntimeError("Library config must be a `LibraryConfig` instance")
                 )
-
             libcfg = lib_obj.db.get(
                 lib_obj.__class__.__name__,
                 "__config__",
@@ -393,17 +376,14 @@ class Module:
                             or lib_obj.config.getdef(conf)
                         ),
                     )
-
         for old_lib in self.allmodules.libraries:
             if old_lib.name == lib_obj.name:
                 if hasattr(old_lib, "on_lib_update") and callable(
                     old_lib.on_lib_update
                 ):
                     await old_lib.on_lib_update(lib_obj)
-
                 replace_all_refs(old_lib, lib_obj)
                 return lib_obj
-
         self.allmodules.libraries += [lib_obj]
         return lib_obj
 
@@ -482,9 +462,11 @@ class ModuleConfig(dict):
     def __init__(self, *entries: typing.Union[str, "ConfigValue"]):
         if all(isinstance(entry, ConfigValue) for entry in entries):
             # New config format processing
+
             self._config = {config.option: config for config in entries}
         else:
             # Legacy config processing
+
             keys = []
             values = []
             defaults = []
@@ -497,12 +479,10 @@ class ModuleConfig(dict):
                     defaults += [entry]
                 else:
                     docstrings += [entry]
-
             self._config = {
                 key: ConfigValue(option=key, default=default, doc=doc)
                 for key, default, doc in zip(keys, defaults, docstrings)
             }
-
         super().__init__(
             {option: config.value for option, config in self._config.items()}
         )
@@ -590,17 +570,15 @@ class ConfigValue:
                 value = ast.literal_eval(value)
             except Exception:
                 pass
-
             # Convert value to list if it's tuple just not to mess up
             # with json convertations
+
             if isinstance(value, (set, tuple)):
                 value = list(value)
-
             if isinstance(value, list):
                 value = [
                     item.strip() if isinstance(item, str) else item for item in value
                 ]
-
             if self.validator is not None:
                 if value is not None:
                     from . import validators
@@ -610,7 +588,6 @@ class ConfigValue:
                     except validators.ValidationError as e:
                         if not ignore_validation:
                             raise e
-
                         value = self.default
                 else:
                     defaults = {
@@ -623,10 +600,9 @@ class ConfigValue:
 
                     if self.validator.internal_id in defaults:
                         value = defaults[self.validator.internal_id]
-
             # This attribute will tell the `Loader` to save this value in db
-            self._save_marker = True
 
+            self._save_marker = True
         object.__setattr__(self, key, value)
 
         if key == "value" and not ignore_validation and callable(self.on_change):

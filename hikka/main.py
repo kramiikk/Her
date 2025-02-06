@@ -2,8 +2,8 @@
 
 # 🌟 Hikka, Friendly Telegram
 
-# Maintainers  | Dan Gazizullin, codrago 
-# Years Active | 2018 - 2024 
+# Maintainers  | Dan Gazizullin, codrago
+# Years Active | 2018 - 2024
 # Repository   | https://github.com/hikariatama/Hikka
 
 
@@ -17,7 +17,6 @@ import logging
 import os
 import random
 import signal
-import socket
 import sqlite3
 import sys
 import typing
@@ -49,6 +48,7 @@ with contextlib.suppress(Exception):
     if "microsoft-standard" in uname().release:
         IS_WSL = True
 # fmt: off
+
 
 
 OFFICIAL_CLIENTS = [

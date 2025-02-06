@@ -1,7 +1,7 @@
 # 🌟 Hikka, Friendly Telegram
 
-# Maintainers  | Dan Gazizullin, codrago 
-# Years Active | 2018 - 2024 
+# Maintainers  | Dan Gazizullin, codrago
+# Years Active | 2018 - 2024
 # Repository   | https://github.com/hikariatama/Hikka
 
 
@@ -51,25 +51,19 @@ def api_config():
     while api_id := tty_input("\033[0;95mEnter API ID: \033[0m", "y"):
         if api_id.isdigit():
             break
-
         tty_print("\033[0;91mInvalid ID\033[0m", "y")
-
     if not api_id:
         tty_print("\033[0;91mCancelled\033[0m", "y")
         sys.exit(0)
-
     while api_hash := tty_input("\033[0;95mEnter API hash: \033[0m", "y"):
         if len(api_hash) == 32 and all(
             symbol in string.hexdigits for symbol in api_hash
         ):
             break
-
         tty_print("\033[0;91mInvalid hash\033[0m", "y")
-
     if not api_hash:
         tty_print("\033[0;91mCancelled\033[0m", "y")
         sys.exit(0)
-
     main.save_config_key("api_id", int(api_id))
     main.save_config_key("api_hash", api_hash)
     tty_print("\033[0;92mAPI config saved\033[0m", "y")

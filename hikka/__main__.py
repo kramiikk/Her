@@ -2,8 +2,8 @@
 
 # 🌟 Hikka, Friendly Telegram
 
-# Maintainers  | Dan Gazizullin, codrago 
-# Years Active | 2018 - 2024 
+# Maintainers  | Dan Gazizullin, codrago
+# Years Active | 2018 - 2024
 # Repository   | https://github.com/hikariatama/Hikka
 
 
@@ -27,7 +27,7 @@ if (
     print()
     print("Type force_insecure to ignore this warning")
     print("Type no_sudo if your system has no sudo (Debian vibes)")
-    inp = input('> ').lower()
+    inp = input("> ").lower()
     if inp != "force_insecure":
         sys.exit(1)
     elif inp == "no_sudo":
@@ -71,7 +71,6 @@ else:
             print("🔄 Installing dependencies...")
             deps()
             restart()
-
     try:
         from . import log
 
@@ -82,11 +81,8 @@ else:
         print(f"{str(e)}\n🔄 Attempting dependencies installation... Just wait ⏱")
         deps()
         restart()
-
     if "HIKKA_DO_NOT_RESTART" in os.environ:
         del os.environ["HIKKA_DO_NOT_RESTART"]
-
     if "HIKKA_DO_NOT_RESTART2" in os.environ:
         del os.environ["HIKKA_DO_NOT_RESTART2"]
-
     main.hikka.main()
