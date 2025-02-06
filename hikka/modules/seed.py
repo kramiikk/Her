@@ -680,6 +680,7 @@ class AdvancedExecutorMod(loader.Module):
 
         try:
             if is_sudo:
+                command = command.replace("sudo ", "sudo -S ", 1)
                 editor = SudoMessageEditor(message, command, message)
             else:
                 editor = RawMessageEditor(message, command, message)
