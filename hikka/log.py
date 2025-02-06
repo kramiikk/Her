@@ -141,5 +141,4 @@ def init():
     logging.getLogger("asyncio").setLevel(logging.WARNING)
     logging.getLogger("git.cmd").setLevel(logging.WARNING)
     logging.getLogger("hikkatl").setLevel(logging.WARNING)
-    logging.getLogger("httpcore").setLevel(logging.WARNING)
     logging.captureWarnings(True)
