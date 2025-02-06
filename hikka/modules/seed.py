@@ -375,9 +375,9 @@ class RawMessageEditor(BaseMessageEditor):
     def _get_status_emoji(self):
         if self._complete:
             if self.rc == 0:
-                return "✅"
+                return "🤙"
             else:
-                return "❌"
+                return "🖕"
         return "⚡"
 
     async def _flush_buffer(self):
@@ -594,6 +594,7 @@ class AdvancedExecutorMod(loader.Module):
         if not command:
             return await utils.answer(message, "💬 Please provide a command to execute")
         if command.startswith("i") and (len(command) == 1 or command[1] == " "):
+            await utils.answer(message, "⌨️")
             args = command[2:].strip()
             reply_message = await message.get_reply_message()
             if not reply_message or not reply_message.raw_text:
