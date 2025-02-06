@@ -370,9 +370,8 @@ class RawMessageEditor(BaseMessageEditor):
         elapsed = time.time() - self.start_time
 
         if self._complete:
-            status = "Complete" if self.rc == 0 else f"Failed (code: {self.rc})"
-            return f"{status} ({elapsed:.1f}s)"
-        return f"Running ({elapsed:.1f}s)"
+            return f"{elapsed:.1f}s"
+        return f"Running {elapsed:.1f}s"
 
     def _get_status_emoji(self):
         if self._complete:
@@ -450,11 +449,11 @@ class RawMessageEditor(BaseMessageEditor):
 class AdvancedExecutorMod(loader.Module):
     strings = {
         "name": "AdvancedExecutor",
-        "executing": "🧬 Executing...",
-        "python_executing": "🐍 Executing...",
-        "terminal_executing": "💻 Executing...",
+        "executing": "Executing...",
+        "python_executing": "🐍",
+        "terminal_executing": "⌨️",
         "forbidden_command": "🚫 This command is forbidden!",
-        "result_header": "🎟 <b>Result:</b>",
+        "result_header": "💻 <b>Result:</b>",
         "error_header": "❌ <b>Error:</b>",
     }
 
@@ -764,7 +763,6 @@ class AdvancedExecutorMod(loader.Module):
             logger.error(f"Process wait error: {e}")
             await editor.cmd_ended(-1)
         finally:
-            # Закрытие потоков
 
             for stream in [proc.stdout, proc.stderr, proc.stdin]:
                 if stream:
