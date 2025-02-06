@@ -6,7 +6,7 @@
 
 
 import asyncio
-import httpx
+import requests
 import logging
 import re
 import time
@@ -511,21 +511,22 @@ class AdvancedExecutorMod(loader.Module):
         finally:
             sys.stdout = original_stdout
 
-    async def _process_api_request(self, payload: Dict[str, Any]) -> str:
-        async with httpx.AsyncClient() as client:
-            async with asyncio.timeout(13):
-                response = await client.post(
-                    "https://api.paxsenix.biz.id/ai/gpt4o",
-                    json=payload,
-                    headers={"Content-Type": "application/json"},
-                )
+    def _process_api_request(self, payload: Dict[str, Any]) -> str:
+        url = "https://api.paxsenix.biz.id/ai/gpt4o"
+        headers = {"Content-Type": "application/json"}
 
-                response.raise_for_status()
-                data = response.json()
+        try:
 
-                if "message" in data:
-                    return data["message"]
-                raise Exception(f"API error: {data.get('error', 'Unknown error')}")
+            response = requests.post(url, json=payload, headers=headers, timeout=13)
+            response.raise_for_status()
+            data = response.json()
+            if "message" in data:
+                return data["message"]
+            raise Exception(f"API error: {data.get('error', 'Unknown error')}")
+        except requests.Timeout:
+            raise Exception("Request timed out")
+        except requests.RequestException as e:
+            raise Exception(f"Network error: {e}")
 
     async def _run_shell(self, message, command):
         editor = None
