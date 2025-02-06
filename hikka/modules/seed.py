@@ -368,7 +368,6 @@ class RawMessageEditor(BaseMessageEditor):
 
     def _get_status_text(self):
         elapsed = time.time() - self.start_time
-
         if self._complete:
             return f"{elapsed:.1f}s"
         return f"Running {elapsed:.1f}s"
@@ -411,7 +410,7 @@ class RawMessageEditor(BaseMessageEditor):
             if content:
                 self._last_content = content
             text = (
-                f"<pre>{utils.escape_html(content)}</pre>\n{status_emoji} {status_text}"
+                f"<pre>{utils.escape_html(content)}</pre>{status_emoji}{status_text}"
             )
 
             try:
@@ -450,8 +449,6 @@ class AdvancedExecutorMod(loader.Module):
     strings = {
         "name": "AdvancedExecutor",
         "executing": "Executing...",
-        "python_executing": "🐍",
-        "terminal_executing": "⌨️",
         "forbidden_command": "🚫 This command is forbidden!",
         "result_header": "💻 <b>Result:</b>",
         "error_header": "❌ <b>Error:</b>",
@@ -631,7 +628,6 @@ class AdvancedExecutorMod(loader.Module):
             return
         try:
             if self.is_shell_command(command):
-                await utils.answer(message, self.strings["terminal_executing"])
                 await self._run_shell(message, command)
             else:
                 await self._execute_python(message, command)
@@ -640,7 +636,6 @@ class AdvancedExecutorMod(loader.Module):
 
     async def _execute_python(self, message, command):
         self.start_time = time.time()
-        await utils.answer(message, self.strings["python_executing"])
         try:
             result, output, error = await self._run_python(
                 code=command, message=message
