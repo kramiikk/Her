@@ -186,7 +186,7 @@ class MessageEditor(BaseMessageEditor):
             except hikkatl.errors.rpcerrorlist.MessageTooLongError:
                 await utils.answer(
                     self.message,
-                    "❌ Output is too large to display ("
+                    "😵‍💫 Output is too large to display ("
                     f"stdout: {len(self.stdout)}, "
                     f"stderr: {len(self.stderr)})",
                 )
@@ -233,12 +233,12 @@ class SudoMessageEditor(MessageEditor):
             re.fullmatch(self.WRONG_PASS, line) for line in lines
         ):
             if self.authmsg:
-                await utils.answer(self.authmsg, "❌ Authentication failed, try again")
+                await utils.answer(self.authmsg, "🙂‍↔️ Authentication failed, try again")
             self.state = 0
             handled = True
             self.stderr = ""
             if self.attempts >= 3:
-                await utils.answer(self.message, "❌ Too many authentication attempts")
+                await utils.answer(self.message, "😵‍💫 Too many authentication attempts")
                 if self.process:
                     self.process.kill()
                 self.state = 2
@@ -251,7 +251,7 @@ class SudoMessageEditor(MessageEditor):
         elif not handled and any(
             re.fullmatch(self.TOO_MANY_TRIES, line) for line in lines
         ):
-            await utils.answer(self.message, "❌ Too many failed attempts")
+            await utils.answer(self.message, "😵‍💫 Too many failed attempts")
             if self.process:
                 self.process.kill()
             self.state = 2
@@ -314,17 +314,17 @@ class SudoMessageEditor(MessageEditor):
                         await utils.answer(response.message, "🔒 Processing...")
                         self.state = 1
                     except (BrokenPipeError, ConnectionResetError):
-                        await utils.answer(self.authmsg, "❌ Process terminated")
+                        await utils.answer(self.authmsg, "🙂‍↔️ Process terminated")
                         self.state = 2
             except asyncio.TimeoutError:
-                await utils.answer(self.authmsg, "❌ Timeout waiting for password")
+                await utils.answer(self.authmsg, "🙂‍↔️ Timeout waiting for password")
                 if self.process:
                     self.process.kill()
                 self.state = 2
         except Exception as e:
             logger.error(f"Error in _handle_auth_request: {str(e)}")
             await utils.answer(
-                self.message, f"❌ Authentication error: {utils.escape_html(str(e))}"
+                self.message, f"🙂‍↔️ Authentication error: {utils.escape_html(str(e))}"
             )
             if self.process:
                 self.process.kill()
@@ -451,7 +451,7 @@ class AdvancedExecutorMod(loader.Module):
         "executing": "Executing...",
         "forbidden_command": "🚫 This command is forbidden!",
         "result_header": "💻 <b>Result:</b>",
-        "error_header": "❌ <b>Error:</b>",
+        "error_header": "🙂‍↔️ <b>Error:</b>",
     }
 
     def __init__(self):
@@ -598,7 +598,7 @@ class AdvancedExecutorMod(loader.Module):
             args = command[2:].strip()
             reply_message = await message.get_reply_message()
             if not reply_message or not reply_message.raw_text:
-                return await utils.answer(message, "❌ Please reply to a message.")
+                return await utils.answer(message, "🙂‍↔️ Please reply to a message.")
             payload = {
                 "messages": [
                     {
@@ -625,7 +625,7 @@ class AdvancedExecutorMod(loader.Module):
                 await utils.answer(message, generated_reply)
             except Exception as e:
                 logger.error(f"GPT error: {e}")
-                await utils.answer(message, "❌ Error generating response")
+                await utils.answer(message, "😵‍💫 Error generating response")
             return
         try:
             if self.is_shell_command(command):
@@ -718,7 +718,7 @@ class AdvancedExecutorMod(loader.Module):
             if proc:
                 try:
                     proc.kill()
-                    await utils.answer(message, "❌ Command execution cancelled")
+                    await utils.answer(message, "🙂‍↔️ Command execution cancelled")
                 except ProcessLookupError:
                     pass
             raise
