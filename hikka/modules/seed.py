@@ -473,7 +473,7 @@ class AdvancedExecutorMod(loader.Module):
             }
 
             try:
-                generated_reply = await self._process_api_request(payload)
+                generated_reply = self._process_api_request(payload)
                 await utils.answer(message, generated_reply)
             except Exception as e:
                 logger.error(f"GPT error: {e}")
@@ -486,6 +486,23 @@ class AdvancedExecutorMod(loader.Module):
                 await self._execute_python(message, command)
         except ValueError as e:
             await utils.answer(message, str(e))
+    
+    def _process_api_request(self, payload: Dict[str, Any]) -> str:
+        url = "https://api.paxsenix.biz.id/ai/gpt4o"
+        headers = {"Content-Type": "application/json"}
+
+        try:
+
+            response = requests.post(url, json=payload, headers=headers, timeout=13)
+            response.raise_for_status()
+            data = response.json()
+            if "message" in data:
+                return data["message"]
+            raise Exception(f"API error: {data.get('error', 'Unknown error')}")
+        except requests.Timeout:
+            raise Exception("Request timed out")
+        except requests.RequestException as e:
+            raise Exception(f"Network error: {e}")
 
     async def _execute_python(self, message, command):
         self.start_time = time.time()
@@ -510,23 +527,6 @@ class AdvancedExecutorMod(loader.Module):
             return traceback.format_exc(), None, True
         finally:
             sys.stdout = original_stdout
-
-    def _process_api_request(self, payload: Dict[str, Any]) -> str:
-        url = "https://api.paxsenix.biz.id/ai/gpt4o"
-        headers = {"Content-Type": "application/json"}
-
-        try:
-
-            response = requests.post(url, json=payload, headers=headers, timeout=13)
-            response.raise_for_status()
-            data = response.json()
-            if "message" in data:
-                return data["message"]
-            raise Exception(f"API error: {data.get('error', 'Unknown error')}")
-        except requests.Timeout:
-            raise Exception("Request timed out")
-        except requests.RequestException as e:
-            raise Exception(f"Network error: {e}")
 
     async def _run_shell(self, message, command):
         editor = None
