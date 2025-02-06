@@ -737,7 +737,7 @@ class AdvancedExecutorMod(loader.Module):
                             else -1
                         )
                         await editor.cmd_ended(rc)
-                        await asyncio.sleep(0.5)
+                        await asyncio.sleep(0.3)
                     if isinstance(editor, SudoMessageEditor):
                         await editor.cleanup()
             finally:

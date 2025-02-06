@@ -9,7 +9,6 @@
 
 import asyncio
 import atexit as _atexit
-import contextlib
 import functools
 import inspect
 import io
@@ -20,7 +19,6 @@ import random
 import re
 import shlex
 import signal
-import string
 import time
 import typing
 from datetime import timedelta
@@ -67,7 +65,6 @@ from hikkatl.tl.types import (
     User,
 )
 
-from ._internal import fw_protect
 from .tl_cache import CustomTelegramClient
 from .types import ListLike, Module
 
@@ -195,7 +192,6 @@ def get_base_dir() -> str:
 async def get_user(message: Message) -> typing.Optional[User]:
     """Get user who sent message, searching if not found easily"""
     try:
-        await fw_protect()
         return await message.get_sender()
     except ValueError:  # Not in database. Lets go looking for them.
         logger.warning("User not in session cache. Searching...")
@@ -203,7 +199,6 @@ async def get_user(message: Message) -> typing.Optional[User]:
         await message.client.get_dialogs()
         return await message.get_sender()
     if isinstance(message.peer_id, (PeerChannel, PeerChat)):
-        await fw_protect()
         async for user in message.client.iter_participants(
             message.peer_id,
             aggressive=True,
@@ -341,7 +336,6 @@ async def answer(
             )
 
             return result
-        await fw_protect()
         result = await (message.edit if edit else message.respond)(
             text,
             parse_mode=lambda t: (t, entities),
@@ -397,7 +391,6 @@ async def get_target(message: Message, arg_no: int = 0) -> typing.Optional[int]:
     else:
         return None
     try:
-        await fw_protect()
         entity = await message.client.get_entity(user)
     except ValueError:
         return None
@@ -437,7 +430,6 @@ async def set_avatar(
         f = avatar
     else:
         return False
-    await fw_protect()
     await client(
         EditPhotoRequest(
             channel=peer,
@@ -467,7 +459,6 @@ async def dnd(
         )
 
         if archive:
-            await fw_protect()
             await client.edit_folder(peer, 1)
     except Exception:
         logger.exception("utils.dnd error")
@@ -491,46 +482,6 @@ def get_link(user: typing.Union[User, Channel], /) -> str:
 def chunks(_list: ListLike, n: int, /) -> typing.List[typing.List[typing.Any]]:
     """Split provided `_list` into chunks of `n`"""
     return [_list[i : i + n] for i in range(0, len(_list), n)]
-
-
-def get_named_platform() -> str:
-    """Returns formatted platform name"""
-    from . import main
-
-    with contextlib.suppress(Exception):
-        if os.path.isfile("/proc/device-tree/model"):
-            with open("/proc/device-tree/model") as f:
-                model = f.read()
-                if "Orange" in model:
-                    return f"🍊 {model}"
-                return f"🍇 {model}" if "Raspberry" in model else f"❓ {model}"
-    if main.IS_WSL:
-        return "🍀 WSL"
-    if main.IS_RAILWAY:
-        return "🚂 Railway"
-    if main.IS_DOCKER:
-        return "🐳 Docker"
-    return "💎 VDS"
-
-
-def get_platform_emoji() -> str:
-    """Returns custom emoji for current platform"""
-    from . import main
-
-    BASE = "".join(
-        (
-            "<emoji document_id={}>🪐</emoji>",
-            "<emoji document_id=5352934134618549768>🪐</emoji>",
-            "<emoji document_id=5352663371290271790>🪐</emoji>",
-            "<emoji document_id=5350822883314655367>🪐</emoji>",
-        )
-    )
-
-    if main.IS_RAILWAY:
-        return BASE.format(5352539534498224966)
-    if main.IS_DOCKER:
-        return BASE.format(5352678227582152630)
-    return BASE.format(5393588431026674882)
 
 
 def uptime() -> str:
@@ -732,22 +683,6 @@ def is_serializable(x: typing.Any, /) -> bool:
         return False
 
 
-def get_lang_flag(countrycode: str) -> str:
-    """Gets an emoji of specified countrycode"""
-    if (
-        len(
-            code := [
-                c
-                for c in countrycode.lower()
-                if c in string.ascii_letters + string.digits
-            ]
-        )
-        == 2
-    ):
-        return "".join([chr(ord(c.upper()) + (ord("🇦") - ord("A"))) for c in code])
-    return countrycode
-
-
 def get_entity_url(
     entity: typing.Union[User, Channel],
     openmessage: bool = False,
@@ -778,7 +713,6 @@ async def get_message_link(
             f"tg://openmessage?user_id={get_chat_id(message)}&message_id={message.id}"
         )
     if not chat and not (chat := message.chat):
-        await fw_protect()
         chat = await message.get_chat()
     topic_affix = (
         f"?topic={message.reply_to.reply_to_msg_id}"

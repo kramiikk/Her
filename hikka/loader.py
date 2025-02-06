@@ -132,8 +132,6 @@ class InfiniteLoop:
             self._task = asyncio.ensure_future(self.actual_loop(*args, **kwargs))
 
     async def actual_loop(self, *args, **kwargs):
-        # Wait for loader to set attribute
-
         while not self.module_instance:
             await asyncio.sleep(0.01)
         if isinstance(self._stop_clause, str) and self._stop_clause:
@@ -298,7 +296,7 @@ class Modules:
         modules to prevent zombie handlers
         """
         while True:
-            await asyncio.sleep(60)
+            await asyncio.sleep(1)
             commands = {}
             callback_handlers = {}
             watchers = []

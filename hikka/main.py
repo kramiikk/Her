@@ -43,23 +43,12 @@ BASE_DIR = (
 BASE_PATH = Path(BASE_DIR)
 CONFIG_PATH = BASE_PATH / "config.json"
 
-IS_DOCKER = "DOCKER" in os.environ
-IS_RAILWAY = "RAILWAY" in os.environ
-IS_USERLAND = "userland" in os.environ.get("USER", "")
-IS_WSL = False
 with contextlib.suppress(Exception):
     from platform import uname
 
     if "microsoft-standard" in uname().release:
         IS_WSL = True
 # fmt: off
-
-
-
-
-
-
-
 
 
 OFFICIAL_CLIENTS = [
@@ -126,33 +115,12 @@ def save_config_key(key: str, value: str) -> bool:
     return True
 
 
-def gen_port(cfg: str = "port", no8080: bool = False) -> int:
-    if not no8080 and "DOCKER" in os.environ:
-        return 8080
-    if (cfg_port := get_config_key(cfg)) is not None:
-        return int(cfg_port)
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("", 0))
-        port = s.getsockname()[1]
-        if port == 0:
-            raise RuntimeError("OS failed to assign a valid port")
-        return port
-
-
 def parse_arguments() -> dict:
     """
     Parses the arguments
     :returns: Dictionary with arguments
     """
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--port",
-        dest="port",
-        action="store",
-        default=None,
-        type=int,
-        help="Порт для веб-сервера (по умолчанию: автоматический выбор)",
-    )
     parser.add_argument("--phone", "-p", action="append")
     parser.add_argument(
         "--root",
@@ -194,8 +162,6 @@ class Her:
             self.ready = asyncio.Event()
             self._get_api_token()
             self.clients = []
-            if self.arguments.port is None:
-                self.arguments.port = gen_port()
         except Exception as e:
             logging.critical(f"Failed to initialize Her instance: {e}")
             raise
@@ -456,7 +422,6 @@ class Her:
     async def _main(self):
         """Main entrypoint"""
         try:
-            save_config_key("port", self.arguments.port)
             await self._get_token()
 
             if not await self._init_clients() or not self.clients:

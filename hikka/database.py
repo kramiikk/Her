@@ -86,7 +86,7 @@ class Database(dict):
         async with self._save_lock:
             if not self._redis:
                 return False
-            await asyncio.sleep(3)
+            await asyncio.sleep(1)
             await utils.run_sync(self._redis_save_sync)
             self._saving_task = None
             return True
