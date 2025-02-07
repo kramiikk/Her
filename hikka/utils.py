@@ -19,9 +19,7 @@ import random
 import re
 import shlex
 import signal
-import time
 import typing
-from datetime import timedelta
 from urllib.parse import urlparse
 
 import git
@@ -89,16 +87,6 @@ FormattingEntity = typing.Union[
     MessageEntityBankCard,
     MessageEntitySpoiler,
 ]
-
-emoji_pattern = re.compile(
-    "["
-    "\U0001f600-\U0001f64f"  # emoticons
-    "\U0001f300-\U0001f5ff"  # symbols & pictographs
-    "\U0001f680-\U0001f6ff"  # transport & map symbols
-    "\U0001f1e0-\U0001f1ff"  # flags (iOS)
-    "]+",
-    flags=re.UNICODE,
-)
 
 parser = hikkatl.utils.sanitize_parse_mode("html")
 logger = logging.getLogger(__name__)
@@ -484,16 +472,6 @@ def chunks(_list: ListLike, n: int, /) -> typing.List[typing.List[typing.Any]]:
     return [_list[i : i + n] for i in range(0, len(_list), n)]
 
 
-def uptime() -> str:
-    """Returns formatted uptime including days if applicable."""
-    total_seconds = round(time.perf_counter() - init_ts)
-    days, remainder = divmod(total_seconds, 86400)
-    time_formatted = str(timedelta(seconds=remainder))
-    if days > 0:
-        return f"{days} day(s), {time_formatted}"
-    return time_formatted
-
-
 def array_sum(
     array: typing.List[typing.List[typing.Any]], /
 ) -> typing.List[typing.Any]:
@@ -835,20 +813,3 @@ def get_topic(message: Message) -> typing.Optional[int]:
         )
         else None
     )
-
-
-def get_ram_usage() -> float:
-    """Returns current process tree memory usage in MB"""
-    try:
-        import psutil
-
-        current_process = psutil.Process(os.getpid())
-        mem = current_process.memory_info()[0] / 2.0**20
-        for child in current_process.children(recursive=True):
-            mem += child.memory_info()[0] / 2.0**20
-        return round(mem, 1)
-    except Exception:
-        return 0
-
-
-init_ts = time.perf_counter()
