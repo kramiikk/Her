@@ -326,7 +326,6 @@ class AdvancedExecutorMod(loader.Module):
             "event": message,
             "chat": message.to_id,
             "hikkatl": hikkatl,
-            "telethon": hikkatl,
             "utils": utils,
             "main": main,
             "loader": loader,

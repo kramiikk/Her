@@ -37,8 +37,7 @@ def restart():
     if "HIKKA_DO_NOT_RESTART2" in os.environ:
         print(
             "Got in a loop, exiting\nYou probably need to manually remove existing"
-            " packages and then restart Her. Run `pip uninstall -y telethon"
-            " telethon-mod hikka-tl-new`, then restart Her."
+            " packages and then restart Her."
         )
         sys.exit(0)
     logging.getLogger().setLevel(logging.CRITICAL)
