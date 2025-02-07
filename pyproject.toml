@@ -18,7 +18,6 @@ meval = "^2.5"
 psutil = "^6.1.1"
 requests = "^2.32.3"
 rsa = "^4.9"
-Telethon = "^1.38.1"
 tgcrypto = "^1.2.5"
 
 [build-system]
