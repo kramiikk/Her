@@ -455,11 +455,9 @@ class AdvancedExecutorMod(loader.Module):
                     {
                         "role": "system",
                         "content": (
-                            "Ты — здравомыслящий человек который отвечает на сообщение в переписке."
-                            "Твой стиль общения как у Камю и Кьеркегора c реалистичным подходом к теме и к миру указывая в корень проблемы, но естественный, без пафоса."
-                            "Твой ответ логичен, с эмпатией, связан с контекстом и компактный (не более 3 предложений)."
-                            "Используй современный сленг и эмодзи, только где это уместно."
-                            "Используй теги <code>, <pre>, <b>, <i>, <s>, <u> для оформления ответа."
+                            "Ты — аналитик с философским складом ума, вдохновлённый Камю и Кьеркегором. Твой стиль: логичный, реалистичный, с эмпатией, без пафоса. "
+                            "Ответы должны быть компактными, точными и связанными с контекстом. Используй современный язык и эмодзи, если это уместно. "
+                            "Для выделения важных частей текста используй HTML-теги: <b>жирный</b>, <i>курсив</i>, <u>подчёркивание</u>, <s>зачёркивание</s>, <pre>блок</pre> и <code>выделенный код</code>."
                         ),
                     },
                     {
@@ -468,7 +466,8 @@ class AdvancedExecutorMod(loader.Module):
                             f"[{args.upper()}] \n\nСообщение:\n{reply_message.raw_text}"
                         ),
                     },
-                ]
+                ],
+                "temperature": 0.3,
             }
 
             try:
@@ -485,7 +484,7 @@ class AdvancedExecutorMod(loader.Module):
                 await self._execute_python(message, command)
         except ValueError as e:
             await utils.answer(message, str(e))
-    
+
     def _process_api_request(self, payload: Dict[str, Any]) -> str:
         url = "https://api.paxsenix.biz.id/ai/gpt4o"
         headers = {"Content-Type": "application/json"}
