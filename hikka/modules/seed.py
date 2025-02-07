@@ -445,7 +445,7 @@ class AdvancedExecutorMod(loader.Module):
         if not command:
             return await utils.answer(message, "💬 Please provide a command to execute")
         if command.startswith("i") and (len(command) == 1 or command[1] == " "):
-            await utils.answer(message, "⌨️")
+            await utils.answer(message, "🔮")
             args = command[2:].strip()
             reply_message = await message.get_reply_message()
             if not reply_message or not reply_message.raw_text:
@@ -456,8 +456,8 @@ class AdvancedExecutorMod(loader.Module):
                         "role": "system",
                         "content": (
                             "Ты — аналитик с философским складом ума, вдохновлённый Камю и Кьеркегором. Твой стиль: логичный, реалистичный, с эмпатией, без пафоса. "
-                            "Ответы должны быть компактными, точными и связанными с контекстом. Используй современный язык и эмодзи, если это уместно. "
-                            "Для выделения важных частей текста используй HTML-теги: <b>жирный</b>, <i>курсив</i>, <u>подчёркивание</u>, <s>зачёркивание</s>, <pre>блок</pre> и <code>выделенный код</code>."
+                            "Ответы должны быть компактными, точными и связанными с контекстом. Используй современный язык и эмодзи, там где уместно. "
+                            "Для выделения важных частей текста используй следующие HTML-теги вместо Markdown: <b>жирный</b>, <i>курсив</i>, <u>подчёркивание</u>, <s>зачёркивание</s>, <pre>блок</pre> и <code>выделенный код</code>."
                         ),
                     },
                     {
@@ -634,15 +634,15 @@ class AdvancedExecutorMod(loader.Module):
                 text.append(f" ↷ Return: <pre>{utils.escape_html(str(output))}</pre>")
         full_text = "\n".join(text)
         if len(full_text) > 4096:
-            full_text = self._truncate_output(full_text, 4096, editor=self.editor)
+            full_text = self._truncate_output(full_text, 4096)
         await utils.answer(message, full_text)
 
     def _truncate_output(
-        self, text: str, max_len: int, editor: BaseMessageEditor
+        self, text: str, max_len: int, editor: BaseMessageEditor = None
     ) -> str:
         if len(text) <= max_len:
             return text
-        if editor.rc is not None:
+        if editor and editor.rc is not None:
             return text[: max_len - 100] + "\n... 🔻 [TRUNCATED] 🔻 ..."
         half = max_len // 2
         return f"{text[:half]}\n... 🔻 [TRUNCATED] 🔻 ...\n{text[-half:]}"
