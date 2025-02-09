@@ -108,7 +108,6 @@ class Module:
         args: typing.Optional[str] = None,
         peer: typing.Optional[EntityLike] = None,
         message: typing.Optional[Message] = None,
-        edit: bool = False,
     ) -> Message:
         if command not in self.allmodules.commands:
             raise ValueError(f"Command {command} not found")

@@ -51,6 +51,8 @@ with contextlib.suppress(Exception):
 
 
 
+
+
 OFFICIAL_CLIENTS = [
     "Telegram Android",
     "Telegram Desktop",
@@ -349,19 +351,6 @@ class Her:
             await client.disconnect()
             client.session.save()
 
-    async def _badge(self, client: CustomTelegramClient):
-        """Call the badge in shell"""
-        try:
-            build = utils.get_git_hash()
-
-            logging.info(
-                f"\n• Version: 1.7.9 {build[:7]}"
-                f"\n• For {client.tg_id}"
-                f"\n• Prefix: «.»"
-            )
-        except Exception:
-            logging.exception("Badge error")
-
     async def _add_dispatcher(
         self,
         client: CustomTelegramClient,
@@ -416,7 +405,7 @@ class Her:
         await modules.send_ready()
 
         if first:
-            await self._badge(client)
+            logging.info(f"\n• Version: 1.7.9\n• For {client.tg_id}")
         await client.run_until_disconnected()
 
     async def _main(self):
