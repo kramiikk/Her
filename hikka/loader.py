@@ -213,7 +213,6 @@ def raw_handler(*updates: TLObject):
     """
     Decorator that marks function as raw telethon events handler
     Use it to prevent zombie-event-handlers, left by unloaded modules
-    :param updates: Update(-s) to handle
     ⚠️ Do not try to simulate behavior of this decorator by yourself!
     ⚠️ This feature won't work, if you dynamically declare method with decorator!
     """

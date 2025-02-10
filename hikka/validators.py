@@ -194,10 +194,7 @@ class Integer(Validator):
 
 
 class Choice(Validator):
-    """
-    Check whether entered value is in the allowed list
-    :param possible_values: Allowed values to be passed to config param
-    """
+    """Check whether entered value is in the allowed list"""
 
     def __init__(
         self,
@@ -230,10 +227,7 @@ class Choice(Validator):
 
 
 class MultiChoice(Validator):
-    """
-    Check whether every entered value is in the allowed list
-    :param possible_values: Allowed values to be passed to config param
-    """
+    """Check whether every entered value is in the allowed list"""
 
     def __init__(
         self,
