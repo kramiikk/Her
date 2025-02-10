@@ -53,6 +53,7 @@ with contextlib.suppress(Exception):
 
 
 
+
 OFFICIAL_CLIENTS = [
     "Telegram Android",
     "Telegram Desktop",
@@ -118,10 +119,7 @@ def save_config_key(key: str, value: str) -> bool:
 
 
 def parse_arguments() -> dict:
-    """
-    Parses the arguments
-    :returns: Dictionary with arguments
-    """
+    """Parses the arguments"""
     parser = argparse.ArgumentParser()
     parser.add_argument("--phone", "-p", action="append")
     parser.add_argument(
