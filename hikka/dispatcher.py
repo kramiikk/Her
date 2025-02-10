@@ -395,13 +395,6 @@ class CommandDispatcher:
     ) -> None:
         """Handle all incoming messages"""
         message = utils.censor(getattr(event, "message", event))
-        if not hasattr(message, "sender_id"):
-            if hasattr(message, "from_id"):
-                message.sender_id = message.from_id.user_id
-            else:
-                return
-        if message.sender_id not in self.owner:
-            return
         if isinstance(message, Message):
             for attr in {"text", "raw_text", "out"}:
                 with contextlib.suppress(AttributeError, UnicodeDecodeError):
