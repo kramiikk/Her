@@ -14,9 +14,9 @@ from typing import Optional, Union, Dict, List, Callable
 
 from hikkatl import events
 from hikkatl.errors import FloodWaitError, RPCError, ChatAdminRequiredError
-from hikkatl.tl.types import Message
+from hikkatl.tl.types import Message, Channel, PeerUser, PeerChannel
 
-from . import main, utils
+from . import utils
 from .database import Database
 from .loader import Modules
 from .tl_cache import CustomTelegramClient
@@ -32,6 +32,7 @@ class MessageTags:
     """Message tags validator"""
 
     TAGS = {
+        "deleted_message",
         "no_commands",
         "only_commands",
         "out",
@@ -76,6 +77,7 @@ class MessageTags:
     def check_message(m: Message) -> Dict[str, Callable[[], bool]]:
         """Returns dictionary of tag checking functions"""
         return {
+            "deleted_message": lambda: getattr(m, "deleted", False),
             "out": lambda: getattr(m, "out", False),
             "in": lambda: not getattr(m, "out", True),
             "only_messages": lambda: isinstance(m, Message),
@@ -137,6 +139,7 @@ class CommandDispatcher:
         self._flood_delay = 3
         self._last_reset = 0.0
         self._reset_interval = 30.0
+        self._semaphore = asyncio.Semaphore(10)
         self._reload_rights()
 
     def _reload_rights(self):
@@ -189,66 +192,55 @@ class CommandDispatcher:
             raise
 
     async def _handle_command(self, event, watcher=False) -> Union[bool, tuple]:
-        if not hasattr(event, "message") or not hasattr(event.message, "message"):
+        """Обрабатывает команды только для NewMessage"""
+
+        if not isinstance(event, events.NewMessage):
+            logger.debug("Попытка обработки неверного типа события: %s", type(event))
+            return False
+        if not hasattr(event, "message") or not isinstance(event.message, Message):
+            logger.warning("Событие не содержит валидного сообщения")
             return False
         message = utils.censor(event.message)
-        if not hasattr(message, "sender_id"):
-            if hasattr(message, "from_id"):
-                message.sender_id = message.from_id.user_id
-            else:
-                return False
-        if message.sender_id not in self.owner:
-            return False
-        prefix = "."
 
-        if not message.message.startswith(prefix):
+        message.text = getattr(message, "text", "")
+        message.raw_text = getattr(message, "raw_text", "")
+        message.out = getattr(message, "out", False)
+
+        prefix = "."
+        if not message.text.startswith(prefix):
             return False
-        cmd_text = message.message[len(prefix) :].strip()
-        if not cmd_text:
+        cmd_body = message.text[len(prefix) :].strip()
+        if not cmd_body:
             return False
         try:
-            command = cmd_text.split(maxsplit=1)[0]
+            base_command = cmd_body.split(maxsplit=1)[0].lower()
         except IndexError:
             return False
-        if (
-            event.sticker
-            or event.dice
-            or event.audio
-            or event.via_bot_id
-            or getattr(event, "reactions", False)
-        ):
-            return False
-        if len(message.message) <= len(prefix):
-            return False
-        command = message.message[len(prefix) :].strip().split(maxsplit=1)[0]
-        tag = command.split("@", maxsplit=1)
+        # Разделение команды и тега (например, "command@name")
 
-        if len(tag) == 2:
-            if tag[1] == "me" and not message.out:
-                return False
-        elif not (event.out or event.mentioned) and not event.is_private:
-            return False
-        txt, func = self._modules.dispatch(tag[0])
-        if not func:
-            return False
-        if (
-            message.is_channel
-            and message.edit_date
-            and not message.is_group
-            and not message.out
-        ):
-            return False
-        message.message = prefix + txt + message.message[len(prefix + command) :]
+        command_parts = base_command.split("@", 1)
+        command_name = command_parts[0]
 
-        if await self._handle_tags(event, func):
-            return False
-        if self._db.get(main.__name__, "grep", False) and not watcher:
-            try:
-                message = GrepHandler(message, self).message
-            except SecurityError as e:
-                logger.warning("Grep security error: %s", e)
+        if len(command_parts) > 1:
+            if command_parts[1] != "me" and not message.out:
                 return False
-        return message, prefix, txt, func
+        txt, handler = self._modules.dispatch(command_name)
+        if not handler:
+            return False
+        if watcher:
+            return (message, prefix, txt, handler)
+        if not self._is_owner(message):
+            return False
+        return (
+            message,
+            prefix,
+            txt,
+            handler,
+        )
+
+    def _is_owner(self, message: Message) -> bool:
+        """Проверяет, является ли отправитель владельцем"""
+        return getattr(message, "sender_id", None) and message.sender_id in self.owner
 
     async def handle_raw(self, event: events.Raw) -> None:
         """Handle raw events"""
@@ -263,12 +255,14 @@ class CommandDispatcher:
         self,
         event: Union[events.NewMessage, events.MessageDeleted],
     ) -> None:
-        """Handle incoming commands"""
+        """Handle incoming commands (only for NewMessage events)"""
+
+        if not isinstance(event, events.NewMessage):
+            return
         result = await self._handle_command(event)
         if not result:
             return
         message, _, _, func = result
-
         asyncio.create_task(
             self.future_dispatcher(
                 func,
@@ -322,10 +316,22 @@ class CommandDispatcher:
             await utils.answer(message, txt)
 
     async def watcher_exc(
-        self, exc: Exception, _func: callable, _message: Message
+        self, exc: Exception, _func: callable, message: Message
     ) -> None:
         """Handle watcher exceptions"""
-        logger.exception("Error running watcher", exc_info=exc)
+        if isinstance(exc, SecurityError):
+            await self._report_security_error(message, str(exc))
+        else:
+            logger.exception("Error running watcher", exc_info=exc)
+
+    async def _report_security_error(self, message: Message, error: str):
+        """Отправка уведомления о security error"""
+        text = (
+            "<emoji document_id=5452069934089649634>🚨</emoji> "
+            "<b>Security Error:</b>\n"
+            f"<code>{utils.escape_html(error)}</code>"
+        )
+        await utils.answer(message, text)
 
     async def _handle_tags(
         self, event: Union[events.NewMessage, events.MessageDeleted], func: callable
@@ -376,158 +382,257 @@ class CommandDispatcher:
                 getattr(message, "sender_id", None) == func.from_id
             )
         if hasattr(func, "chat_id"):
-            try:
-                chat_id = (
-                    int(str(func.chat_id).lstrip("-100")) if func.chat_id else None
-                )
-            except ValueError:
-                chat_id = None
-            tag_checks["chat_id"] = lambda: utils.get_chat_id(message) == chat_id
+            tag_checks["chat_id"] = lambda: utils.get_chat_id(message) == func.chat_id
         for tag in MessageTags.TAGS:
             if getattr(func, tag, False) and tag in tag_checks:
                 if not tag_checks[tag]():
                     return tag
         return None
 
+    async def _handle_deleted(self, event: events.MessageDeleted) -> None:
+        """Обработчик удалённых сообщений с использованием кеша для получения sender_id"""
+        try:
+            # Получаем все удалённые сообщения из кеша
+
+            messages = await self._client.get_messages(
+                entity=event.chat_id,
+                ids=event.deleted_ids,
+            )
+
+            for msg in messages:
+                if not isinstance(msg, Message):
+                    continue
+                # Создаём прокси для каждого удалённого сообщения
+
+                class DeletedMessageProxy:
+                    def __init__(self, original_msg):
+                        self.deleted = True
+                        self.text = "[Сообщение удалено]"
+                        self.raw_text = getattr(original_msg, "raw_text", "")
+                        self.out = getattr(original_msg, "out", False)
+                        self.media = getattr(original_msg, "media", None)
+                        self.sticker = getattr(original_msg, "sticker", None)
+                        self.sender_id = self._get_sender_id(original_msg)
+                        self.chat_id = event.chat_id
+                        self.id = getattr(original_msg, "id", None)
+
+                    @staticmethod
+                    def _get_sender_id(msg):
+                        """Получаем sender_id из оригинального сообщения"""
+                        if hasattr(msg, "sender_id"):
+                            return msg.sender_id
+                        if hasattr(msg, "from_id"):
+                            if isinstance(msg.from_id, PeerUser):
+                                return msg.from_id.user_id
+                            if isinstance(msg.from_id, PeerChannel):
+                                return msg.from_id.channel_id
+                        return None
+
+                proxy = DeletedMessageProxy(msg)
+
+                # Отправляем в обработчики
+
+                for watcher in self._modules.watchers:
+                    asyncio.create_task(
+                        self.future_dispatcher(
+                            watcher,
+                            proxy,
+                            self.watcher_exc,
+                        )
+                    )
+        except Exception as e:
+            logger.error("Ошибка обработки удалённых сообщений: %s", e, exc_info=True)
+
     async def handle_incoming(
         self,
         event: Union[events.NewMessage, events.MessageDeleted],
     ) -> None:
-        """Handle all incoming messages"""
-        message = utils.censor(getattr(event, "message", event))
-        if isinstance(message, Message):
-            for attr in {"text", "raw_text", "out"}:
-                with contextlib.suppress(AttributeError, UnicodeDecodeError):
-                    if not hasattr(message, attr):
-                        setattr(message, attr, "")
-        for func in self._modules.watchers:
-            asyncio.create_task(
-                self.future_dispatcher(
-                    func,
-                    message,
-                    self.watcher_exc,
+        """Обработка всех входящих сообщений"""
+        try:
+            if isinstance(event, events.MessageDeleted):
+
+                await self._handle_deleted(event)
+                return
+            message = utils.censor(getattr(event, "message", event))
+
+            if isinstance(message, Message):
+                message.text = getattr(message, "text", "")
+                message.raw_text = getattr(message, "raw_text", "")
+                message.out = getattr(message, "out", False)
+                message.media = getattr(message, "media", None)
+                if hasattr(message, "from_id"):
+                    if isinstance(message.from_id, PeerUser):
+                        sender_id = message.from_id.user_id
+                    elif isinstance(message.from_id, PeerChannel):
+                        sender_id = message.from_id.channel_id
+                    else:
+                        sender_id = None
+                else:
+                    sender_id = None
+                message.sender_id = getattr(message, "sender_id", None) or sender_id
+            for watcher in self._modules.watchers:
+                asyncio.create_task(
+                    self.future_dispatcher(
+                        watcher,
+                        message,
+                        self.watcher_exc,
+                    )
                 )
-            )
+            await self.handle_command(event)
+        except Exception as e:
+            logger.error("Ошибка обработки сообщения: %s", e, exc_info=True)
 
     async def future_dispatcher(
         self, func: callable, message: Message, exception_handler: callable, *args
     ) -> None:
         """Dispatch function execution to the future"""
         try:
-            await func(message, *args)
+            async with self._semaphore:
+                await func(message, *args)
         except Exception as e:
             await exception_handler(e, func, message)
 
 
 class GrepHandler:
-    """Handles grep-like filtering of messages"""
+    """Handles grep-like filtering with full regex support"""
 
     def __init__(self, message: Message, dispatcher: CommandDispatcher):
+        if hasattr(message, "hikka_grepped") and message.hikka_grepped:
+            raise SecurityError("Message already processed")
         self.message = message
         self.dispatcher = dispatcher
-        self._process_grep()
+        self._compiled_grep = None
+        self._compiled_ungrep = None
 
-    def _process_grep(self) -> None:
-        if not hasattr(self.message, "text") or not isinstance(self.message.text, str):
-            raise SecurityError("Invalid message type for grep")
-        if len(self.message.text) > 4096:
-            raise SecurityError("Слишком длинное сообщение для grep")
-        if "||grep" in self.message.text or "|| grep" in self.message.text:
+        try:
+            self._process_grep()
+            self._modify_message_methods()
+        except SecurityError as e:
+            raise  # Пробрасываем для обработки выше
+        except Exception as e:
+            logger.error(f"GrepHandler init error: {str(e)}")
+
+    def _process_grep(self):
+        """Main grep processing logic with regex support"""
+        raw_text = getattr(self.message, "raw_text", "")
+
+        # 1. Проверка на экранированный grep
+
+        if re.search(r"\|\| ?grep", raw_text):
             self._handle_escaped_grep()
             return
-        grep_match = re.search(r".+\| ?grep (.+)", self.message.raw_text)
+        # 2. Извлечение паттерна
+
+        grep_match = re.search(r"\| ?grep (.+)", raw_text)
         if not grep_match:
             return
-        grep = grep_match.group(1)
-        self._clean_message()
+        # 3. Парсинг параметров
 
-        ungrep = self._extract_ungrep(grep)
-        grep = utils.escape_html(grep).strip() if grep else None
-        ungrep = utils.escape_html(ungrep).strip() if ungrep else None
+        full_pattern = grep_match.group(1)
+        pattern_parts = full_pattern.split(" -v ", 1)
 
-        self._setup_modified_methods(grep, ungrep)
+        try:
+            # 4. Компиляция основного паттерна
 
-    def _handle_escaped_grep(self) -> None:
+            self._compiled_grep = re.compile(
+                pattern_parts[0], flags=re.IGNORECASE if "i" in pattern_parts[0] else 0
+            )
+        except re.error as e:
+            raise SecurityError(f"Invalid regex: {str(e)}") from e
+        # 5. Обработка инверсного поиска (-v)
+
+        if len(pattern_parts) > 1:
+            try:
+                self._compiled_ungrep = re.compile(pattern_parts[1])
+            except re.error as e:
+                raise SecurityError(f"Invalid inverse regex: {str(e)}") from e
+        # 6. Очистка исходного сообщения
+
+        self._clean_original_message()
+
+    def _handle_escaped_grep(self):
+        """Обработка экранированного grep с помощью ||"""
         self.message.raw_text = re.sub(r"\|\| ?grep", "| grep", self.message.raw_text)
-        self.message.text = re.sub(r"\|\| ?grep", "| grep", self.message.text)
-        self.message.message = re.sub(r"\|\| ?grep", "| grep", self.message.message)
+        self.message.text = self.message.raw_text
 
-    def _clean_message(self) -> None:
-        for attr in ["text", "raw_text", "message"]:
-            setattr(
-                self.message,
-                attr,
-                re.sub(r"\| ?grep.+", "", getattr(self.message, attr)),
-            )
+    def _clean_original_message(self):
+        """Очистка исходного сообщения от grep-параметров"""
+        self.message.raw_text = re.sub(
+            r"\| ?grep .+", "", self.message.raw_text, flags=re.DOTALL
+        )
+        self.message.text = self.message.raw_text
 
-    def _extract_ungrep(self, grep: str) -> Optional[str]:
-        ungrep_match = re.search(r"-v (.+)", grep)
-        if ungrep_match:
-            ungrep = ungrep_match.group(1)
-            grep = re.sub(r"(.+) -v .+", r"\g<1>", grep)
-            return ungrep
-        return None
+    def _modify_message_methods(self):
+        """Модифицируем методы ответа для поддержки regex"""
 
-    def _setup_modified_methods(self, grep: str, ungrep: str) -> None:
-        def process_text(text: str) -> str:
-            res = []
+        def process_content(text: str) -> str:
+            if not self._compiled_grep:
+                return text
+            result = []
             for line in text.split("\n"):
-                if self._should_include_line(line, grep, ungrep):
-                    processed_line = utils.remove_html(line, escape=True)
-                    if grep:
-                        processed_line = processed_line.replace(grep, f"<u>{grep}</u>")
-                    res.append(processed_line)
-            return self._format_result(res, grep, ungrep)
+                # Проверка основного паттерна
 
-        async def modified_edit(text, *args, **kwargs):
-            kwargs["parse_mode"] = "HTML"
-            return await self.dispatcher.safe_api_call(
-                self.message.edit(self.message, process_text(text), *args, **kwargs)
+                grep_match = self._compiled_grep.search(line)
+
+                # Проверка инверсного паттерна
+
+                ungrep_match = (
+                    self._compiled_ungrep.search(line)
+                    if self._compiled_ungrep
+                    else False
+                )
+
+                if grep_match and not ungrep_match:
+                    # Подсветка совпадений
+
+                    highlighted = self._compiled_grep.sub(
+                        lambda m: f"<u>{utils.escape_html(m.group(0))}</u>",
+                        utils.escape_html(line),
+                    )
+                    result.append(highlighted)
+            return self._format_result(
+                result,
+                self._compiled_grep.pattern if self._compiled_grep else None,
+                self._compiled_ungrep.pattern if self._compiled_ungrep else None,
             )
 
-        async def modified_reply(text, *args, **kwargs):
-            kwargs["parse_mode"] = "HTML"
-            return await self.dispatcher.safe_api_call(
-                self.message.reply(process_text(text), *args, **kwargs)
+        # Модификация методов сообщения
+
+        original_edit = self.message.edit
+        original_reply = self.message.reply
+
+        async def new_edit(text: str, *args, **kwargs):
+            return await original_edit(
+                process_content(text), parse_mode="HTML", *args, **kwargs
             )
 
-        async def modified_respond(text, *args, **kwargs):
-            kwargs["parse_mode"] = "HTML"
-            kwargs.setdefault("reply_to", utils.get_topic(self.message))
-            return await self.dispatcher.safe_api_call(
-                self.message.respond(process_text(text), *args, **kwargs)
+        async def new_reply(text: str, *args, **kwargs):
+            return await original_reply(
+                process_content(text), parse_mode="HTML", *args, **kwargs
             )
 
-        self.message.edit = modified_edit
-        self.message.reply = modified_reply
-        self.message.respond = modified_respond
+        self.message.edit = new_edit
+        self.message.reply = new_reply
+        self.message.respond = new_reply
         self.message.hikka_grepped = True
 
     @staticmethod
-    def _should_include_line(line: str, grep: str, ungrep: str) -> bool:
-        clean_line = utils.remove_html(line)
-        if grep and grep not in clean_line:
-            return False
-        if ungrep and ungrep in clean_line:
-            return False
-        return bool(grep) or bool(ungrep)
-
-    @staticmethod
-    def _format_result(res: List[str], grep: str, ungrep: str) -> str:
+    def _format_result(
+        res: List[str], grep: Optional[str], ungrep: Optional[str]
+    ) -> str:
         if not res:
             conditions = []
             if grep:
-                conditions.append(f"contain <b>{grep}</b>")
+                conditions.append(f"match <b>{utils.escape_html(grep)}</b>")
             if ungrep:
-                conditions.append(f"do not contain <b>{ungrep}</b>")
+                conditions.append(f"do not match <b>{utils.escape_html(ungrep)}</b>")
             return f"💬 <i>No lines that {' and '.join(conditions)}</i>"
         header = "💬 <i>Lines that "
         if grep:
-            header += f"contain <b>{grep}</b>"
+            header += f"match <b>{utils.escape_html(grep)}</b>"
         if grep and ungrep:
             header += " and"
         if ungrep:
-            header += f" do not contain <b>{ungrep}</b>"
+            header += f" do not match <b>{utils.escape_html(ungrep)}</b>"
         header += ":</i>\n"
-
         return header + "\n".join(res)
