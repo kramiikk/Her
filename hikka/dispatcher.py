@@ -216,8 +216,6 @@ class CommandDispatcher:
             base_command = cmd_body.split(maxsplit=1)[0].lower()
         except IndexError:
             return False
-        # Разделение команды и тега (например, "command@name")
-
         command_parts = base_command.split("@", 1)
         command_name = command_parts[0]
 
@@ -240,7 +238,16 @@ class CommandDispatcher:
 
     def _is_owner(self, message: Message) -> bool:
         """Проверяет, является ли отправитель владельцем"""
-        return getattr(message, "sender_id", None) and message.sender_id in self.owner
+        sender_id = getattr(message, "sender_id", None)
+        if sender_id is None:
+            if hasattr(message, "from_id"):
+                if isinstance(message.from_id, PeerUser):
+                    sender_id = message.from_id.user_id
+                elif isinstance(message.from_id, PeerChannel):
+                    sender_id = message.from_id.channel_id
+                else:
+                    sender_id = None
+        return sender_id is not None and sender_id in self.owner
 
     async def handle_raw(self, event: events.Raw) -> None:
         """Handle raw events"""
@@ -392,7 +399,6 @@ class CommandDispatcher:
     async def _handle_deleted(self, event: events.MessageDeleted) -> None:
         """Обработчик удалённых сообщений с использованием кеша для получения sender_id"""
         try:
-            # Получаем все удалённые сообщения из кеша
 
             messages = await self._client.get_messages(
                 entity=event.chat_id,
@@ -402,7 +408,6 @@ class CommandDispatcher:
             for msg in messages:
                 if not isinstance(msg, Message):
                     continue
-                # Создаём прокси для каждого удалённого сообщения
 
                 class DeletedMessageProxy:
                     def __init__(self, original_msg):
@@ -429,8 +434,6 @@ class CommandDispatcher:
                         return None
 
                 proxy = DeletedMessageProxy(msg)
-
-                # Отправляем в обработчики
 
                 for watcher in self._modules.watchers:
                     asyncio.create_task(
@@ -460,16 +463,6 @@ class CommandDispatcher:
                 message.raw_text = getattr(message, "raw_text", "")
                 message.out = getattr(message, "out", False)
                 message.media = getattr(message, "media", None)
-                if hasattr(message, "from_id"):
-                    if isinstance(message.from_id, PeerUser):
-                        sender_id = message.from_id.user_id
-                    elif isinstance(message.from_id, PeerChannel):
-                        sender_id = message.from_id.channel_id
-                    else:
-                        sender_id = None
-                else:
-                    sender_id = None
-                message.sender_id = getattr(message, "sender_id", None) or sender_id
             for watcher in self._modules.watchers:
                 asyncio.create_task(
                     self.future_dispatcher(
@@ -508,7 +501,7 @@ class GrepHandler:
             self._process_grep()
             self._modify_message_methods()
         except SecurityError as e:
-            raise  # Пробрасываем для обработки выше
+            raise
         except Exception as e:
             logger.error(f"GrepHandler init error: {str(e)}")
 
@@ -516,38 +509,27 @@ class GrepHandler:
         """Main grep processing logic with regex support"""
         raw_text = getattr(self.message, "raw_text", "")
 
-        # 1. Проверка на экранированный grep
-
         if re.search(r"\|\| ?grep", raw_text):
             self._handle_escaped_grep()
             return
-        # 2. Извлечение паттерна
-
         grep_match = re.search(r"\| ?grep (.+)", raw_text)
         if not grep_match:
             return
-        # 3. Парсинг параметров
-
         full_pattern = grep_match.group(1)
         pattern_parts = full_pattern.split(" -v ", 1)
 
         try:
-            # 4. Компиляция основного паттерна
 
             self._compiled_grep = re.compile(
                 pattern_parts[0], flags=re.IGNORECASE if "i" in pattern_parts[0] else 0
             )
         except re.error as e:
             raise SecurityError(f"Invalid regex: {str(e)}") from e
-        # 5. Обработка инверсного поиска (-v)
-
         if len(pattern_parts) > 1:
             try:
                 self._compiled_ungrep = re.compile(pattern_parts[1])
             except re.error as e:
                 raise SecurityError(f"Invalid inverse regex: {str(e)}") from e
-        # 6. Очистка исходного сообщения
-
         self._clean_original_message()
 
     def _handle_escaped_grep(self):
@@ -570,11 +552,8 @@ class GrepHandler:
                 return text
             result = []
             for line in text.split("\n"):
-                # Проверка основного паттерна
 
                 grep_match = self._compiled_grep.search(line)
-
-                # Проверка инверсного паттерна
 
                 ungrep_match = (
                     self._compiled_ungrep.search(line)
@@ -583,7 +562,6 @@ class GrepHandler:
                 )
 
                 if grep_match and not ungrep_match:
-                    # Подсветка совпадений
 
                     highlighted = self._compiled_grep.sub(
                         lambda m: f"<u>{utils.escape_html(m.group(0))}</u>",
@@ -595,8 +573,6 @@ class GrepHandler:
                 self._compiled_grep.pattern if self._compiled_grep else None,
                 self._compiled_ungrep.pattern if self._compiled_ungrep else None,
             )
-
-        # Модификация методов сообщения
 
         original_edit = self.message.edit
         original_reply = self.message.reply
