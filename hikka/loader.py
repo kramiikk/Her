@@ -486,20 +486,6 @@ class Modules:
 
                 if method.autostart:
                     method.start()
-        self.unregister_commands(mod)
-        self.unregister_raw_handlers(mod)
-
         self.register_commands(mod)
         self.register_watchers(mod)
         self.register_raw_handlers(mod)
-
-    def unregister_commands(self, instance: Module):
-        for name, cmd in self.commands.copy().items():
-            if cmd.__self__.__class__.__name__ == instance.__class__.__name__:
-                del self.commands[name]
-
-    def unregister_raw_handlers(self, instance: Module):
-        """Unregister event handlers for a module"""
-        for handler in self.client.dispatcher.raw_handlers:
-            if handler.__self__.__class__.__name__ == instance.__class__.__name__:
-                self.client.dispatcher.raw_handlers.remove(handler)
