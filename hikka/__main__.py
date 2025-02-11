@@ -17,7 +17,7 @@ from ._internal import restart
 if (
     getpass.getuser() == "root"
     and "--root" not in " ".join(sys.argv)
-    and all(trigger not in os.environ for trigger in {"DOCKER", "GOORM", "NO_SUDO"})
+    and all(trigger not in os.environ for trigger in {"NO_SUDO"})
 ):
     print("🚫" * 15)
     print("You attempted to run Her on behalf of root user")
@@ -57,20 +57,6 @@ def deps():
 if __package__ != "hikka":  # In case they did python __main__.py
     print("🚫 Error: you cannot run this as a script; you must execute as a package")
 else:
-    try:
-        import hikkatl
-    except Exception:
-        pass
-    else:
-        try:
-            import hikkatl  # noqa: F811
-
-            if tuple(map(int, hikkatl.__version__.split("."))) < (2, 0, 8):
-                raise ImportError
-        except ImportError:
-            print("🔄 Installing dependencies...")
-            deps()
-            restart()
     try:
         from . import log
 

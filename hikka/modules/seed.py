@@ -376,7 +376,6 @@ class AdvancedExecutorMod(loader.Module):
             "rsync",
             "systemctl",
             "service",
-            "docker",
             "python",
             "python3",
             "pip",

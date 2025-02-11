@@ -34,9 +34,7 @@ from .dispatcher import CommandDispatcher
 from .tl_cache import CustomTelegramClient
 
 BASE_DIR = (
-    "/data"
-    if "DOCKER" in os.environ
-    else os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 )
 
 BASE_PATH = Path(BASE_DIR)
@@ -168,9 +166,7 @@ class Her:
 
     def _get_base_dir(self):
         return (
-            "/data"
-            if "DOCKER" in os.environ
-            else os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+            os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
         )
 
     def _read_sessions(self):
