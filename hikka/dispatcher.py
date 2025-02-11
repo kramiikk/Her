@@ -22,6 +22,7 @@ from .loader import Modules
 from .tl_cache import CustomTelegramClient
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.DEBUG)
 
 
 class SecurityError(Exception):
@@ -194,47 +195,66 @@ class CommandDispatcher:
     async def _handle_command(self, event, watcher=False) -> Union[bool, tuple]:
         """Обрабатывает команды только для NewMessage"""
 
-        if not isinstance(event, events.NewMessage):
-            logger.debug("Попытка обработки неверного типа события: %s", type(event))
-            return False
-        if not hasattr(event, "message") or not isinstance(event.message, Message):
-            logger.warning("Событие не содержит валидного сообщения")
-            return False
-        message = utils.censor(event.message)
+        logger.debug("Entering _handle_command with event type: %s", type(event))
 
+        if not isinstance(event, events.NewMessage):
+            logger.debug("Event is not NewMessage, skipping")
+            return False
+            
+        if not hasattr(event, "message") or not isinstance(event.message, Message):
+            logger.warning("Event does not contain valid message")
+            return False
+            
+        message = utils.censor(event.message)
+        
         message.text = getattr(message, "text", "")
         message.raw_text = getattr(message, "raw_text", "")
         message.out = getattr(message, "out", False)
-
+        
+        logger.debug("Processing message text: %s", message.text)
+        
         prefix = "."
         if not message.text.startswith(prefix):
+            logger.debug("Message does not start with prefix '.'")
             return False
-        cmd_body = message.text[len(prefix) :].strip()
+            
+        cmd_body = message.text[len(prefix):].strip()
         if not cmd_body:
+            logger.debug("Empty command body after prefix")
             return False
+            
         try:
             base_command = cmd_body.split(maxsplit=1)[0].lower()
+            logger.debug("Extracted base command: %s", base_command)
         except IndexError:
+            logger.debug("Failed to extract base command")
             return False
+            
         command_parts = base_command.split("@", 1)
         command_name = command_parts[0]
-
+        
+        logger.debug("Looking for handler for command: %s", command_name)
+        
         if len(command_parts) > 1:
             if command_parts[1] != "me" and not message.out:
+                logger.debug("Command targeted at different user")
                 return False
+                
         txt, handler = self._modules.dispatch(command_name)
         if not handler:
+            logger.debug("No handler found for command: %s", command_name)
             return False
+            
         if watcher:
+            logger.debug("Returning watcher tuple")
             return (message, prefix, txt, handler)
+            
         if not self._is_owner(message):
+            logger.debug("Message sender is not owner")
             return False
-        return (
-            message,
-            prefix,
-            txt,
-            handler,
-        )
+            
+        logger.debug("Command handled successfully")
+        return (message, prefix, txt, handler)
 
     def _is_owner(self, message: Message) -> bool:
         """Проверяет, является ли отправитель владельцем"""
