@@ -11,12 +11,7 @@ import json
 import logging
 import os
 import time
-
-try:
-    import redis
-except ImportError as e:
-    if "RAILWAY" in os.environ:
-        raise e
+import redis
 import typing
 
 from collections import deque

@@ -9,9 +9,9 @@
 
 import getpass
 import os
-import subprocess
 import sys
 
+from . import log, main
 from ._internal import restart
 
 if (
@@ -34,41 +34,9 @@ if (
         os.environ["NO_SUDO"] = "1"
         print("Added NO_SUDO in your environment variables")
         restart()
-
-
-def deps():
-    subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "pip",
-            "install",
-            "--upgrade",
-            "-q",
-            "--disable-pip-version-check",
-            "--no-warn-script-location",
-            "-r",
-            "requirements.txt",
-        ],
-        check=True,
-    )
-
-
-if __package__ != "hikka":  # In case they did python __main__.py
-    print("🚫 Error: you cannot run this as a script; you must execute as a package")
-else:
-    try:
-        from . import log
-
-        log.init()
-
-        from . import main
-    except ImportError as e:
-        print(f"{str(e)}\n🔄 Attempting dependencies installation... Just wait ⏱")
-        deps()
-        restart()
-    if "HIKKA_DO_NOT_RESTART" in os.environ:
-        del os.environ["HIKKA_DO_NOT_RESTART"]
-    if "HIKKA_DO_NOT_RESTART2" in os.environ:
-        del os.environ["HIKKA_DO_NOT_RESTART2"]
-    main.hikka.main()
+log.init()
+if "HIKKA_DO_NOT_RESTART" in os.environ:
+    del os.environ["HIKKA_DO_NOT_RESTART"]
+if "HIKKA_DO_NOT_RESTART2" in os.environ:
+    del os.environ["HIKKA_DO_NOT_RESTART2"]
+main.hikka.main()

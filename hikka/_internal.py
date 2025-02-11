@@ -5,7 +5,6 @@
 # Repository   | https://github.com/hikariatama/Hikka
 
 
-import atexit
 import logging
 import os
 import signal
