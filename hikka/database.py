@@ -2,9 +2,7 @@ import asyncio
 import collections
 import json
 import logging
-import os
 import time
-import redis
 import typing
 
 from collections import deque
@@ -39,76 +37,21 @@ logger = logging.getLogger(__name__)
 class Database(dict):
     def __init__(self, client: CustomTelegramClient):
         super().__init__()
-        self._save_lock = asyncio.Lock()
         self._client: CustomTelegramClient = client
         self._next_revision_call: int = 0
         self._me: User = None
-        self._redis: redis.Redis = None
-        self._saving_task: asyncio.Future = None
         self._revisions: Deque[dict] = deque(maxlen=15)
+        self._db_file = main.BASE_PATH / f"config-{self._client.tg_id}.json"
 
     def __repr__(self):
         return object.__repr__(self)
 
-    def _redis_save_sync(self):
-        with self._redis.pipeline() as pipe:
-            pipe.set(
-                str(self._client.tg_id),
-                json.dumps(self, ensure_ascii=True),
-            )
-            pipe.execute()
-
-    async def remote_force_save(self) -> bool:
-        """Force save database to remote endpoint without waiting"""
-        if not self._redis:
-            return False
-        try:
-            await utils.run_sync(self._redis_save_sync)
-            return True
-        except Exception as e:
-            logger.error(f"Force save failed: {e}")
-            return False
-
-    async def _redis_save(self) -> bool:
-        """Save database to redis"""
-        async with self._save_lock:
-            if not self._redis:
-                return False
-            await asyncio.sleep(1)
-            await utils.run_sync(self._redis_save_sync)
-            self._saving_task = None
-            return True
-
-    async def redis_init(self) -> bool:
-        """Init redis database"""
-        if REDIS_URI := (
-            os.environ.get("REDIS_URL") or main.get_config_key("redis_uri")
-        ):
-            self._redis = redis.Redis.from_url(REDIS_URI)
-            return True
-        return False
-
     async def init(self):
         """Asynchronous initialization unit"""
-        await self.redis_init()
-        if not self._redis:
-            self._db_file = main.BASE_PATH / f"config-{self._client.tg_id}.json"
-            self.read()
+        await asyncio.to_thread(self.read)
 
     def read(self):
-        if self._redis:
-            try:
-                if self._redis.ping():
-                    data = self._redis.get(str(self._client.tg_id))
-                    if data:
-                        self.update(**json.loads(data.decode()))
-                    else:
-                        logger.info("Redis empty, new DB created")
-                else:
-                    logger.error("Redis connection lost")
-            except Exception:
-                logger.exception("Redis error")
-            return
+        """Read database from file"""
         try:
             if self._db_file.exists():
                 self.update(**json.loads(self._db_file.read_text()))
@@ -156,7 +99,7 @@ class Database(dict):
         return True
 
     def save(self) -> bool:
-        """Save database"""
+        """Save database to file"""
         if not self.process_db_autofix(self):
             try:
                 rev = self._revisions.pop()
@@ -170,10 +113,6 @@ class Database(dict):
         if self._next_revision_call < time.time():
             self._revisions.append(dict(self))
             self._next_revision_call = time.time() + 3
-        if self._redis:
-            if not self._saving_task:
-                self._saving_task = asyncio.ensure_future(self._redis_save())
-            return True
         try:
             self._db_file.write_text(json.dumps(self, indent=4))
         except Exception:
