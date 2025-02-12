@@ -1,4 +1,4 @@
-# ✨ Her UserBot
+# ✨ Her_UserBot
 
 > **⚠️ Use at your own risk**  
 > This software is provided "as is" without warranties.

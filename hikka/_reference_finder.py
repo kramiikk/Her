@@ -1,4 +1,4 @@
-import gc as _gc
+import gc
 import inspect
 import logging
 import types
@@ -20,10 +20,10 @@ _CELLTYPE = type(proxy0(None).__closure__[0])
 def replace_all_refs(replace_from: typing.Any, replace_to: typing.Any) -> typing.Any:
     # https://github.com/cart0113/pyjack/blob/dd1f9b70b71f48335d72f53ee0264cf70dbf4e28/pyjack.py
 
-    _gc.collect()
+    gc.collect()
 
     hit = False
-    for referrer in _gc.get_referrers(replace_from):
+    for referrer in gc.get_referrers(replace_from):
         # FRAMES -- PASS THEM UP
 
         if isinstance(referrer, types.FrameType):
@@ -36,7 +36,7 @@ def replace_all_refs(replace_from: typing.Any, replace_to: typing.Any) -> typing
             # THIS CODE HERE IS TO DEAL WITH DICTPROXY TYPES
 
             if "__dict__" in referrer and "__weakref__" in referrer:
-                for cls in _gc.get_referrers(referrer):
+                for cls in gc.get_referrers(referrer):
                     if inspect.isclass(cls) and cls.__dict__ == referrer:
                         break
             for key, value in referrer.items():
