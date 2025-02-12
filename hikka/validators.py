@@ -3,13 +3,10 @@ import re
 import typing
 
 import grapheme
-from emoji import get_emoji_unicode_dict
 
 from . import utils
 
 ConfigAllowedTypes = typing.Union[tuple, list, str, int, bool, None]
-
-ALLOWED_EMOJIS = set(get_emoji_unicode_dict("en").values())
 
 VALIDATORS_TRANSLATIONS = {
     "digits": " with exactly {digits} digits",
@@ -38,11 +35,6 @@ VALIDATORS_TRANSLATIONS = {
     "float_max": "{sign}float less than {maximum}",
     "union": "one of the following:\n",
     "empty": "empty value",
-    "emoji_fixed_len": "{length} emojis",
-    "emoji_len_range": "{min_len} to {max_len} emojis",
-    "emoji_min_len": "at least {min_len} emoji",
-    "emoji_max_len": "no more than {max_len} emojis",
-    "emoji": "emoji",
     "entity_like": "link to entity, username or Telegram ID",
 }
 
@@ -644,84 +636,6 @@ class Hidden(Validator):
         validator: Validator,
     ) -> ConfigAllowedTypes:
         return validator.validate(value)
-
-
-class Emoji(Validator):
-    """Checks whether passed argument is a valid emoji"""
-
-    def __init__(
-        self,
-        length: typing.Optional[int] = None,
-        min_len: typing.Optional[int] = None,
-        max_len: typing.Optional[int] = None,
-    ):
-        if length is not None:
-            doc = {
-                "en": VALIDATORS_TRANSLATIONS["emoji_fixed_len"].format(length=length)
-            }
-        elif min_len is not None and max_len is not None:
-            doc = {
-                "en": VALIDATORS_TRANSLATIONS["emoji_len_range"].format(
-                    min_len=min_len, max_len=max_len
-                )
-            }
-        elif min_len is not None:
-            doc = {
-                "en": VALIDATORS_TRANSLATIONS["emoji_min_len"].format(min_len=min_len)
-            }
-        elif max_len is not None:
-            doc = {
-                "en": VALIDATORS_TRANSLATIONS["emoji_max_len"].format(max_len=max_len)
-            }
-        else:
-            doc = {"en": VALIDATORS_TRANSLATIONS["emoji"]}
-        super().__init__(
-            functools.partial(
-                self._validate,
-                length=length,
-                min_len=min_len,
-                max_len=max_len,
-            ),
-            doc,
-            _internal_id="Emoji",
-        )
-
-    @staticmethod
-    def _validate(
-        value: ConfigAllowedTypes,
-        /,
-        *,
-        length: typing.Optional[int],
-        min_len: typing.Optional[int],
-        max_len: typing.Optional[int],
-    ) -> str:
-        value = str(value)
-        passed_length = len(list(grapheme.graphemes(value)))
-
-        if length is not None and passed_length != length:
-            raise ValidationError(f"Passed value ({value}) is not {length} emojis long")
-        if (
-            min_len is not None
-            and max_len is not None
-            and (passed_length < min_len or passed_length > max_len)
-        ):
-            raise ValidationError(
-                f"Passed value ({value}) is not between {min_len} and {max_len} emojis"
-                " long"
-            )
-        if min_len is not None and passed_length < min_len:
-            raise ValidationError(
-                f"Passed value ({value}) is not at least {min_len} emojis long"
-            )
-        if max_len is not None and passed_length > max_len:
-            raise ValidationError(
-                f"Passed value ({value}) is not no more than {max_len} emojis long"
-            )
-        if any(emoji not in ALLOWED_EMOJIS for emoji in grapheme.graphemes(value)):
-            raise ValidationError(
-                f"Passed value ({value}) is not a valid string with emojis"
-            )
-        return value
 
 
 class EntityLike(RegExp):

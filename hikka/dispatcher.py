@@ -206,21 +206,21 @@ class CommandDispatcher:
                 fw_time = ", ".join(time_parts)
 
                 txt = (
-                    "<emoji document_id=5877458226823302157>🕒</emoji> <b>Call</b>"
+                    "🕒 <b>Call</b>"
                     f" <code>{utils.escape_html(message.message)}</code>"
                     f" <b>caused FloodWait of {fw_time} on method</b>"
                     f" <code>{type(exc.request).__name__}</code>"
                 )
             else:
                 txt = (
-                    "<emoji document_id=5877477244938489129>🚫</emoji> <b>Call</b>"
+                    "🚫 <b>Call</b>"
                     f" <code>{utils.escape_html(message.message)}</code>"
                     " <b>failed due to RPC error:</b>"
                     f" <code>{utils.escape_html(str(exc))}</code>"
                 )
         else:
             txt = (
-                "<emoji document_id=5877477244938489129>🚫</emoji><b> Call</b>"
+                "🚫 <b>Call</b>"
                 f" <code>{utils.escape_html(message.message)}</code>"
                 "<b> failed!</b>"
             )

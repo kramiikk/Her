@@ -428,7 +428,4 @@ class Her:
             self._shutdown_handler()
         self.loop.close()
 
-
-hikkatl.extensions.html.CUSTOM_EMOJIS = not get_config_key("disable_custom_emojis")
-
 hikka = Her()

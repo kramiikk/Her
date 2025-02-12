@@ -134,7 +134,7 @@ class MessageEditor(BaseMessageEditor):
             if self.rc is not None:
                 status = f"<b>Exit code:</b> <code>{self.rc}</code>\n\n"
             base_text = (
-                f"<emoji document_id=5472111548572900003>⌨️</emoji> "
+                f"⌨️ "
                 f"<b>Command:</b> <code>{utils.escape_html(self.command)}</code>\n"
                 f"{status}"
             )
