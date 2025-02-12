@@ -1,12 +1,3 @@
-"""Main script, where all the fun starts"""
-
-# 🌟 Hikka, Friendly Telegram
-
-# Maintainers  | Dan Gazizullin, codrago
-# Years Active | 2018 - 2024
-# Repository   | https://github.com/hikariatama/Hikka
-
-
 import argparse
 import asyncio
 import contextlib
