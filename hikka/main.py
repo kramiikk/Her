@@ -369,7 +369,7 @@ class Her:
         await modules.send_ready()
 
         if first:
-            logging.info(f"\n• Version: 1.7.9\n• For {client.tg_id}")
+            logging.info(f"\n• Version 1.7.9\n• For {client.tg_id}")
         await client.run_until_disconnected()
 
     async def _main(self):
