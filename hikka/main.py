@@ -1,6 +1,5 @@
 import argparse
 import asyncio
-import contextlib
 import importlib
 import getpass
 import json
@@ -13,35 +12,21 @@ import sys
 import typing
 from pathlib import Path
 
-import hikkatl
+
 from hikkatl import events
 from hikkatl.errors import AuthKeyInvalidError
 from hikkatl.sessions import MemorySession, SQLiteSession
 from hikkatl.network.connection import ConnectionTcpFull
 
 
-from . import configurator, database, loader, utils
+from . import configurator, database, loader
 from .dispatcher import CommandDispatcher
 from .tl_cache import CustomTelegramClient
 
-BASE_DIR = (
-    os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-)
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
 BASE_PATH = Path(BASE_DIR)
 CONFIG_PATH = BASE_PATH / "config.json"
-
-with contextlib.suppress(Exception):
-    from platform import uname
-
-    if "microsoft-standard" in uname().release:
-        IS_WSL = True
-# fmt: off
-
-
-
-
-
 
 OFFICIAL_CLIENTS = [
     "Telegram Android",
@@ -50,7 +35,6 @@ OFFICIAL_CLIENTS = [
     "Telegram Win",
     "Telegram Linux",
 ]
-# fmt: on
 
 
 class ApiToken(typing.NamedTuple):
@@ -61,17 +45,14 @@ class ApiToken(typing.NamedTuple):
 def generate_random_system_version():
     systems = [
         (
-            # Android
             lambda: f"Android {random.randint(10, 14)} (SDK {random.randint(30, 34)})",
             "arm64-v8a",
         ),
         (
-            # Windows
             lambda: f"11 Build {random.randint(19000, 22621)}",
             "x64",
         ),
         (
-            # Linux
             lambda: f"Ubuntu 2{random.randint(2, 4)}.04",
             "x64",
         ),
@@ -156,9 +137,7 @@ class Her:
             raise
 
     def _get_base_dir(self):
-        return (
-            os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-        )
+        return os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
     def _read_sessions(self):
         """Load sessions without manual AuthKeyInvalidError check"""
@@ -406,14 +385,6 @@ class Her:
             logging.critical(f"Critical error: {e}")
             sys.exit(1)
 
-    def _exception_handler(self, loop, context):
-        """Обработчик исключений event loop"""
-        logging.error(
-            "Event loop error: %s (message: %s)",
-            context.get("exception"),
-            context["message"],
-        )
-
     def _shutdown_handler(self):
         """Shutdown handler"""
         logging.info("Bye")
@@ -427,5 +398,6 @@ class Her:
         except KeyboardInterrupt:
             self._shutdown_handler()
         self.loop.close()
+
 
 hikka = Her()
