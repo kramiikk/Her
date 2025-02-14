@@ -6,7 +6,6 @@ import json
 import logging
 import os
 import re
-import shlex
 import typing
 from urllib.parse import urlparse
 
@@ -14,8 +13,6 @@ import hikkatl
 from hikkatl.tl.custom.message import Message
 
 from hikkatl.tl.types import (
-    Channel,
-    Chat,
     MessageEntityBankCard,
     MessageEntityBlockquote,
     MessageEntityBold,
@@ -60,22 +57,7 @@ FormattingEntity = typing.Union[
     MessageEntitySpoiler,
 ]
 
-parser = hikkatl.utils.sanitize_parse_mode("html")
 logger = logging.getLogger(__name__)
-
-
-def get_args(message: typing.Union[Message, str]) -> typing.List[str]:
-    if not (message := getattr(message, "message", message)):
-        return False
-    if len(message := message.split(maxsplit=1)) <= 1:
-        return []
-    message = message[1]
-
-    try:
-        split = shlex.split(message)
-    except ValueError:
-        return message  # Cannot split, let's assume that it's just one long message
-    return list(filter(lambda x: len(x) > 0, split))
 
 
 def get_args_raw(message: typing.Union[Message, str]) -> str:
@@ -130,26 +112,6 @@ def censor(
         elif k[0] != "_" and hasattr(v, "__dict__"):
             setattr(obj, k, censor(v, to_censor, replace_with))
     return obj
-
-
-def relocate_entities(
-    entities: typing.List[FormattingEntity],
-    offset: int,
-    text: typing.Optional[str] = None,
-) -> typing.List[FormattingEntity]:
-    """Move all entities by offset (truncating at text)"""
-    length = len(text) if text is not None else 0
-
-    for ent in entities.copy() if entities else ():
-        ent.offset += offset
-        if ent.offset < 0:
-            ent.length += ent.offset
-            ent.offset = 0
-        if text is not None and ent.offset + ent.length > length:
-            ent.length = length - ent.offset
-        if ent.length <= 0:
-            entities.remove(ent)
-    return entities
 
 
 async def answer(
@@ -243,30 +205,6 @@ def is_serializable(x: typing.Any, /) -> bool:
         return False
 
 
-async def get_message_link(
-    message: Message,
-    chat: typing.Optional[typing.Union[Chat, Channel]] = None,
-) -> str:
-    """Get link to message"""
-    if message.is_private:
-        return (
-            f"tg://openmessage?user_id={get_chat_id(message)}&message_id={message.id}"
-        )
-    if not chat and not (chat := message.chat):
-        chat = await message.get_chat()
-    topic_affix = (
-        f"?topic={message.reply_to.reply_to_msg_id}"
-        if getattr(message.reply_to, "forum_topic", False)
-        else ""
-    )
-
-    return (
-        f"https://t.me/{chat.username}/{message.id}{topic_affix}"
-        if getattr(chat, "username", False)
-        else f"https://t.me/c/{chat.id}/{message.id}{topic_affix}"
-    )
-
-
 def remove_html(text: str, escape: bool = False, keep_emojis: bool = False) -> str:
     """Removes HTML tags from text"""
     return (escape_html if escape else str)(
@@ -286,15 +224,6 @@ def get_kwargs() -> typing.Dict[str, typing.Any]:
     """Get kwargs of function, in which is called"""
     keys, _, _, values = inspect.getargvalues(inspect.currentframe().f_back)
     return {key: values[key] for key in keys if key != "self"}
-
-
-def mime_type(message: Message) -> str:
-    """Get mime type of document in message"""
-    return (
-        ""
-        if not isinstance(message, Message) or not getattr(message, "media", False)
-        else getattr(getattr(message, "media", False), "mime_type", False) or ""
-    )
 
 
 def iter_attrs(obj: typing.Any, /) -> typing.List[typing.Tuple[str, typing.Any]]:
