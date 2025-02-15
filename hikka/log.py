@@ -54,18 +54,18 @@ class TelegramLogsHandler(logging.Handler):
             self.targets[0].format(record)
             for record in (self.buffer + self.handledbuffer)
             if record.levelno >= lvl
-            and (not record.hikka_caller or client_id == record.hikka_caller)
+            and (not record.her_caller or client_id == record.her_caller)
         ]
 
     def emit(self, record: logging.LogRecord):
         try:
             caller = next(
                 (
-                    frame_info.frame.f_locals["_hikka_client_id_logging_tag"]
+                    frame_info.frame.f_locals["_her_client_id_logging_tag"]
                     for frame_info in inspect.stack()
                     if isinstance(
                         getattr(getattr(frame_info, "frame", None), "f_locals", {}).get(
-                            "_hikka_client_id_logging_tag"
+                            "_her_client_id_logging_tag"
                         ),
                         int,
                     )
@@ -77,7 +77,7 @@ class TelegramLogsHandler(logging.Handler):
                 caller = None
         except Exception:
             caller = None
-        record.hikka_caller = caller
+        record.her_caller = caller
 
         if len(self.buffer) + len(self.handledbuffer) >= self.capacity:
             if self.handledbuffer:
@@ -103,8 +103,8 @@ class TelegramLogsHandler(logging.Handler):
 
 
 _main_formatter = logging.Formatter(
-    fmt="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
+    fmt="%(levelname)s %(asctime)s %(name)s: %(message)s",
+    datefmt="%d %H:%M:%S",
     style="%",
 )
 

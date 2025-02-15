@@ -8,7 +8,6 @@ import importlib.util
 import inspect
 import logging
 import os
-import re
 import sys
 import time
 import typing
@@ -122,7 +121,7 @@ class Module:
         return get_commands(self)
 
     @property
-    def hikka_commands(self) -> typing.Dict[str, Command]:
+    def her_commands(self) -> typing.Dict[str, Command]:
         """List of commands that module supports"""
         return get_commands(self)
 
@@ -132,7 +131,7 @@ class Module:
         return get_callback_handlers(self)
 
     @property
-    def hikka_callback_handlers(self) -> typing.Dict[str, Command]:
+    def her_callback_handlers(self) -> typing.Dict[str, Command]:
         """List of callback handlers that module supports"""
         return get_callback_handlers(self)
 
@@ -142,7 +141,7 @@ class Module:
         return get_watchers(self)
 
     @property
-    def hikka_watchers(self) -> typing.Dict[str, Command]:
+    def her_watchers(self) -> typing.Dict[str, Command]:
         """List of watchers that module supports"""
         return get_watchers(self)
 
@@ -150,24 +149,24 @@ class Module:
     def commands(self, _):
         pass
 
-    @hikka_commands.setter
-    def hikka_commands(self, _):
+    @her_commands.setter
+    def her_commands(self, _):
         pass
 
     @callback_handlers.setter
     def callback_handlers(self, _):
         pass
 
-    @hikka_callback_handlers.setter
-    def hikka_callback_handlers(self, _):
+    @her_callback_handlers.setter
+    def her_callback_handlers(self, _):
         pass
 
     @watchers.setter
     def watchers(self, _):
         pass
 
-    @hikka_watchers.setter
-    def hikka_watchers(self, _):
+    @her_watchers.setter
+    def her_watchers(self, _):
         pass
 
     async def animate(
@@ -230,16 +229,7 @@ class Module:
         code.raise_for_status()
         code = code.text
 
-        if re.search(r"# ?scope: ?hikka_min", code):
-            ver = tuple(
-                map(
-                    int,
-                    re.search(r"# ?scope: ?hikka_min ((\d+\.){2}\d+)", code)[1].split(
-                        "."
-                    ),
-                )
-            )
-        module = f"hikka.libraries.{url.replace('%', '%%').replace('.', '%d')}"
+        module = f"her.libraries.{url.replace('%', '%%').replace('.', '%d')}"
         origin = f"<library {url}>"
 
         spec = importlib.machinery.ModuleSpec(
@@ -322,7 +312,7 @@ class Module:
             all(
                 line.replace(" ", "") != "#scope:no_stats" for line in code.splitlines()
             )
-            and self._db.get("hikka.main", "stats", True)
+            and self._db.get("her.main", "stats", True)
             and url is not None
             and utils.check_url(url)
         ):

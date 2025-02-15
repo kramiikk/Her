@@ -35,7 +35,7 @@ class CommandDispatcher:
         self._db = db
 
         self.owner = db.pointer(__name__, "owner", [])
-        self._me = self._client.hikka_me.id
+        self._me = self._client.tg_id
 
         self.raw_handlers = []
 
@@ -345,7 +345,6 @@ class GrepHandler:
         self.message.edit = modified_edit
         self.message.reply = modified_reply
         self.message.respond = modified_respond
-        self.message.hikka_grepped = True
 
     @staticmethod
     def _should_include_line(line: str, grep: str, ungrep: str) -> bool:

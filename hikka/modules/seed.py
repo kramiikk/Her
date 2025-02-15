@@ -1,3 +1,4 @@
+import io
 import asyncio
 import hikkatl
 import logging
@@ -126,7 +127,7 @@ class MessageEditor(BaseMessageEditor):
         await self.redraw()
 
     async def redraw(self):
-        if self._is_updating or self._finished:
+        if self._is_updating or self._finished or getattr(self, "file_sent", False):
             return
         self._is_updating = True
         try:
@@ -172,17 +173,22 @@ class MessageEditor(BaseMessageEditor):
                 text += "\n\n".join(sections)
             try:
                 full_text = utils.escape_html(text)
-                if len(full_text) <= 4096:
-                    await utils.answer(self.message, text)
-                else:
-                    raise hikkatl.errors.rpcerrorlist.MessageTooLongError
+                await utils.answer(self.message, text)
             except hikkatl.errors.rpcerrorlist.MessageTooLongError:
-                await utils.answer(
-                    self.message,
-                    "😵‍💫 Output is too large to display ("
-                    f"stdout: {len(self.stdout)}, "
-                    f"stderr: {len(self.stderr)})",
-                )
+                if not getattr(self, "file_sent", False):
+                    full_output = self.stdout + self.stderr
+                    file = io.BytesIO(full_output.encode("utf-8"))
+                    file.name = "output.txt"
+                    await self.message.client.send_file(
+                        self.message.peer_id,
+                        file,
+                        caption="Command output",
+                        reply_to=utils.get_topic(self.message),
+                    )
+                    self.file_sent = True
+                return
+            except Exception as e:
+                logger.error(f"Error updating message: {e}")
         finally:
             self._is_updating = False
 
@@ -228,7 +234,7 @@ class RawMessageEditor(BaseMessageEditor):
         return "⚡"
 
     async def _flush_buffer(self):
-        if self._finished:
+        if self._finished or getattr(self, "file_sent", False):
             return
         async with self._update_lock:
             current_time = time.time()
@@ -261,6 +267,18 @@ class RawMessageEditor(BaseMessageEditor):
             try:
                 await utils.answer(self.message, text)
                 self._last_update = current_time
+            except hikkatl.errors.rpcerrorlist.MessageTooLongError:
+                if not getattr(self, "file_sent", False):
+                    full_output = self._last_content
+                    file = io.BytesIO(full_output.encode("utf-8"))
+                    file.name = "output.txt"
+                    await self.message.client.send_file(
+                        self.message.peer_id,
+                        file,
+                        caption="Command output",
+                        reply_to=utils.get_topic(self.message),
+                    )
+                    self.file_sent = True
             except Exception as e:
                 logger.error(f"Error updating message: {e}")
             finally:

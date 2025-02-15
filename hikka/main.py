@@ -145,7 +145,6 @@ class Her:
         self.sessions = []
 
         if not session_path.exists():
-            logging.info("Session file not found")
             return
         try:
             session = SQLiteSession(str(session_path))
@@ -303,7 +302,7 @@ class Her:
             first = True
             me = await client.get_me()
             client.tg_id = me.id
-            client.hikka_me = me
+            client.her_me = me
 
             while True:
                 try:
@@ -356,7 +355,7 @@ class Her:
         await client.start()
 
         db = database.Database(client)
-        client.hikka_db = db
+        client.her_db = db
         await db.init()
 
         modules = loader.Modules(client, self.sessions[0], db)
@@ -400,4 +399,4 @@ class Her:
         self.loop.close()
 
 
-hikka = Her()
+her = Her()

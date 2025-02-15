@@ -20,7 +20,7 @@ def die():
 
 
 def restart():
-    if "HIKKA_DO_NOT_RESTART2" in os.environ:
+    if "HER_DO_NOT_RESTART2" in os.environ:
         print(
             "Got in a loop, exiting\nYou probably need to manually remove existing"
             " packages and then restart Her."
@@ -30,9 +30,9 @@ def restart():
 
     print("🔄 Restarting...")
 
-    if "HIKKA_DO_NOT_RESTART" not in os.environ:
-        os.environ["HIKKA_DO_NOT_RESTART"] = "1"
+    if "HER_DO_NOT_RESTART" not in os.environ:
+        os.environ["HER_DO_NOT_RESTART"] = "1"
     else:
-        os.environ["HIKKA_DO_NOT_RESTART2"] = "1"
+        os.environ["HER_DO_NOT_RESTART2"] = "1"
     signal.signal(signal.SIGTERM, get_startup_callback())
     die()

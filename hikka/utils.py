@@ -142,18 +142,6 @@ async def answer(
     if isinstance(response, str) and not kwargs.pop("asfile", False):
         text, entities = parse_mode.parse(response)
 
-        if len(text) >= 4096 and not hasattr(message, "hikka_grepped"):
-            file = io.BytesIO(text.encode("utf-8"))
-            file.name = "result.txt"
-
-            result = await message.client.send_file(
-                message.peer_id,
-                file,
-                caption="too long",
-                reply_to=kwargs.get("reply_to") or get_topic(message),
-            )
-
-            return result
         result = await (message.edit if edit else message.respond)(
             text,
             parse_mode=lambda t: (t, entities),

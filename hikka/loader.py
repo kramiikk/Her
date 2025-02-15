@@ -251,9 +251,9 @@ class Modules:
             callback_handlers = {}
             watchers = []
             for module in self.modules:
-                commands.update(module.hikka_commands)
-                callback_handlers.update(module.hikka_callback_handlers)
-                watchers.extend(module.hikka_watchers.values())
+                commands.update(module.her_commands)
+                callback_handlers.update(module.her_callback_handlers)
+                watchers.extend(module.her_watchers.values())
             self.commands = commands
             self.callback_handlers = callback_handlers
 
@@ -342,9 +342,9 @@ class Modules:
         """Register commands from instance"""
         if instance.__origin__.startswith("<core"):
             self._core_commands += list(
-                map(lambda x: x.lower(), list(instance.hikka_commands))
+                map(lambda x: x.lower(), list(instance.her_commands))
             )
-        for _command, cmd in instance.hikka_commands.items():
+        for _command, cmd in instance.her_commands.items():
             self.commands.update({_command.lower(): cmd})
 
     def register_watchers(self, instance: Module):
@@ -352,7 +352,7 @@ class Modules:
         for _watcher in self.watchers:
             if _watcher.__self__.__class__.__name__ == instance.__class__.__name__:
                 self.watchers.remove(_watcher)
-        for _watcher in instance.hikka_watchers.values():
+        for _watcher in instance.her_watchers.values():
             self.watchers += [_watcher]
 
     def lookup(

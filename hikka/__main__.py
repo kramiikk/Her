@@ -26,8 +26,8 @@ if (
         print("Added NO_SUDO in your environment variables")
         restart()
 log.init()
-if "HIKKA_DO_NOT_RESTART" in os.environ:
-    del os.environ["HIKKA_DO_NOT_RESTART"]
-if "HIKKA_DO_NOT_RESTART2" in os.environ:
-    del os.environ["HIKKA_DO_NOT_RESTART2"]
-main.hikka.main()
+if "HER_DO_NOT_RESTART" in os.environ:
+    del os.environ["HER_DO_NOT_RESTART"]
+if "HER_DO_NOT_RESTART2" in os.environ:
+    del os.environ["HER_DO_NOT_RESTART2"]
+main.her.main()
