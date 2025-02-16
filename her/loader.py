@@ -321,8 +321,6 @@ class Modules:
             None,
         )
 
-        if hasattr(module, "__version__"):
-            ret.__version__ = module.__version__
         if ret is None:
             ret = module.register(module_name)
             if not isinstance(ret, Module):
