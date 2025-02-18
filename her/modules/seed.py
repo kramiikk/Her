@@ -590,7 +590,7 @@ class AdvancedExecutorMod(loader.Module):
                             else -1
                         )
                         await editor.cmd_ended(rc)
-                        await asyncio.sleep(0.3)
+                        await asyncio.sleep(1)
             finally:
                 if proc:
                     try:

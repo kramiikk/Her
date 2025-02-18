@@ -108,7 +108,7 @@ class InfiniteLoop:
 
     async def actual_loop(self, *args, **kwargs):
         while not self.module_instance:
-            await asyncio.sleep(0.01)
+            await asyncio.sleep(1)
         if isinstance(self._stop_clause, str) and self._stop_clause:
             self.module_instance.set(self._stop_clause, True)
         self.status = True
