@@ -12,15 +12,11 @@ from hikkatl.errors.rpcerrorlist import TopicDeletedError
 from hikkatl.hints import EntityLike
 from hikkatl.tl import functions
 from hikkatl.tl.alltlobjects import LAYER
-from hikkatl.tl.functions.channels import GetFullChannelRequest
-from hikkatl.tl.functions.users import GetFullUserRequest
 from hikkatl.tl.types import (
-    ChannelFull,
     Message,
     Updates,
     UpdatesCombined,
     UpdateShort,
-    UserFull,
 )
 
 from .types import (
@@ -185,11 +181,6 @@ class CustomTelegramClient(TelegramClient):
     def her_fulluser_cache(self) -> typing.Dict[int, CacheRecordFullUser]:
         return self._her_fulluser_cache
 
-    async def force_get_entity(self, *args, **kwargs):
-        """Forcefully makes a request to Telegram to get the entity."""
-
-        return await self.get_entity(*args, force=True, **kwargs)
-
     async def get_entity(
         self,
         entity: EntityLike,
@@ -233,156 +224,6 @@ class CustomTelegramClient(TelegramClient):
                 self._her_entity_cache[resolved_entity.username] = cache_record
         return copy.deepcopy(resolved_entity)
 
-    async def get_perms_cached(
-        self,
-        entity: EntityLike,
-        user: typing.Optional[EntityLike] = None,
-        exp: int = 5 * 60,
-        force: bool = False,
-    ):
-
-        # Will be used to determine, which client caused logging messages
-
-        entity = await self.get_entity(entity)
-        user = await self.get_entity(user) if user else None
-
-        if not hashable(entity) or not hashable(user):
-            try:
-                hashable_entity = next(
-                    getattr(entity, attr)
-                    for attr in {"user_id", "channel_id", "chat_id", "id"}
-                    if getattr(entity, attr, None)
-                )
-            except StopIteration:
-                return await self.get_permissions(entity, user)
-            try:
-                hashable_user = next(
-                    getattr(user, attr)
-                    for attr in {"user_id", "channel_id", "chat_id", "id"}
-                    if getattr(user, attr, None)
-                )
-            except StopIteration:
-                return await self.get_permissions(entity, user)
-        else:
-            hashable_entity = entity
-            hashable_user = user
-        if str(hashable_entity).isdigit() and int(hashable_entity) < 0:
-            hashable_entity = int(str(hashable_entity)[4:])
-        if str(hashable_user).isdigit() and int(hashable_user) < 0:
-            hashable_user = int(str(hashable_user)[4:])
-        if (
-            not force
-            and hashable_entity
-            and hashable_user
-            and hashable_user in self._her_perms_cache.get(hashable_entity, {})
-            and (
-                not exp
-                or self._her_perms_cache[hashable_entity][hashable_user].ts + exp
-                > time.time()
-            )
-        ):
-            return copy.deepcopy(
-                self._her_perms_cache[hashable_entity][hashable_user].perms
-            )
-        resolved_perms = await self.get_permissions(entity, user)
-
-        if resolved_perms:
-            cache_record = CacheRecordPerms(
-                hashable_entity,
-                hashable_user,
-                resolved_perms,
-                exp,
-            )
-            self._her_perms_cache.setdefault(hashable_entity, {})[
-                hashable_user
-            ] = cache_record
-
-            def save_user(key: typing.Union[str, int]):
-                nonlocal self, cache_record, user, hashable_user
-                if getattr(user, "id", None):
-                    self._her_perms_cache.setdefault(key, {})[user.id] = cache_record
-                if getattr(user, "username", None):
-                    self._her_perms_cache.setdefault(key, {})[
-                        f"@{user.username}"
-                    ] = cache_record
-                    self._her_perms_cache.setdefault(key, {})[
-                        user.username
-                    ] = cache_record
-
-            if getattr(entity, "id", None):
-                save_user(entity.id)
-            if getattr(entity, "username", None):
-                save_user(f"@{entity.username}")
-                save_user(entity.username)
-        return copy.deepcopy(resolved_perms)
-
-    async def get_fullchannel(
-        self,
-        entity: EntityLike,
-        exp: int = 300,
-        force: bool = False,
-    ) -> ChannelFull:
-        if not hashable(entity):
-            try:
-                hashable_entity = next(
-                    getattr(entity, attr)
-                    for attr in {"channel_id", "chat_id", "id"}
-                    if getattr(entity, attr, None)
-                )
-            except StopIteration:
-                return await self(GetFullChannelRequest(channel=entity))
-        else:
-            hashable_entity = entity
-        if str(hashable_entity).isdigit() and int(hashable_entity) < 0:
-            hashable_entity = int(str(hashable_entity)[4:])
-        if (
-            not force
-            and self._her_fullchannel_cache.get(hashable_entity)
-            and not self._her_fullchannel_cache[hashable_entity].expired
-            and self._her_fullchannel_cache[hashable_entity].ts + exp > time.time()
-        ):
-            return self._her_fullchannel_cache[hashable_entity].full_channel
-        result = await self(GetFullChannelRequest(channel=entity))
-        self._her_fullchannel_cache[hashable_entity] = CacheRecordFullChannel(
-            hashable_entity,
-            result,
-            exp,
-        )
-        return result
-
-    async def get_fulluser(
-        self,
-        entity: EntityLike,
-        exp: int = 300,
-        force: bool = False,
-    ) -> UserFull:
-        if not hashable(entity):
-            try:
-                hashable_entity = next(
-                    getattr(entity, attr)
-                    for attr in {"user_id", "chat_id", "id"}
-                    if getattr(entity, attr, None)
-                )
-            except StopIteration:
-                return await self(GetFullUserRequest(entity))
-        else:
-            hashable_entity = entity
-        if str(hashable_entity).isdigit() and int(hashable_entity) < 0:
-            hashable_entity = int(str(hashable_entity)[4:])
-        if (
-            not force
-            and self._her_fulluser_cache.get(hashable_entity)
-            and not self._her_fulluser_cache[hashable_entity].expired
-            and self._her_fulluser_cache[hashable_entity].ts + exp > time.time()
-        ):
-            return self._her_fulluser_cache[hashable_entity].full_user
-        result = await self(GetFullUserRequest(entity))
-        self._her_fulluser_cache[hashable_entity] = CacheRecordFullUser(
-            hashable_entity,
-            result,
-            exp,
-        )
-        return result
 
     @staticmethod
     def _find_message_obj_in_frame(
@@ -472,11 +313,3 @@ class CustomTelegramClient(TelegramClient):
             *args,
             **kwargs,
         )
-
-    def _handle_update(
-        self: "CustomTelegramClient",
-        update: typing.Union[Updates, UpdatesCombined, UpdateShort],
-    ):
-        if self._raw_updates_processor is not None:
-            self._raw_updates_processor(update)
-        super()._handle_update(update)

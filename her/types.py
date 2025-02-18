@@ -2,19 +2,13 @@ import ast
 import asyncio
 import contextlib
 import copy
-import importlib
-import importlib.machinery
-import importlib.util
 import inspect
 import logging
-import os
-import sys
 import time
 import typing
 from dataclasses import dataclass, field
 from importlib.abc import SourceLoader
 
-import requests
 from hikkatl.hints import EntityLike
 from hikkatl.tl.types import (
     ChannelFull,
@@ -23,7 +17,6 @@ from hikkatl.tl.types import (
 )
 
 from . import utils
-from ._reference_finder import replace_all_refs
 from .pointers import PointerDict, PointerList
 
 __all__ = [
@@ -169,26 +162,6 @@ class Module:
     def her_watchers(self, _):
         pass
 
-    async def animate(
-        self,
-        message: Message,
-        frames: typing.List[str],
-        interval: typing.Union[float, int],
-    ) -> None:
-        """Animate message"""
-        from . import utils
-
-        if interval < 0.1:
-            logger.warning(
-                "Resetting animation interval to 0.1s, because it may get you in"
-                " floodwaits"
-            )
-            interval = 0.1
-        for frame in frames:
-            message = await utils.answer(message, frame)
-            await asyncio.sleep(interval)
-        return message
-
     def get(
         self,
         key: str,
@@ -207,168 +180,6 @@ class Module:
     ) -> typing.Union[JSONSerializable, PointerList, PointerDict]:
         return self._db.pointer(self.__class__.__name__, key, default, item_type)
 
-    async def import_lib(
-        self,
-        url: str,
-        *,
-        suspend_on_error: typing.Optional[bool] = False,
-        _did_requirements: bool = False,
-    ) -> "Library":
-
-        from . import utils  # Avoiding circular import
-        from .loader import USER_INSTALL, VALID_PIP_PACKAGES
-
-        def _raise(e: Exception):
-            if suspend_on_error:
-                raise SelfSuspend("Required library is not available or is corrupted.")
-            raise e
-
-        if not utils.check_url(url):
-            _raise(ValueError("Invalid url for library"))
-        code = await utils.run_sync(requests.get, url)
-        code.raise_for_status()
-        code = code.text
-
-        module = f"her.libraries.{url.replace('%', '%%').replace('.', '%d')}"
-        origin = f"<library {url}>"
-
-        spec = importlib.machinery.ModuleSpec(
-            module,
-            StringLoader(code, origin),
-            origin=origin,
-        )
-        try:
-            instance = importlib.util.module_from_spec(spec)
-            sys.modules[module] = instance
-            spec.loader.exec_module(instance)
-        except ImportError as e:
-            logger.info(
-                "Library loading failed, attemping dependency installation (%s)",
-                e.name,
-            )
-            # Let's try to reinstall dependencies
-
-            try:
-                requirements = list(
-                    filter(
-                        lambda x: not x.startswith(("-", "_", ".")),
-                        map(
-                            str.strip,
-                            VALID_PIP_PACKAGES.search(code)[1].split(),
-                        ),
-                    )
-                )
-            except TypeError:
-                logger.warning(
-                    "No valid pip packages specified in code, attemping"
-                    " installation from error"
-                )
-                requirements = [e.name]
-            if not requirements or _did_requirements:
-                _raise(e)
-            pip = await asyncio.create_subprocess_exec(
-                sys.executable,
-                "-m",
-                "pip",
-                "install",
-                "--upgrade",
-                "-q",
-                "--disable-pip-version-check",
-                "--no-warn-script-location",
-                *["--user"] if USER_INSTALL else [],
-                *requirements,
-            )
-
-            rc = await pip.wait()
-
-            if rc != 0:
-                _raise(e)
-            importlib.invalidate_caches()
-
-            kwargs = utils.get_kwargs()
-            kwargs["_did_requirements"] = True
-
-            return await self._mod_import_lib(**kwargs)  # Try again
-        lib_obj = next(
-            (
-                value()
-                for value in vars(instance).values()
-                if inspect.isclass(value) and issubclass(value, Library)
-            ),
-            None,
-        )
-
-        if not lib_obj:
-            _raise(ImportError("Invalid library. No class found"))
-        if not lib_obj.__class__.__name__.endswith("Lib"):
-            _raise(
-                ImportError(
-                    "Invalid library. Classname {} does not end with 'Lib'".format(
-                        lib_obj.__class__.__name__
-                    )
-                )
-            )
-        if (
-            all(
-                line.replace(" ", "") != "#scope:no_stats" for line in code.splitlines()
-            )
-            and self._db.get("her.main", "stats", True)
-            and url is not None
-            and utils.check_url(url)
-        ):
-            with contextlib.suppress(Exception):
-                await self.lookup("loader")._send_stats(url)
-        lib_obj.source_url = url.strip("/")
-        lib_obj.allmodules = self.allmodules
-        lib_obj.internal_init()
-
-        for old_lib in self.allmodules.libraries:
-            if old_lib.name == lib_obj.name and (
-                not isinstance(getattr(old_lib, "version", None), tuple)
-                and not isinstance(getattr(lib_obj, "version", None), tuple)
-                or old_lib.version >= lib_obj.version
-            ):
-                return old_lib
-        if hasattr(lib_obj, "init"):
-            if not callable(lib_obj.init):
-                _raise(ValueError("Library init() must be callable"))
-            try:
-                await lib_obj.init()
-            except Exception:
-                _raise(RuntimeError("Library init() failed"))
-        if hasattr(lib_obj, "config"):
-            if not isinstance(lib_obj.config, LibraryConfig):
-                _raise(
-                    RuntimeError("Library config must be a `LibraryConfig` instance")
-                )
-            libcfg = lib_obj.db.get(
-                lib_obj.__class__.__name__,
-                "__config__",
-                {},
-            )
-
-            for conf in lib_obj.config:
-                with contextlib.suppress(Exception):
-                    lib_obj.config.set_no_raise(
-                        conf,
-                        (
-                            libcfg[conf]
-                            if conf in libcfg
-                            else os.environ.get(f"{lib_obj.__class__.__name__}.{conf}")
-                            or lib_obj.config.getdef(conf)
-                        ),
-                    )
-        for old_lib in self.allmodules.libraries:
-            if old_lib.name == lib_obj.name:
-                if hasattr(old_lib, "on_lib_update") and callable(
-                    old_lib.on_lib_update
-                ):
-                    await old_lib.on_lib_update(lib_obj)
-                replace_all_refs(old_lib, lib_obj)
-                return lib_obj
-        self.allmodules.libraries += [lib_obj]
-        return lib_obj
-
 
 class Library:
     """All external libraries must have a class-inheritant from this class"""
@@ -382,23 +193,6 @@ class Library:
         self.tg_id = self._client.tg_id
         self._tg_id = self._client.tg_id
         self.lookup = self.allmodules.lookup
-
-    def _lib_get(
-        self,
-        key: str,
-        default: typing.Optional[JSONSerializable] = None,
-    ) -> JSONSerializable:
-        return self._db.get(self.__class__.__name__, key, default)
-
-    def _lib_set(self, key: str, value: JSONSerializable) -> bool:
-        self._db.set(self.__class__.__name__, key, value)
-
-    def _lib_pointer(
-        self,
-        key: str,
-        default: typing.Optional[JSONSerializable] = None,
-    ) -> typing.Union[JSONSerializable, PointerDict, PointerList]:
-        return self._db.pointer(self.__class__.__name__, key, default)
 
 
 class LoadError(Exception):
