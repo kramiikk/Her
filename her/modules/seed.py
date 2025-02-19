@@ -1,4 +1,3 @@
-import io
 import asyncio
 import hikkatl
 import logging
@@ -33,7 +32,7 @@ async def read_stream(func: callable, stream):
             buffer.append(decoded)
 
             current_time = time.time()
-            if len("".join(buffer)) > 512 or current_time - last_send >= 0.3:
+            if len("".join(buffer)) > 512 or current_time - last_send >= 1:
                 await func("".join(buffer))
                 buffer.clear()
                 last_send = current_time
@@ -80,17 +79,22 @@ class BaseMessageEditor:
             return f"{frame} <b>Running for {elapsed:.1f}s</b>\n"
 
     def _truncate_output(self, text: str, max_len: int) -> str:
+        """
+        Base truncation method that other classes can inherit from.
+        Shows both beginning and end of content within max_len limit.
+        """
         text = text.replace("\r\n", "\n").replace("\r", "\n")
         text = utils.escape_html(text)
 
         if len(text) <= max_len:
             return text
-        if self.rc is not None:
-            return "..." + text[-max_len + 3 :]
+            
         separator = "\n... 🔻 [TRUNCATED] 🔻 ...\n"
+        if self.rc is not None:
+            return separator + text[-(max_len - len(separator)):]
+            
         available_len = max_len - len(separator)
         part_len = available_len // 2
-
         return text[:part_len].strip() + separator + text[-part_len:].strip()
 
     async def cmd_ended(self):
@@ -126,37 +130,51 @@ class MessageEditor(BaseMessageEditor):
         self.stderr += stderr
         await self.redraw()
 
+    def _truncate_output(self, text: str, max_len: int) -> str:
+        """
+        Standard message editor truncation.
+        Optimized for regular command output.
+        """
+        text = text.replace("\r\n", "\n").replace("\r", "\n")
+        text = utils.escape_html(text)
+
+        if len(text) <= max_len:
+            return text
+            
+        separator = "\n... 🔻 [TRUNCATED] 🔻 ...\n"
+        if self.rc is not None:
+            return separator + text[-(max_len - len(separator)):]
+            
+        available_len = max_len - len(separator)
+        part_len = available_len // 2
+        return text[:part_len].strip() + separator + text[-part_len:].strip()
+
     async def redraw(self):
-        if self._is_updating or self._finished or getattr(self, "file_sent", False):
+        if self._is_updating or self._finished:
             return
+        
         self._is_updating = True
         try:
-            status = ""
-            if self.rc is not None:
-                status = f"<b>Exit code:</b> <code>{self.rc}</code>\n\n"
+            status = f"<b>Exit code:</b> <code>{self.rc}</code>\n\n" if self.rc is not None else ""
             base_text = (
-                f"⌨️ "
-                f"<b>Command:</b> <code>{utils.escape_html(self.command)}</code>\n"
+                f"⌨️ <b>Command:</b> <code>{utils.escape_html(self.command)}</code>\n"
                 f"{status}"
             )
 
             max_total = 4096 - len(utils.escape_html(base_text)) - 100
 
             if not self.stderr:
-                stdout_max = min(len(self.stdout), max_total)
+                stdout_max = max_total
                 stderr_max = 0
             else:
-                initial_stdout = int(max_total * 0.7)
-                initial_stderr = max_total - initial_stdout
+                stdout_max = int(max_total * 0.7)
+                stderr_max = max_total - stdout_max
 
-                stdout_max = min(len(self.stdout), initial_stdout)
-                stderr_max = min(len(self.stderr), initial_stderr)
+                if len(self.stdout) < stdout_max:
+                    stderr_max += stdout_max - len(self.stdout)
+                if len(self.stderr) < stderr_max:
+                    stdout_max += stderr_max - len(self.stderr)
 
-                unused_stdout = initial_stdout - stdout_max
-                unused_stderr = initial_stderr - stderr_max
-
-                stdout_max += unused_stderr
-                stderr_max += unused_stdout
             sections = []
             if self.stdout.strip():
                 stdout_text = self._truncate_output(self.stdout, stdout_max)
@@ -168,25 +186,16 @@ class MessageEditor(BaseMessageEditor):
                 sections.append(
                     f"<b>📥 Stderr ({len(self.stderr)} chars):</b>\n<pre>{stderr_text}</pre>"
                 )
+
             text = base_text
             if sections:
                 text += "\n\n".join(sections)
+
             try:
-                full_text = utils.escape_html(text)
                 await utils.answer(self.message, text)
             except hikkatl.errors.rpcerrorlist.MessageTooLongError:
-                if not getattr(self, "file_sent", False):
-                    full_output = self.stdout + self.stderr
-                    file = io.BytesIO(full_output.encode("utf-8"))
-                    file.name = "output.txt"
-                    await self.message.client.send_file(
-                        self.message.peer_id,
-                        file,
-                        caption="Command output",
-                        reply_to=utils.get_topic(self.message),
-                    )
-                    self.file_sent = True
-                return
+                truncated_text = self._truncate_output(text, 4096)
+                await utils.answer(self.message, truncated_text)
             except Exception as e:
                 logger.error(f"Error updating message: {e}")
         finally:
@@ -207,16 +216,25 @@ class RawMessageEditor(BaseMessageEditor):
         self._force_update_interval = 1.0
 
     def _truncate_output(self, text: str, max_len: int, keep_edges=True) -> str:
+        """
+        Raw message editor truncation.
+        Handles streaming output with option to keep edges.
+        """
         text = text.replace("\r\n", "\n").replace("\r", "\n").strip()
         text = utils.escape_html(text)
 
         if len(text) <= max_len:
             return text
+            
+        separator = "\n... 🔻 [TRUNCATED] 🔻 ...\n"
+        
         if self.rc is not None:
-            return "..." + text[-max_len + 3 :]
+            return separator + text[-(max_len - len(separator)):]
+            
         if keep_edges:
-            edge = (max_len - len("\n... 🔻 [TRUNCATED] 🔻 ...\n")) // 2
-            return text[:edge] + "\n... 🔻 [TRUNCATED] 🔻 ...\n" + text[-edge:]
+            edge_len = (max_len - len(separator)) // 2
+            return text[:edge_len].strip() + separator + text[-edge_len:].strip()
+        
         return text[:max_len]
 
     def _get_status_text(self):
@@ -234,7 +252,7 @@ class RawMessageEditor(BaseMessageEditor):
         return "⚡"
 
     async def _flush_buffer(self):
-        if self._finished or getattr(self, "file_sent", False):
+        if self._finished:
             return
         async with self._update_lock:
             current_time = time.time()
@@ -268,17 +286,7 @@ class RawMessageEditor(BaseMessageEditor):
                 await utils.answer(self.message, text)
                 self._last_update = current_time
             except hikkatl.errors.rpcerrorlist.MessageTooLongError:
-                if not getattr(self, "file_sent", False):
-                    full_output = self._last_content
-                    file = io.BytesIO(full_output.encode("utf-8"))
-                    file.name = "output.txt"
-                    await self.message.client.send_file(
-                        self.message.peer_id,
-                        file,
-                        caption="Command output",
-                        reply_to=utils.get_topic(self.message),
-                    )
-                    self.file_sent = True
+                await utils.answer(self.message, "too long")
             except Exception as e:
                 logger.error(f"Error updating message: {e}")
             finally:
@@ -477,7 +485,7 @@ class AdvancedExecutorMod(loader.Module):
                         ),
                     },
                 ],
-                "temperature": 0.3,
+                "temperature": 0.2,
             }
 
             try:
@@ -647,15 +655,21 @@ class AdvancedExecutorMod(loader.Module):
             full_text = self._truncate_output(full_text, 4096)
         await utils.answer(message, full_text)
 
-    def _truncate_output(
-        self, text: str, max_len: int, editor: BaseMessageEditor = None
-    ) -> str:
+    def _truncate_output(self, text: str, max_len: int, editor: BaseMessageEditor = None) -> str:
+        """
+        Module-level truncation for general output.
+        Takes into account editor state if provided.
+        """
         if len(text) <= max_len:
             return text
+            
+        separator = "\n... 🔻 [TRUNCATED] 🔻 ...\n"
+        
         if editor and editor.rc is not None:
-            return text[: max_len - 100] + "\n... 🔻 [TRUNCATED] 🔻 ..."
-        half = max_len // 2
-        return f"{text[:half]}\n... 🔻 [TRUNCATED] 🔻 ...\n{text[-half:]}"
+            return text[:100] + separator + text[-(max_len - 100 - len(separator)):]
+            
+        half_len = (max_len - len(separator)) // 2
+        return text[:half_len] + separator + text[-half_len:]
 
     def get_sub(self, mod):
         """Returns a dictionary of module attributes that don't start with _"""
