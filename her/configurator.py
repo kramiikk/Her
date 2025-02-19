@@ -22,7 +22,7 @@ def tty_input(prompt: str) -> str:
 
 def api_config() -> None:
     """Запрашивает конфигурацию API у пользователя и сохраняет её."""
-    tty_print("\033[0;95mWelcome to Her Userbot!\033[0m")
+    tty_print("\033[0;95mWelcome to Her_UserBot!\033[0m")
     tty_print("\033[0;96m1. Go to https://my.telegram.org and login\033[0m")
     tty_print("\033[0;96m2. Click on \033[1;96mAPI development tools\033[0m")
     tty_print("\033[0;96m3. Create a new application\033[0m")

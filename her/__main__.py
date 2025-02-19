@@ -12,19 +12,13 @@ if (
 ):
     print("🚫" * 15)
     print("You attempted to run Her on behalf of root user")
-    print("Please, create a new user and restart script")
     print("If this action was intentional, pass --root argument instead")
     print("🚫" * 15)
     print()
     print("Type force_insecure to ignore this warning")
-    print("Type no_sudo if your system has no sudo (Debian vibes)")
     inp = input("> ").lower()
     if inp != "force_insecure":
         sys.exit(1)
-    elif inp == "no_sudo":
-        os.environ["NO_SUDO"] = "1"
-        print("Added NO_SUDO in your environment variables")
-        restart()
 log.init()
 if "HER_DO_NOT_RESTART" in os.environ:
     del os.environ["HER_DO_NOT_RESTART"]
