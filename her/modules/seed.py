@@ -88,11 +88,9 @@ class BaseMessageEditor:
 
         if len(text) <= max_len:
             return text
-            
         separator = "\n... 🔻 [TRUNCATED] 🔻 ...\n"
         if self.rc is not None:
-            return separator + text[-(max_len - len(separator)):]
-            
+            return separator + text[-(max_len - len(separator)) :]
         available_len = max_len - len(separator)
         part_len = available_len // 2
         return text[:part_len].strip() + separator + text[-part_len:].strip()
@@ -140,11 +138,9 @@ class MessageEditor(BaseMessageEditor):
 
         if len(text) <= max_len:
             return text
-            
         separator = "\n... 🔻 [TRUNCATED] 🔻 ...\n"
         if self.rc is not None:
-            return separator + text[-(max_len - len(separator)):]
-            
+            return separator + text[-(max_len - len(separator)) :]
         available_len = max_len - len(separator)
         part_len = available_len // 2
         return text[:part_len].strip() + separator + text[-part_len:].strip()
@@ -152,10 +148,13 @@ class MessageEditor(BaseMessageEditor):
     async def redraw(self):
         if self._is_updating or self._finished:
             return
-        
         self._is_updating = True
         try:
-            status = f"<b>Exit code:</b> <code>{self.rc}</code>\n\n" if self.rc is not None else ""
+            status = (
+                f"<b>Exit code:</b> <code>{self.rc}</code>\n\n"
+                if self.rc is not None
+                else ""
+            )
             base_text = (
                 f"⌨️ <b>Command:</b> <code>{utils.escape_html(self.command)}</code>\n"
                 f"{status}"
@@ -174,7 +173,6 @@ class MessageEditor(BaseMessageEditor):
                     stderr_max += stdout_max - len(self.stdout)
                 if len(self.stderr) < stderr_max:
                     stdout_max += stderr_max - len(self.stderr)
-
             sections = []
             if self.stdout.strip():
                 stdout_text = self._truncate_output(self.stdout, stdout_max)
@@ -186,11 +184,9 @@ class MessageEditor(BaseMessageEditor):
                 sections.append(
                     f"<b>📥 Stderr ({len(self.stderr)} chars):</b>\n<pre>{stderr_text}</pre>"
                 )
-
             text = base_text
             if sections:
                 text += "\n\n".join(sections)
-
             try:
                 await utils.answer(self.message, text)
             except hikkatl.errors.rpcerrorlist.MessageTooLongError:
@@ -225,16 +221,13 @@ class RawMessageEditor(BaseMessageEditor):
 
         if len(text) <= max_len:
             return text
-            
         separator = "\n... 🔻 [TRUNCATED] 🔻 ...\n"
-        
+
         if self.rc is not None:
-            return separator + text[-(max_len - len(separator)):]
-            
+            return separator + text[-(max_len - len(separator)) :]
         if keep_edges:
             edge_len = (max_len - len(separator)) // 2
             return text[:edge_len].strip() + separator + text[-edge_len:].strip()
-        
         return text[:max_len]
 
     def _get_status_text(self):
@@ -655,19 +648,19 @@ class AdvancedExecutorMod(loader.Module):
             full_text = self._truncate_output(full_text, 4096)
         await utils.answer(message, full_text)
 
-    def _truncate_output(self, text: str, max_len: int, editor: BaseMessageEditor = None) -> str:
+    def _truncate_output(
+        self, text: str, max_len: int, editor: BaseMessageEditor = None
+    ) -> str:
         """
         Module-level truncation for general output.
         Takes into account editor state if provided.
         """
         if len(text) <= max_len:
             return text
-            
         separator = "\n... 🔻 [TRUNCATED] 🔻 ...\n"
-        
+
         if editor and editor.rc is not None:
-            return text[:100] + separator + text[-(max_len - 100 - len(separator)):]
-            
+            return text[:100] + separator + text[-(max_len - 100 - len(separator)) :]
         half_len = (max_len - len(separator)) // 2
         return text[:half_len] + separator + text[-half_len:]
 
