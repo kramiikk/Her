@@ -7,7 +7,6 @@ import typing
 
 from collections import deque
 from typing import Deque
-from hikkatl.tl.types import User
 
 from . import main, utils
 from .pointers import (
