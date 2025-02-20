@@ -6,7 +6,6 @@ import importlib.util
 import inspect
 import logging
 import os
-import re
 import sys
 import typing
 from pathlib import Path
@@ -59,6 +58,7 @@ logger = logging.getLogger(__name__)
 
 async def stop_placeholder() -> bool:
     return True
+
 
 class InfiniteLoop:
     _task = None
@@ -220,19 +220,22 @@ class Modules:
         Periodically reloads commands, callback handlers and watchers from loaded
         modules to prevent zombie handlers
         """
+        last_modules = set()
         while True:
-            await asyncio.sleep(1)
-            commands = {}
-            callback_handlers = {}
-            watchers = []
-            for module in self.modules:
-                commands.update(module.her_commands)
-                callback_handlers.update(module.her_callback_handlers)
-                watchers.extend(module.her_watchers.values())
-            self.commands = commands
-            self.callback_handlers = callback_handlers
+            await asyncio.sleep(5)
+            if {id(m) for m in self.modules} != last_modules:
+                last_modules = {id(m) for m in self.modules}
+                commands = {}
+                callback_handlers = {}
+                watchers = []
+                for module in self.modules:
+                    commands.update(module.her_commands)
+                    callback_handlers.update(module.her_callback_handlers)
+                    watchers.extend(module.her_watchers.values())
+                self.commands = commands
+                self.callback_handlers = callback_handlers
 
-            self.watchers = watchers
+                self.watchers = watchers
 
     async def register_all(self) -> typing.List[Module]:
         """Load all modules in the module directory"""
@@ -349,6 +352,8 @@ class Modules:
 
         for module in self.modules:
             if module.__class__.__name__ == instance.__class__.__name__:
+                if hasattr(module, "close"):
+                    await module.close()
                 await module.on_unload()
                 for handler in module.raw_handlers:
                     with contextlib.suppress(ValueError):

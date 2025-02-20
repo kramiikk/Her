@@ -35,7 +35,6 @@ class CommandDispatcher:
         self._db = db
 
         self.owner = db.pointer(__name__, "owner", [])
-        self._me = self._client.tg_id
 
         self.raw_handlers = []
 
@@ -100,6 +99,16 @@ class CommandDispatcher:
         if not hasattr(event, "message") or not hasattr(event.message, "message"):
             return False
         message = utils.censor(event.message)
+
+        if isinstance(event, events.NewMessage):
+            if (
+                event.sticker
+                or event.dice
+                or event.audio
+                or event.via_bot_id
+                or getattr(event, "reactions", False)
+            ):
+                return False
         if not hasattr(message, "sender_id"):
             if hasattr(message, "from_id"):
                 message.sender_id = message.from_id.user_id
@@ -111,24 +120,16 @@ class CommandDispatcher:
 
         if not message.message.startswith(prefix):
             return False
-        cmd_text = message.message[len(prefix) :].strip()
+        cmd_text = message.message[len(prefix):].strip()
         if not cmd_text:
             return False
         try:
             command = cmd_text.split(maxsplit=1)[0]
         except IndexError:
             return False
-        if (
-            event.sticker
-            or event.dice
-            or event.audio
-            or event.via_bot_id
-            or getattr(event, "reactions", False)
-        ):
-            return False
         if len(message.message) <= len(prefix):
             return False
-        command = message.message[len(prefix) :].strip().split(maxsplit=1)[0]
+
         tag = command.split("@", maxsplit=1)
 
         if len(tag) == 2:
@@ -140,8 +141,7 @@ class CommandDispatcher:
         if not func:
             return False
         if (
-            message.is_channel
-            and message.edit_date
+            message.edit_date
             and not message.is_group
             and not message.out
         ):

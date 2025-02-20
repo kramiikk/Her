@@ -39,7 +39,6 @@ class Database(dict):
         super().__init__()
         self._client: CustomTelegramClient = client
         self._next_revision_call: int = 0
-        self._me: User = None
         self._revisions: Deque[dict] = deque(maxlen=15)
         self._db_file = main.BASE_PATH / f"config-{self._client.tg_id}.json"
 
