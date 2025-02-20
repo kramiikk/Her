@@ -60,17 +60,6 @@ logger = logging.getLogger(__name__)
 async def stop_placeholder() -> bool:
     return True
 
-
-VALID_PIP_PACKAGES = re.compile(
-    r"^\s*# ?requires:(?: ?)((?:{url} )*(?:{url}))\s*$".format(
-        url=r"[-[\]_.~:/?#@!$&'()*+,;%<=>a-zA-Z0-9]+"
-    ),
-    re.MULTILINE,
-)
-
-USER_INSTALL = "PIP_TARGET" not in os.environ and "VIRTUAL_ENV" not in os.environ
-
-
 class InfiniteLoop:
     _task = None
     status = False
@@ -150,19 +139,6 @@ def loop(
     return wrapped
 
 
-def tag(*tags, **kwarg_tags):
-    """Tag function (esp. watchers) with some tags"""
-
-    def inner(func: Command) -> Command:
-        for _tag in tags:
-            setattr(func, _tag, True)
-        for _tag, value in kwarg_tags.items():
-            setattr(func, _tag, value)
-        return func
-
-    return inner
-
-
 def _mark_method(mark: str, *args, **kwargs) -> typing.Callable[..., Command]:
     """
     Mark method as a method of a class
@@ -232,8 +208,7 @@ class Modules:
         self.modules = []  # skipcq: PTC-W0052
         self.libraries = []
         self.watchers = []
-        self._log_handlers = []
-        self._core_commands = []
+        self.raw_handlers = []
         self.client = client
         self.session = session
         self._db = db
@@ -331,17 +306,14 @@ class Modules:
         return ret
 
     def register_raw_handlers(self, instance: Module):
-        """Register event handlers for a module"""
+        instance.raw_handlers = []
         for name, handler in utils.iter_attrs(instance):
             if getattr(handler, "is_raw_handler", False):
                 self.client.dispatcher.raw_handlers.append(handler)
+                instance.raw_handlers.append(handler)
 
     def register_commands(self, instance: Module):
         """Register commands from instance"""
-        if instance.__origin__.startswith("<core"):
-            self._core_commands += list(
-                map(lambda x: x.lower(), list(instance.her_commands))
-            )
         for _command, cmd in instance.her_commands.items():
             self.commands.update({_command.lower(): cmd})
 
@@ -377,13 +349,14 @@ class Modules:
 
         for module in self.modules:
             if module.__class__.__name__ == instance.__class__.__name__:
-
                 await module.on_unload()
-
+                for handler in module.raw_handlers:
+                    with contextlib.suppress(ValueError):
+                        self.client.dispatcher.raw_handlers.remove(handler)
                 self.modules.remove(module)
                 for _, method in utils.iter_attrs(module):
                     if isinstance(method, InfiniteLoop):
-                        method.stop()
+                        await method.stop()
         self.modules += [instance]
 
     def dispatch(self, _command: str) -> typing.Tuple[str, typing.Optional[str]]:

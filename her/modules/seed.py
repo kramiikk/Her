@@ -482,8 +482,7 @@ class AdvancedExecutorMod(loader.Module):
             }
 
             try:
-                generated_reply = self._process_api_request(payload)
-                await utils.answer(message, generated_reply)
+                await utils.answer(message, self._process_api_request(payload))
             except Exception as e:
                 logger.error(f"GPT error: {e}")
                 await utils.answer(message, "😵‍💫 Error generating response")
