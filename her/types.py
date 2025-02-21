@@ -80,7 +80,6 @@ class Module:
         self._db = self.allmodules.db
         self.client = self.allmodules.client
         self._client = self.allmodules.client
-        self.lookup = self.allmodules.lookup
         self.tg_id = self._client.tg_id
         self._tg_id = self._client.tg_id
 
@@ -181,20 +180,6 @@ class Module:
         return self._db.pointer(self.__class__.__name__, key, default, item_type)
 
 
-class Library:
-    """All external libraries must have a class-inheritant from this class"""
-
-    def internal_init(self):
-        self.name = self.__class__.__name__
-        self.db = self.allmodules.db
-        self._db = self.allmodules.db
-        self.client = self.allmodules.client
-        self._client = self.allmodules.client
-        self.tg_id = self._client.tg_id
-        self._tg_id = self._client.tg_id
-        self.lookup = self.allmodules.lookup
-
-
 class LoadError(Exception):
     """Tells user, why your module can't be loaded, if raised in `client_ready`"""
 
@@ -292,8 +277,6 @@ class ModuleConfig(dict):
     ):
         self._config[key].validator = validator
 
-
-LibraryConfig = ModuleConfig
 
 
 class _Placeholder:

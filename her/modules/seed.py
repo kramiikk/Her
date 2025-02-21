@@ -78,22 +78,23 @@ class BaseMessageEditor:
         else:
             return f"{frame} <b>Running for {elapsed:.1f}s</b>\n"
 
-    def _truncate_output(self, text: str, max_len: int) -> str:
+    def _truncate_output(self, text: str, max_len: int, keep_edges=True) -> str:
         """
-        Base truncation method that other classes can inherit from.
-        Shows both beginning and end of content within max_len limit.
+        Base truncation method that handles both standard and streaming output.
         """
-        text = text.replace("\r\n", "\n").replace("\r", "\n")
+        text = text.replace("\r\n", "\n").replace("\r", "\n").strip()
         text = utils.escape_html(text)
 
         if len(text) <= max_len:
             return text
         separator = "\n... 🔻 [TRUNCATED] 🔻 ...\n"
+
         if self.rc is not None:
             return separator + text[-(max_len - len(separator)) :]
-        available_len = max_len - len(separator)
-        part_len = available_len // 2
-        return text[:part_len].strip() + separator + text[-part_len:].strip()
+        if keep_edges:
+            edge_len = (max_len - len(separator)) // 2
+            return text[:edge_len].strip() + separator + text[-edge_len:].strip()
+        return text[:max_len]
 
     async def cmd_ended(self):
         self._finished = True
@@ -127,23 +128,6 @@ class MessageEditor(BaseMessageEditor):
     async def update_stderr(self, stderr):
         self.stderr += stderr
         await self.redraw()
-
-    def _truncate_output(self, text: str, max_len: int) -> str:
-        """
-        Standard message editor truncation.
-        Optimized for regular command output.
-        """
-        text = text.replace("\r\n", "\n").replace("\r", "\n")
-        text = utils.escape_html(text)
-
-        if len(text) <= max_len:
-            return text
-        separator = "\n... 🔻 [TRUNCATED] 🔻 ...\n"
-        if self.rc is not None:
-            return separator + text[-(max_len - len(separator)) :]
-        available_len = max_len - len(separator)
-        part_len = available_len // 2
-        return text[:part_len].strip() + separator + text[-part_len:].strip()
 
     async def redraw(self):
         if self._is_updating or self._finished:
@@ -211,25 +195,6 @@ class RawMessageEditor(BaseMessageEditor):
         self._last_update = time.time()
         self._force_update_interval = 1.0
 
-    def _truncate_output(self, text: str, max_len: int, keep_edges=True) -> str:
-        """
-        Raw message editor truncation.
-        Handles streaming output with option to keep edges.
-        """
-        text = text.replace("\r\n", "\n").replace("\r", "\n").strip()
-        text = utils.escape_html(text)
-
-        if len(text) <= max_len:
-            return text
-        separator = "\n... 🔻 [TRUNCATED] 🔻 ...\n"
-
-        if self.rc is not None:
-            return separator + text[-(max_len - len(separator)) :]
-        if keep_edges:
-            edge_len = (max_len - len(separator)) // 2
-            return text[:edge_len].strip() + separator + text[-edge_len:].strip()
-        return text[:max_len]
-
     def _get_status_text(self):
         elapsed = time.time() - self.start_time
         if self._complete:
@@ -279,7 +244,7 @@ class RawMessageEditor(BaseMessageEditor):
                 await utils.answer(self.message, text)
                 self._last_update = current_time
             except hikkatl.errors.rpcerrorlist.MessageTooLongError:
-                await utils.answer(self.message, "too long")
+                await utils.answer(self.message, self._truncate_output(text, 4096))
             except Exception as e:
                 logger.error(f"Error updating message: {e}")
             finally:
@@ -310,13 +275,6 @@ class RawMessageEditor(BaseMessageEditor):
 
 
 class AdvancedExecutorMod(loader.Module):
-    strings = {
-        "name": "AdvancedExecutor",
-        "executing": "Executing...",
-        "forbidden_command": "🚫 This command is forbidden!",
-        "result_header": "💻 <b>Result:</b>",
-        "error_header": "🙂‍↔️ <b>Error:</b>",
-    }
 
     def __init__(self):
         self.active_processes = {}
@@ -336,7 +294,6 @@ class AdvancedExecutorMod(loader.Module):
             **self.get_sub(hikkatl.tl.types),
             **self.get_sub(hikkatl.tl.functions),
             "event": message,
-            "chat": message.to_id,
             "hikkatl": hikkatl,
             "utils": utils,
             "main": main,
@@ -344,7 +301,6 @@ class AdvancedExecutorMod(loader.Module):
             "f": hikkatl.tl.functions,
             "c": self.client,
             "m": message,
-            "lookup": self.lookup,
             "self": self,
             "db": self.db,
         }
@@ -634,10 +590,10 @@ class AdvancedExecutorMod(loader.Module):
         ]
 
         if error:
-            text.append(f"<b>{self.strings['error_header']}</b>")
+            text.append(f"<b>🙂‍↔️ Error:</b>")
             text.append(f"<pre>{utils.escape_html(result)}</pre>")
         else:
-            text.append(f"<b>{self.strings['result_header']}</b>")
+            text.append(f"<b>💻 Result:</b>")
             if result.strip():
                 text.append(f"<pre>{utils.escape_html(result)}</pre>")
             if output is not None:

@@ -20,8 +20,6 @@ from .types import (
     Command,
     ConfigValue,
     JSONSerializable,
-    Library,
-    LibraryConfig,
     LoadError,
     Module,
     ModuleConfig,
@@ -37,8 +35,6 @@ __all__ = [
     "InfiniteLoop",
     "Command",
     "JSONSerializable",
-    "Library",
-    "LibraryConfig",
     "LoadError",
     "Module",
     "SelfSuspend",
@@ -206,7 +202,6 @@ class Modules:
         self.commands = {}
         self.callback_handlers = {}
         self.modules = []  # skipcq: PTC-W0052
-        self.libraries = []
         self.watchers = []
         self.raw_handlers = []
         self.client = client
@@ -327,23 +322,6 @@ class Modules:
                 self.watchers.remove(_watcher)
         for _watcher in instance.her_watchers.values():
             self.watchers += [_watcher]
-
-    def lookup(
-        self,
-        modname: str,
-    ) -> typing.Union[bool, Module, Library]:
-        return next(
-            (lib for lib in self.libraries if lib.name.lower() == modname.lower()),
-            False,
-        ) or next(
-            (
-                mod
-                for mod in self.modules
-                if mod.__class__.__name__.lower() == modname.lower()
-                or mod.name.lower() == modname.lower()
-            ),
-            False,
-        )
 
     async def complete_registration(self, instance: Module):
         """Complete registration of instance"""
