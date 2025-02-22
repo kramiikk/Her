@@ -34,8 +34,6 @@ class CommandDispatcher:
         self._client = client
         self._db = db
 
-        self.owner = db.pointer(__name__, "owner", [])
-
         self.raw_handlers = []
 
         self._api_lock = asyncio.Lock()
@@ -44,12 +42,6 @@ class CommandDispatcher:
         self._flood_delay = 3
         self._last_reset = 0.0
         self._reset_interval = 30.0
-        self._reload_rights()
-
-    def _reload_rights(self):
-        """Internal method to ensure that account owner is always in the owner list"""
-        if self._client.tg_id not in self.owner:
-            self.owner.append(self._client.tg_id)
 
     async def _api_call_guard(self):
         """Контролирует частоту запросов к API с периодическим сбросом"""
@@ -96,31 +88,18 @@ class CommandDispatcher:
             raise
 
     async def _handle_command(self, event, watcher=False) -> Union[bool, tuple]:
-        if not hasattr(event, "message") or not hasattr(event.message, "message"):
+        if not event.out:
             return False
+        if isinstance(event, events.NewMessage):
+            if not hasattr(event, "message") or not hasattr(event.message, "message"):
+                return False
         message = utils.censor(event.message)
 
-        if isinstance(event, events.NewMessage):
-            if (
-                event.sticker
-                or event.dice
-                or event.audio
-                or event.via_bot_id
-                or getattr(event, "reactions", False)
-            ):
-                return False
-        if not hasattr(message, "sender_id"):
-            if hasattr(message, "from_id"):
-                message.sender_id = message.from_id.user_id
-            else:
-                return False
-        if message.sender_id not in self.owner:
-            return False
         prefix = "."
 
         if not message.message.startswith(prefix):
             return False
-        cmd_text = message.message[len(prefix):].strip()
+        cmd_text = message.message[len(prefix) :].strip()
         if not cmd_text:
             return False
         try:
@@ -129,22 +108,8 @@ class CommandDispatcher:
             return False
         if len(message.message) <= len(prefix):
             return False
-
-        tag = command.split("@", maxsplit=1)
-
-        if len(tag) == 2:
-            if tag[1] == "me" and not message.out:
-                return False
-        elif not (event.out or event.mentioned) and not event.is_private:
-            return False
-        txt, func = self._modules.dispatch(tag[0])
+        txt, func = self._modules.dispatch(command)
         if not func:
-            return False
-        if (
-            message.edit_date
-            and not message.is_group
-            and not message.out
-        ):
             return False
         message.message = prefix + txt + message.message[len(prefix + command) :]
 
