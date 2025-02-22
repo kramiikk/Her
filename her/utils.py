@@ -1,5 +1,3 @@
-import asyncio
-import functools
 import inspect
 import io
 import json
@@ -83,19 +81,6 @@ def escape_html(text: str, /) -> str:  # sourcery skip
 def get_base_dir() -> str:
     """Get directory of current file"""
     return os.path.dirname(os.path.abspath(__file__))
-
-
-def run_sync(func, *args, **kwargs):
-    """Run a non-async function in a new thread and return an awaitable"""
-    return asyncio.get_event_loop().run_in_executor(
-        None,
-        functools.partial(func, *args, **kwargs),
-    )
-
-
-def run_async(loop: asyncio.AbstractEventLoop, coro: typing.Awaitable) -> typing.Any:
-    """Run an async function as a non-async function, blocking till it's done"""
-    return asyncio.run_coroutine_threadsafe(coro, loop).result()
 
 
 def censor(
