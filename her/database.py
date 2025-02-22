@@ -36,10 +36,10 @@ logger = logging.getLogger(__name__)
 class Database(dict):
     def __init__(self, client: CustomTelegramClient):
         super().__init__()
-        self._client: CustomTelegramClient = client
-        self._next_revision_call: int = 0
-        self._revisions: Deque[dict] = deque(maxlen=15)
-        self._db_file = main.BASE_PATH / f"config-{self._client.tg_id}.json"
+        self.client: CustomTelegramClient = client
+        self.next_revision_call: int = 0
+        self.revisions: Deque[dict] = deque(maxlen=15)
+        self.db_file = main.BASE_PATH / f"config-{self.client.tg_id}.json"
 
     def __repr__(self):
         return object.__repr__(self)
@@ -51,13 +51,13 @@ class Database(dict):
     def read(self):
         """Read database from file"""
         try:
-            if self._db_file.exists():
-                self.update(**json.loads(self._db_file.read_text()))
+            if self.db_file.exists():
+                self.update(**json.loads(self.db_file.read_text()))
             else:
                 logger.info("Creating new local DB")
         except json.JSONDecodeError:
             logger.error("DB corrupted, resetting...")
-            self._db_file.unlink()
+            self.db_file.unlink()
         except Exception as e:
             logger.error(f"Read failed: {e}")
 
@@ -100,7 +100,7 @@ class Database(dict):
         """Save database to file"""
         if not self.process_db_autofix(self):
             try:
-                rev = self._revisions.pop()
+                rev = self.revisions.pop()
                 self.clear()
                 self.update(**rev)
             except IndexError:
@@ -108,11 +108,11 @@ class Database(dict):
                 return False
             logger.warning("Restored database from last valid revision")
             return self.save()
-        if self._next_revision_call < time.time():
-            self._revisions.append(dict(self))
-            self._next_revision_call = time.time() + 3
+        if self.next_revision_call < time.time():
+            self.revisions.append(dict(self))
+            self.next_revision_call = time.time() + 3
         try:
-            self._db_file.write_text(json.dumps(self, indent=4))
+            self.db_file.write_text(json.dumps(self, indent=4))
         except Exception:
             logger.exception("Database save failed!")
             return False

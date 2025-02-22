@@ -11,8 +11,8 @@ class PointerList(list):
         key: str,
         default: typing.Optional[typing.Any] = None,
     ):
-        self._db = db
-        self._module = module
+        self.db = db
+        self.module = module
         self._key = key
         self._default = default
         super().__init__(db.get(module, key, default))
@@ -83,10 +83,10 @@ class PointerList(list):
         self._save()
 
     def _save(self):
-        self._db.set(self._module, self._key, list(self))
+        self.db.set(self.module, self._key, list(self))
 
     def tolist(self):
-        return self._db.get(self._module, self._key, self._default)
+        return self.db.get(self.module, self._key, self._default)
 
 
 class PointerDict(dict):
@@ -99,8 +99,8 @@ class PointerDict(dict):
         key: str,
         default: typing.Optional[typing.Any] = None,
     ):
-        self._db = db
-        self._module = module
+        self.db = db
+        self.module = module
         self._key = key
         self._default = default
         super().__init__(db.get(module, key, default))
@@ -119,7 +119,7 @@ class PointerDict(dict):
         return f"PointerDict({dict(self)})"
 
     def __bool__(self) -> bool:
-        return bool(self._db.get(self._module, self._key, self._default))
+        return bool(self.db.get(self.module, self._key, self._default))
 
     def __setitem__(self, key: str, value: typing.Any):
         super().__setitem__(key, value)
@@ -156,10 +156,10 @@ class PointerDict(dict):
         self._save()
 
     def _save(self):
-        self._db.set(self._module, self._key, dict(self))
+        self.db.set(self.module, self._key, dict(self))
 
     def todict(self):
-        return self._db.get(self._module, self._key, self._default)
+        return self.db.get(self.module, self._key, self._default)
 
 
 class BaseSerializingMiddlewareDict:

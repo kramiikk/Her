@@ -206,7 +206,6 @@ class Modules:
         self.raw_handlers = []
         self.client = client
         self.session = session
-        self._db = db
         self.db = db
         asyncio.ensure_future(self._junk_collector())
 
@@ -359,7 +358,7 @@ class Modules:
     def send_config_one(self, mod: Module, skip_hook: bool = False):
         """Send config to single instance"""
         if hasattr(mod, "config"):
-            modcfg = self._db.get(
+            modcfg = self.db.get(
                 mod.__class__.__name__,
                 "__config__",
                 {},
@@ -411,7 +410,7 @@ class Modules:
     ):
         try:
             if len(inspect.signature(mod.client_ready).parameters) == 2:
-                await mod.client_ready(self.client, self._db)
+                await mod.client_ready(self.client, self.db)
             else:
                 await mod.client_ready()
         except Exception as e:

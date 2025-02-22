@@ -30,9 +30,9 @@ class CommandDispatcher:
         client: CustomTelegramClient,
         db: Database,
     ):
-        self._modules = modules
-        self._client = client
-        self._db = db
+        self.modules = modules
+        self.client = client
+        self.db = db
 
         self.raw_handlers = []
 
@@ -108,12 +108,12 @@ class CommandDispatcher:
             return False
         if len(message.message) <= len(prefix):
             return False
-        txt, func = self._modules.dispatch(command)
+        txt, func = self.modules.dispatch(command)
         if not func:
             return False
         message.message = prefix + txt + message.message[len(prefix + command) :]
 
-        if self._db.get(main.__name__, "grep", False) and not watcher:
+        if self.db.get(main.__name__, "grep", False) and not watcher:
             try:
                 message = GrepHandler(message, self).message
             except SecurityError as e:
@@ -209,7 +209,7 @@ class CommandDispatcher:
                 with contextlib.suppress(AttributeError, UnicodeDecodeError):
                     if not hasattr(message, attr):
                         setattr(message, attr, "")
-        for func in self._modules.watchers:
+        for func in self.modules.watchers:
             asyncio.create_task(
                 self.future_dispatcher(
                     func,

@@ -12,11 +12,9 @@ from importlib.abc import SourceLoader
 from hikkatl.hints import EntityLike
 from hikkatl.tl.types import (
     ChannelFull,
-    Message,
     UserFull,
 )
 
-from . import utils
 from .pointers import PointerDict, PointerList
 
 __all__ = [
@@ -77,35 +75,11 @@ class Module:
     def internal_init(self):
         """Called after the class is initialized in order to pass the client and db. Do not call it yourself"""
         self.db = self.allmodules.db
-        self._db = self.allmodules.db
         self.client = self.allmodules.client
-        self._client = self.allmodules.client
-        self.tg_id = self._client.tg_id
-        self._tg_id = self._client.tg_id
+        self.tg_id = self.client.tg_id
 
     async def on_unload(self):
         """Called after unloading / reloading module"""
-
-    async def invoke(
-        self,
-        command: str,
-        args: typing.Optional[str] = None,
-        peer: typing.Optional[EntityLike] = None,
-        message: typing.Optional[Message] = None,
-    ) -> Message:
-        if command not in self.allmodules.commands:
-            raise ValueError(f"Command {command} not found")
-        if not message and not peer:
-            raise ValueError("Either peer or message must be specified")
-        cmd = f".{command} {args or ''}".strip()
-
-        message = (
-            (await self._client.send_message(peer, cmd))
-            if peer
-            else (await utils.answer(message, cmd))
-        )
-        await self.allmodules.commands[command](message)
-        return message
 
     @property
     def commands(self) -> typing.Dict[str, Command]:
@@ -166,10 +140,10 @@ class Module:
         key: str,
         default: typing.Optional[JSONSerializable] = None,
     ) -> JSONSerializable:
-        return self._db.get(self.__class__.__name__, key, default)
+        return self.db.get(self.__class__.__name__, key, default)
 
     def set(self, key: str, value: JSONSerializable) -> bool:
-        self._db.set(self.__class__.__name__, key, value)
+        self.db.set(self.__class__.__name__, key, value)
 
     def pointer(
         self,
@@ -177,7 +151,7 @@ class Module:
         default: typing.Optional[JSONSerializable] = None,
         item_type: typing.Optional[typing.Any] = None,
     ) -> typing.Union[JSONSerializable, PointerList, PointerDict]:
-        return self._db.pointer(self.__class__.__name__, key, default, item_type)
+        return self.db.pointer(self.__class__.__name__, key, default, item_type)
 
 
 class LoadError(Exception):
