@@ -204,27 +204,33 @@ class RawMessageEditor(BaseMessageEditor):
                 return "🖕"
         return "⚡"
 
-    async def _flush_buffer(self):
+    async def redraw(self):
+        """
+        Implementation of the required abstract method.
+        This method handles the actual message updates.
+        """
         if self._finished:
             return
+        
         async with self._update_lock:
             current_time = time.time()
-
+            
             content = "\n".join(
                 line.strip() for line in "".join(self._buffer).split("\n")
             )
-
+            
             should_update = (
                 self._complete
                 or content.strip()
                 or current_time - self._last_update >= self._force_update_interval
             )
-
+            
             if not should_update:
                 return
+                
             status_emoji = self._get_status_emoji()
             status_text = self._get_status_text()
-
+            
             if self._last_content:
                 content = (
                     f"{self._last_content}\n{content}"
@@ -233,17 +239,24 @@ class RawMessageEditor(BaseMessageEditor):
                 )
             if content:
                 self._last_content = content
+                
             text = f"<pre>{utils.escape_html(content)}</pre>{status_emoji}{status_text}"
-
+            
             try:
                 await utils.answer(self.message, text)
                 self._last_update = current_time
             except hikkatl.errors.rpcerrorlist.MessageTooLongError:
-                await utils.answer(self.message, self._truncate_output(text, 4096))
+                await utils.answer(
+                    self.message, 
+                    self._truncate_output(text, 4096)
+                )
             except Exception as e:
                 logger.error(f"Error updating message: {e}")
             finally:
                 self._buffer.clear()
+
+    async def _flush_buffer(self):
+        await self.redraw()
 
     async def update_stdout(self, stdout):
         stdout = stdout.replace("\r\n", "\n").replace("\r", "\n")
