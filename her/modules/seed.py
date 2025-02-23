@@ -6,6 +6,7 @@ import requests
 import sys
 import time
 import traceback
+from abc import ABC, abstractmethod
 from typing import Dict, Any
 from .. import loader, main, utils
 
@@ -49,7 +50,7 @@ async def sleep_for_task(func: callable, data: bytes, delay: float):
     await func(data.decode())
 
 
-class BaseMessageEditor:
+class BaseMessageEditor(ABC):
     def __init__(
         self,
         message: hikkatl.tl.types.Message,
@@ -69,15 +70,6 @@ class BaseMessageEditor:
         self._is_updating = False
         self._finished = False
 
-    def _get_progress(self):
-        elapsed = time.time() - self.start_time
-        frame = "⏳"
-        if elapsed < 1:
-            elapsed_ms = elapsed * 1000
-            return f"{frame} <b>Running for {elapsed_ms:.1f}ms</b>\n"
-        else:
-            return f"{frame} <b>Running for {elapsed:.1f}s</b>\n"
-
     def _truncate_output(self, text: str, max_len: int, keep_edges=True) -> str:
         """
         Base truncation method that handles both standard and streaming output.
@@ -95,21 +87,24 @@ class BaseMessageEditor:
             edge_len = (max_len - len(separator)) // 2
             return text[:edge_len].strip() + separator + text[-edge_len:].strip()
         return text[:max_len]
-
-    async def cmd_ended(self):
-        self._finished = True
+    
+    @abstractmethod
+    async def cmd_ended(self, rc):
         pass
-
-    async def update_stdout(self):
+        
+    @abstractmethod
+    async def update_stdout(self, stdout):
         if self._finished:
             return
         pass
 
-    async def update_stderr(self):
+    @abstractmethod
+    async def update_stderr(self, stdout):
         if self._finished:
             return
         pass
-
+    
+    @abstractmethod
     async def redraw(self):
         pass
 
@@ -493,12 +488,11 @@ class AdvancedExecutorMod(loader.Module):
             sys.stdout = original_stdout
 
     async def _run_shell(self, message, command):
-        editor = None
+        editor = RawMessageEditor(message, command, message)
         proc = None
         key = hash_msg(message)
 
         try:
-            editor = RawMessageEditor(message, command, message)
             proc = await asyncio.create_subprocess_shell(
                 command,
                 stdin=asyncio.subprocess.PIPE,
@@ -580,7 +574,9 @@ class AdvancedExecutorMod(loader.Module):
                     except Exception:
                         pass
 
-    async def _format_result(self, message, code, result, output, error):
+    async def _format_result(
+        self, message, code, result, output, error, editor: BaseMessageEditor = None
+    ):
         duration = time.time() - self.start_time
         duration_str = f"{duration*1000:.1f}ms" if duration < 1 else f"{duration:.2f}s"
 
@@ -590,7 +586,7 @@ class AdvancedExecutorMod(loader.Module):
         ]
 
         if error:
-            text.append(f"<b>🙂‍↔️ Error:</b>")
+            text.append(f"<b>❌ Error:</b>")
             text.append(f"<pre>{utils.escape_html(result)}</pre>")
         else:
             text.append(f"<b>💻 Result:</b>")
@@ -600,24 +596,18 @@ class AdvancedExecutorMod(loader.Module):
                 text.append(f" ↷ Return: <pre>{utils.escape_html(str(output))}</pre>")
         full_text = "\n".join(text)
         if len(full_text) > 4096:
-            full_text = self._truncate_output(full_text, 4096)
+            full_text = self._truncate_output(full_text, 4096, editor)
         await utils.answer(message, full_text)
 
     def _truncate_output(
         self, text: str, max_len: int, editor: BaseMessageEditor = None
     ) -> str:
-        """
-        Module-level truncation for general output.
-        Takes into account editor state if provided.
-        """
+        """Универсальная обрезка с учётом редактора"""
+        text = utils.escape_html(text.replace("\r\n", "\n").replace("\r", "\n").strip())
+
         if len(text) <= max_len:
             return text
-        separator = "\n... 🔻 [TRUNCATED] 🔻 ...\n"
-
-        if editor and editor.rc is not None:
-            return text[:100] + separator + text[-(max_len - 100 - len(separator)) :]
-        half_len = (max_len - len(separator)) // 2
-        return text[:half_len] + separator + text[-half_len:]
+        return editor._truncate_output(text, max_len)
 
     def get_sub(self, mod):
         """Returns a dictionary of module attributes that don't start with _"""
