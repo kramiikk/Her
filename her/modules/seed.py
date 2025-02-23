@@ -87,11 +87,11 @@ class BaseMessageEditor(ABC):
             edge_len = (max_len - len(separator)) // 2
             return text[:edge_len].strip() + separator + text[-edge_len:].strip()
         return text[:max_len]
-    
+
     @abstractmethod
     async def cmd_ended(self, rc):
         pass
-        
+
     @abstractmethod
     async def update_stdout(self, stdout):
         if self._finished:
@@ -103,7 +103,7 @@ class BaseMessageEditor(ABC):
         if self._finished:
             return
         pass
-    
+
     @abstractmethod
     async def redraw(self):
         pass
@@ -211,26 +211,24 @@ class RawMessageEditor(BaseMessageEditor):
         """
         if self._finished:
             return
-        
         async with self._update_lock:
             current_time = time.time()
-            
+
             content = "\n".join(
                 line.strip() for line in "".join(self._buffer).split("\n")
             )
-            
+
             should_update = (
                 self._complete
                 or content.strip()
                 or current_time - self._last_update >= self._force_update_interval
             )
-            
+
             if not should_update:
                 return
-                
             status_emoji = self._get_status_emoji()
             status_text = self._get_status_text()
-            
+
             if self._last_content:
                 content = (
                     f"{self._last_content}\n{content}"
@@ -239,17 +237,13 @@ class RawMessageEditor(BaseMessageEditor):
                 )
             if content:
                 self._last_content = content
-                
             text = f"<pre>{utils.escape_html(content)}</pre>{status_emoji}{status_text}"
-            
+
             try:
                 await utils.answer(self.message, text)
                 self._last_update = current_time
             except hikkatl.errors.rpcerrorlist.MessageTooLongError:
-                await utils.answer(
-                    self.message, 
-                    self._truncate_output(text, 4096)
-                )
+                await utils.answer(self.message, self._truncate_output(text, 4096))
             except Exception as e:
                 logger.error(f"Error updating message: {e}")
             finally:
@@ -615,12 +609,27 @@ class AdvancedExecutorMod(loader.Module):
     def _truncate_output(
         self, text: str, max_len: int, editor: BaseMessageEditor = None
     ) -> str:
-        """Универсальная обрезка с учётом редактора"""
-        text = utils.escape_html(text.replace("\r\n", "\n").replace("\r", "\n").strip())
+        """Universal truncation that properly handles HTML formatting."""
+        text = text.replace("\r\n", "\n").replace("\r", "\n").strip()
 
-        if len(text) <= max_len:
-            return text
-        return editor._truncate_output(text, max_len)
+        if text.startswith("<pre>") and text.endswith("</pre>"):
+            text = text[5:-6]
+        text = utils.escape_html(text)
+
+        if len(text) <= max_len - 11:
+            return f"<pre>{text}</pre>"
+        separator = "\n... 🔻 [TRUNCATED] 🔻 ...\n"
+
+        available_space = max_len - len(separator) - 11
+
+        if editor and editor.rc is not None:
+            truncated = text[-(available_space):]
+            return f"<pre>{separator}{truncated}</pre>"
+        else:
+            half_space = available_space // 2
+            start = text[:half_space].strip()
+            end = text[-half_space:].strip()
+            return f"<pre>{start}{separator}{end}</pre>"
 
     def get_sub(self, mod):
         """Returns a dictionary of module attributes that don't start with _"""
