@@ -71,26 +71,19 @@ class BaseMessageEditor(ABC):
         self._finished = False
 
     def _truncate_output(self, text: str, max_len: int, keep_edges=True) -> str:
-        """
-        Base truncation method that handles both standard and streaming output.
-        Ensures proper HTML tag handling when truncating.
-        """
         text = text.replace("\r\n", "\n").replace("\r", "\n").strip()
 
         if len(text) <= max_len:
             return utils.escape_html(text)
-        separator = "\n<pre>... 🔻 [TRUNCATED] 🔻 ...</pre>\n"
-
         if self.rc is not None:
-            truncated = text[-(max_len - len(separator)) :]
-            return f"{separator}<pre>{utils.escape_html(truncated)}</pre>"
+            return utils.escape_html(text[-(max_len):])
         if keep_edges:
-            edge_len = (max_len - len(separator)) // 2
+            edge_len = max_len // 2
             start = text[:edge_len].strip()
             end = text[-edge_len:].strip()
-            return f"<pre>{utils.escape_html(start)}</pre>{separator}<pre>{utils.escape_html(end)}</pre>"
-        truncated = text[:max_len]
-        return f"<pre>{utils.escape_html(truncated)}</pre>"
+            separator = "... 🔻 [TRUNCATED] 🔻 ..."
+            return utils.escape_html(f"{start}\n{separator}\n{end}")
+        return utils.escape_html(text[:max_len])
 
     @abstractmethod
     async def cmd_ended(self, rc):
@@ -241,13 +234,15 @@ class RawMessageEditor(BaseMessageEditor):
                 )
             if content:
                 self._last_content = content
-            text = f"<pre>{utils.escape_html(content)}</pre>{status_emoji}{status_text}"
+            content_with_status = f"{content}\n{status_emoji}{status_text}"
 
             try:
-                await utils.answer(self.message, text)
-                self._last_update = current_time
+                formatted_text = f"<pre>{utils.escape_html(content_with_status)}</pre>"
+                await utils.answer(self.message, formatted_text)
             except hikkatl.errors.rpcerrorlist.MessageTooLongError:
-                await utils.answer(self.message, self._truncate_output(text, 4096))
+                truncated = self._truncate_output(content_with_status, 4096)
+                formatted_text = f"<pre>{utils.escape_html(truncated)}</pre>"
+                await utils.answer(self.message, formatted_text)
             except Exception as e:
                 logger.error(f"Error updating message: {e}")
             finally:
@@ -428,9 +423,9 @@ class AdvancedExecutorMod(loader.Module):
                     {
                         "role": "system",
                         "content": (
-                            "Ты — аналитик с философским складом ума, вдохновлённый Камю и Кьеркегором. Твой стиль: логичный, реалистичный, с эмпатией, без пафоса. "
-                            "Ответы должны быть компактными, точными и связанными с контекстом. Используй современный язык и эмодзи, там где уместно. "
-                            "Для выделения важных частей текста вместо Markdown используй следующие HTML-теги: <b>жирный</b>, <i>курсив</i>, <u>подчёркивание</u>, <s>зачёркивание</s>, <pre>блок</pre> и <code>выделенный код</code>."
+                            "Ты — аналитик с философским складом ума, вдохновлённый Камю и Кьеркегором. Твой стиль: без пафоса, логичный, реалистичный, с эмпатией. "
+                            "Ответы должны быть профессиональными, экспертными, компактными и связанными с контекстом. Используй сленг последних лет и эмодзи, там где уместно. "
+                            "Для текста вместо Markdown используй HTML-теги: <b>, <i>, <u>, <s>, <pre> и <code>."
                         ),
                     },
                     {
@@ -440,7 +435,7 @@ class AdvancedExecutorMod(loader.Module):
                         ),
                     },
                 ],
-                "temperature": 0.2,
+                "temperature": 0.3,
             }
 
             try:
