@@ -73,20 +73,24 @@ class BaseMessageEditor(ABC):
     def _truncate_output(self, text: str, max_len: int, keep_edges=True) -> str:
         """
         Base truncation method that handles both standard and streaming output.
+        Ensures proper HTML tag handling when truncating.
         """
         text = text.replace("\r\n", "\n").replace("\r", "\n").strip()
-        text = utils.escape_html(text)
 
         if len(text) <= max_len:
-            return text
-        separator = "\n... 🔻 [TRUNCATED] 🔻 ...\n"
+            return utils.escape_html(text)
+        separator = "\n<pre>... 🔻 [TRUNCATED] 🔻 ...</pre>\n"
 
         if self.rc is not None:
-            return separator + text[-(max_len - len(separator)) :]
+            truncated = text[-(max_len - len(separator)) :]
+            return f"{separator}<pre>{utils.escape_html(truncated)}</pre>"
         if keep_edges:
             edge_len = (max_len - len(separator)) // 2
-            return text[:edge_len].strip() + separator + text[-edge_len:].strip()
-        return text[:max_len]
+            start = text[:edge_len].strip()
+            end = text[-edge_len:].strip()
+            return f"<pre>{utils.escape_html(start)}</pre>{separator}<pre>{utils.escape_html(end)}</pre>"
+        truncated = text[:max_len]
+        return f"<pre>{utils.escape_html(truncated)}</pre>"
 
     @abstractmethod
     async def cmd_ended(self, rc):
@@ -139,7 +143,7 @@ class MessageEditor(BaseMessageEditor):
                 f"{status}"
             )
 
-            max_total = 4096 - len(utils.escape_html(base_text)) - 100
+            max_total = 4096 - len(base_text) - 100
 
             if not self.stderr:
                 stdout_max = max_total
@@ -156,12 +160,12 @@ class MessageEditor(BaseMessageEditor):
             if self.stdout.strip():
                 stdout_text = self._truncate_output(self.stdout, stdout_max)
                 sections.append(
-                    f"<b>📤 Stdout ({len(self.stdout)} chars):</b>\n<pre>{stdout_text}</pre>"
+                    f"<b>📤 Stdout ({len(self.stdout)} chars):</b>\n{stdout_text}"
                 )
             if self.stderr.strip():
                 stderr_text = self._truncate_output(self.stderr, stderr_max)
                 sections.append(
-                    f"<b>📥 Stderr ({len(self.stderr)} chars):</b>\n<pre>{stderr_text}</pre>"
+                    f"<b>📥 Stderr ({len(self.stderr)} chars):</b>\n{stderr_text}"
                 )
             text = base_text
             if sections:
@@ -609,27 +613,12 @@ class AdvancedExecutorMod(loader.Module):
     def _truncate_output(
         self, text: str, max_len: int, editor: BaseMessageEditor = None
     ) -> str:
-        """Universal truncation that properly handles HTML formatting."""
-        text = text.replace("\r\n", "\n").replace("\r", "\n").strip()
+        """Универсальная обрезка с учётом редактора"""
+        text = utils.escape_html(text.replace("\r\n", "\n").replace("\r", "\n").strip())
 
-        if text.startswith("<pre>") and text.endswith("</pre>"):
-            text = text[5:-6]
-        text = utils.escape_html(text)
-
-        if len(text) <= max_len - 11:
-            return f"<pre>{text}</pre>"
-        separator = "\n... 🔻 [TRUNCATED] 🔻 ...\n"
-
-        available_space = max_len - len(separator) - 11
-
-        if editor and editor.rc is not None:
-            truncated = text[-(available_space):]
-            return f"<pre>{separator}{truncated}</pre>"
-        else:
-            half_space = available_space // 2
-            start = text[:half_space].strip()
-            end = text[-half_space:].strip()
-            return f"<pre>{start}{separator}{end}</pre>"
+        if len(text) <= max_len:
+            return text
+        return editor._truncate_output(text, max_len)
 
     def get_sub(self, mod):
         """Returns a dictionary of module attributes that don't start with _"""
