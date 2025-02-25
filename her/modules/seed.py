@@ -185,7 +185,27 @@ class RawMessageEditor(BaseMessageEditor):
         self._complete = False
         self._last_content = ""
         self._last_update = time.time()
-        self._force_update_interval = 1.0
+        self._force_update_interval = 3
+        self._min_update_interval = 2
+        self._buffer_threshold = 1024
+        self._pending_update = None
+
+    async def _flush_buffer(self):
+        await self.redraw()
+
+    async def update_stdout(self, stdout):
+        stdout = stdout.replace("\r\n", "\n").replace("\r", "\n")
+        self._buffer.append(stdout)
+
+        current_time = time.time()
+        buffer_size = len("".join(self._buffer))
+
+        if (
+            buffer_size > self._buffer_threshold
+            or current_time - self._last_flush > self._min_update_interval
+        ):
+            await self._schedule_update()
+            self._last_flush = current_time
 
     def _get_status_text(self):
         elapsed = time.time() - self.start_time
@@ -201,77 +221,54 @@ class RawMessageEditor(BaseMessageEditor):
                 return "🖕"
         return "⚡"
 
+    async def _schedule_update(self):
+        if self._pending_update is not None:
+            self._pending_update.cancel()
+
+        async def _debounced_update():
+            await asyncio.sleep(1)
+            await self._flush_buffer()
+
+        self._pending_update = asyncio.create_task(_debounced_update())
+
     async def redraw(self):
-        """
-        Implementation of the required abstract method.
-        This method handles the actual message updates.
-        """
-        if self._finished:
+        if self._finished or not self._buffer:
             return
         async with self._update_lock:
             current_time = time.time()
 
-            content = "\n".join(
-                line.strip() for line in "".join(self._buffer).split("\n")
-            )
-
-            should_update = (
-                self._complete
-                or content.strip()
-                or current_time - self._last_update >= self._force_update_interval
-            )
-
-            if not should_update:
+            if (
+                current_time - self._last_update < self._min_update_interval
+                and not self._complete
+            ):
                 return
+            content = "".join(self._buffer).strip()
+            self._buffer.clear()
+
+            full_content = (
+                f"{self._last_content}\n{content}" if self._last_content else content
+            )
+            self._last_content = full_content[-4096:]
+
             status_emoji = self._get_status_emoji()
             status_text = self._get_status_text()
-
-            if self._last_content:
-                content = (
-                    f"{self._last_content}\n{content}"
-                    if content
-                    else self._last_content
-                )
-            if content:
-                self._last_content = content
-            content_with_status = f"{content}\n{status_emoji}{status_text}"
+            content_with_status = f"{full_content}\n{status_emoji}{status_text}"
 
             try:
-                formatted_text = f"<pre>{utils.escape_html(content_with_status)}</pre>"
+                truncated = utils.escape_html(content_with_status[-4096:])
+                formatted_text = f"<pre>{truncated}</pre>"
                 await utils.answer(self.message, formatted_text)
-            except hikkatl.errors.rpcerrorlist.MessageTooLongError:
-                truncated = self._truncate_output(content_with_status, 4096)
-                formatted_text = f"<pre>{utils.escape_html(truncated)}</pre>"
-                await utils.answer(self.message, formatted_text)
+                self._last_update = current_time
             except Exception as e:
-                logger.error(f"Error updating message: {e}")
-            finally:
-                self._buffer.clear()
-
-    async def _flush_buffer(self):
-        await self.redraw()
-
-    async def update_stdout(self, stdout):
-        stdout = stdout.replace("\r\n", "\n").replace("\r", "\n")
-        self._buffer.append(stdout)
-
-        current_time = time.time()
-        buffer_size = len("".join(self._buffer))
-
-        if buffer_size > 256 or current_time - self._last_flush > 0.5:
-            await self._flush_buffer()
-            self._last_flush = current_time
+                logger.error(f"Update error: {e}")
 
     async def update_stderr(self, stderr):
-        stderr = stderr.replace("\r\n", "\n").replace("\r", "\n")
-        self._buffer.append(stderr)
-        await self._flush_buffer()
-        self._last_flush = time.time()
+        await self.update_stdout(stderr)
 
     async def cmd_ended(self, rc):
         self.rc = rc
         self._complete = True
-        await self._flush_buffer()
+        await self.redraw()
         self._buffer.clear()
 
 
