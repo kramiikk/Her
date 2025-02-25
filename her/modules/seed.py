@@ -232,7 +232,7 @@ class RawMessageEditor(BaseMessageEditor):
         self._pending_update = asyncio.create_task(_debounced_update())
 
     async def redraw(self):
-        if self._finished or not self._buffer:
+        if self._finished or (not self._buffer and not self._complete):
             return
         async with self._update_lock:
             current_time = time.time()
