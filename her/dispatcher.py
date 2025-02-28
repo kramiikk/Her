@@ -95,6 +95,8 @@ class CommandDispatcher:
                 return False
         message = utils.censor(event.message)
 
+        if not hasattr(message, "message") or message.message is None:
+            return False
         prefix = "."
 
         if not message.message.startswith(prefix):
