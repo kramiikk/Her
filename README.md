@@ -1,5 +1,3 @@
-# ✨ Her_UserBot
-
 ## 🚀 Installation
 
 ```bash
