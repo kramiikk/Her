@@ -298,6 +298,8 @@ class Her:
     async def amain_wrapper(self, client: CustomTelegramClient):
         """Wrapper around amain"""
         try:
+            await asyncio.sleep(random.uniform(13, 99))
+
             await client.start()
             first = True
             me = await client.get_me()
@@ -368,7 +370,7 @@ class Her:
         await modules.send_ready()
 
         if first:
-            logging.info(f"\n\n• Version 1.7.9\n\n• For {client.tg_id}")
+            logging.info(f"\n\n• Version 1.8.0\n\n• For {client.tg_id}")
         await client.run_until_disconnected()
 
     async def _main(self):

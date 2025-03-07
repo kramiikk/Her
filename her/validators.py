@@ -4,8 +4,6 @@ import typing
 
 import grapheme
 
-from . import utils
-
 ConfigAllowedTypes = typing.Union[tuple, list, str, int, bool, None]
 
 VALIDATORS_TRANSLATIONS = {
@@ -14,15 +12,12 @@ VALIDATORS_TRANSLATIONS = {
     "integer_range": "{sign}integer from {minimum} to {maximum}{digits}",
     "integer": "{sign}integer{digits}",
     "integer_max": "{sign}integer less than {maximum}{digits}",
-    "choice": "one of the following: {possible}",
-    "multichoice": "list of values, where each one must be one of: {possible}",
     "each": " (each must be {each})",
     "fixed_len": " (exactly {fixed_len} pcs.)",
     "max_len": " (up to {max_len} pcs.)",
     "len_range": " (from {min_len} to {max_len} pcs.)",
     "min_len": " (at least {min_len} pcs.)",
     "series": "series of values{len}{each}, separated with «,»",
-    "link": "link",
     "string_fixed_len": "string of length {length}",
     "string": "string",
     "string_max_len": "string of length up to {max_len}",
@@ -33,8 +28,6 @@ VALIDATORS_TRANSLATIONS = {
     "float_range": "{sign}float from {minimum} to {maximum}",
     "float": "{sign}float",
     "float_max": "{sign}float less than {maximum}",
-    "union": "one of the following:\n",
-    "empty": "empty value",
     "entity_like": "link to entity, username or Telegram ID",
 }
 
@@ -178,72 +171,6 @@ class Integer(Validator):
         return value
 
 
-class Choice(Validator):
-    """Check whether entered value is in the allowed list"""
-
-    def __init__(
-        self,
-        possible_values: typing.List[ConfigAllowedTypes],
-        /,
-    ):
-        super().__init__(
-            functools.partial(self._validate, possible_values=possible_values),
-            {
-                "en": VALIDATORS_TRANSLATIONS["choice"].format(
-                    possible=" / ".join(list(map(str, possible_values)))
-                )
-            },
-            _internal_id="Choice",
-        )
-
-    @staticmethod
-    def _validate(
-        value: ConfigAllowedTypes,
-        /,
-        *,
-        possible_values: typing.List[ConfigAllowedTypes],
-    ) -> ConfigAllowedTypes:
-        if value not in possible_values:
-            raise ValidationError(
-                f"Passed value ({value}) is not one of the following:"
-                f" {' / '.join(list(map(str, possible_values)))}"
-            )
-        return value
-
-
-class MultiChoice(Validator):
-    """Check whether every entered value is in the allowed list"""
-
-    def __init__(
-        self,
-        possible_values: typing.List[ConfigAllowedTypes],
-        /,
-    ):
-        possible = " / ".join(list(map(str, possible_values)))
-        super().__init__(
-            functools.partial(self._validate, possible_values=possible_values),
-            {"en": VALIDATORS_TRANSLATIONS["multichoice"].format(possible=possible)},
-            _internal_id="MultiChoice",
-        )
-
-    @staticmethod
-    def _validate(
-        value: typing.List[ConfigAllowedTypes],
-        /,
-        *,
-        possible_values: typing.List[ConfigAllowedTypes],
-    ) -> typing.List[ConfigAllowedTypes]:
-        if not isinstance(value, (list, tuple)):
-            value = [value]
-        for item in value:
-            if item not in possible_values:
-                raise ValidationError(
-                    f"One of passed values ({item}) is not one of the following:"
-                    f" {' / '.join(list(map(str, possible_values)))}"
-                )
-        return list(set(value))
-
-
 class Series(Validator):
     """Represents the series of value (simply `list`)"""
 
@@ -337,26 +264,6 @@ class Series(Validator):
                     )
         value = list(filter(lambda x: x, value))
 
-        return value
-
-
-class Link(Validator):
-    """Valid url must be specified"""
-
-    def __init__(self):
-        super().__init__(
-            lambda value: self._validate(value),
-            {"en": VALIDATORS_TRANSLATIONS["link"]},
-            _internal_id="Link",
-        )
-
-    @staticmethod
-    def _validate(value: ConfigAllowedTypes, /) -> str:
-        try:
-            if not utils.check_url(value):
-                raise Exception("Invalid URL")
-        except Exception:
-            raise ValidationError(f"Passed value ({value}) is not a valid URL")
         return value
 
 
@@ -546,96 +453,6 @@ class Float(Validator):
         if maximum is not None and value > maximum:
             raise ValidationError(f"Passed value ({value}) is greater than maximum one")
         return value
-
-
-class TelegramID(Validator):
-    def __init__(self):
-        super().__init__(
-            self._validate,
-            {"en": "Telegram ID"},
-            _internal_id="TelegramID",
-        )
-
-    @staticmethod
-    def _validate(value: ConfigAllowedTypes, /) -> int:
-        e = ValidationError(f"Passed value ({value}) is not a valid telegram id")
-
-        try:
-            value = int(str(value).strip())
-        except Exception:
-            raise e
-        if str(value).startswith("-100"):
-            value = int(str(value)[4:])
-        if value > 2**64 - 1 or value < 0:
-            raise e
-        return value
-
-
-class Union(Validator):
-    def __init__(self, *validators):
-        doc = {"en": VALIDATORS_TRANSLATIONS["union"]}
-
-        def case(x: str) -> str:
-            return x[0].upper() + x[1:]
-
-        for validator in validators:
-            doc["en"] += f"- {case(validator.doc.get('en', validator.doc['en']))}\n"
-        doc["en"] = doc["en"].strip()
-
-        super().__init__(
-            functools.partial(self._validate, validators=validators),
-            doc,
-            _internal_id="Union",
-        )
-
-    @staticmethod
-    def _validate(
-        value: ConfigAllowedTypes,
-        /,
-        *,
-        validators: list,
-    ) -> ConfigAllowedTypes:
-        for validator in validators:
-            try:
-                return validator.validate(value)
-            except ValidationError:
-                pass
-        raise ValidationError(f"Passed value ({value}) is not valid")
-
-
-class NoneType(Validator):
-    def __init__(self):
-        super().__init__(
-            self._validate,
-            {"en": VALIDATORS_TRANSLATIONS["empty"]},
-            _internal_id="NoneType",
-        )
-
-    @staticmethod
-    def _validate(value: ConfigAllowedTypes, /) -> None:
-        if value is not None and str(value).strip() != "":
-            raise ValidationError(f"Passed value ({value}) is not None or empty string")
-        return None
-
-
-class Hidden(Validator):
-    def __init__(self, validator: typing.Optional[Validator] = None):
-        if not validator:
-            validator = String()
-        super().__init__(
-            functools.partial(self._validate, validator=validator),
-            validator.doc,
-            _internal_id="Hidden",
-        )
-
-    @staticmethod
-    def _validate(
-        value: ConfigAllowedTypes,
-        /,
-        *,
-        validator: Validator,
-    ) -> ConfigAllowedTypes:
-        return validator.validate(value)
 
 
 class EntityLike(RegExp):

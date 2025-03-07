@@ -1,11 +1,9 @@
-import inspect
 import io
 import json
 import logging
 import os
 import re
 import typing
-from urllib.parse import urlparse
 
 import hikkatl
 from hikkatl.tl.custom.message import Message
@@ -161,14 +159,6 @@ async def answer(
     return result
 
 
-def check_url(url: str) -> bool:
-    """Statically checks url for validity"""
-    try:
-        return bool(urlparse(url).netloc)
-    except Exception:
-        return False
-
-
 def is_serializable(x: typing.Any, /) -> bool:
     """Checks if object is JSON-serializable"""
     try:
@@ -191,12 +181,6 @@ def remove_html(text: str, escape: bool = False, keep_emojis: bool = False) -> s
             text,
         )
     )
-
-
-def get_kwargs() -> typing.Dict[str, typing.Any]:
-    """Get kwargs of function, in which is called"""
-    keys, _, _, values = inspect.getargvalues(inspect.currentframe().f_back)
-    return {key: values[key] for key in keys if key != "self"}
 
 
 def iter_attrs(obj: typing.Any, /) -> typing.List[typing.Tuple[str, typing.Any]]:

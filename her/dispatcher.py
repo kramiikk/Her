@@ -6,7 +6,7 @@ import time
 from typing import Optional, Union, List
 
 from hikkatl import events
-from hikkatl.errors import FloodWaitError, RPCError, ChatAdminRequiredError
+from hikkatl.errors import FloodWaitError, RPCError
 from hikkatl.tl.types import Message
 
 from . import main, utils
@@ -57,35 +57,6 @@ class CommandDispatcher:
             await asyncio.sleep(self._flood_delay)
             self._api_calls = 1
             self._last_reset = current_time
-
-    async def safe_api_call(self, coro):
-        """Обёртка для безопасного вызова API"""
-        try:
-            await self._api_call_guard()
-
-            for _ in range(3):
-                try:
-                    return await coro
-                except FloodWaitError as e:
-                    wait_time = e.seconds + 5
-                    logger.warning(
-                        f"FloodWait detected. Sleeping for {wait_time} seconds"
-                    )
-                    await asyncio.sleep(wait_time)
-                except ChatAdminRequiredError:
-                    logger.error("Missing admin rights for operation")
-                    raise
-                except RPCError as e:
-                    if "CHAT_WRITE_FORBIDDEN" in str(e):
-                        logger.error("Can't write to this chat")
-                        raise
-                    logger.error("RPC error: %s", e)
-                    await asyncio.sleep(1)
-                    continue
-            raise RuntimeError("Failed after 3 retries")
-        except Exception as e:
-            logger.exception("Error in safe_api_call: %s", e)
-            raise
 
     async def _handle_command(self, event, watcher=False) -> Union[bool, tuple]:
         if not event.out:
@@ -292,22 +263,16 @@ class GrepHandler:
 
         async def modified_edit(text, *args, **kwargs):
             kwargs["parse_mode"] = "HTML"
-            return await self.dispatcher.safe_api_call(
-                self.message.edit(self.message, process_text(text), *args, **kwargs)
-            )
+            return await self.message.edit(self.message, process_text(text), *args, **kwargs)
 
         async def modified_reply(text, *args, **kwargs):
             kwargs["parse_mode"] = "HTML"
-            return await self.dispatcher.safe_api_call(
-                self.message.reply(process_text(text), *args, **kwargs)
-            )
+            return await self.message.reply(process_text(text), *args, **kwargs)
 
         async def modified_respond(text, *args, **kwargs):
             kwargs["parse_mode"] = "HTML"
             kwargs.setdefault("reply_to", utils.get_topic(self.message))
-            return await self.dispatcher.safe_api_call(
-                self.message.respond(process_text(text), *args, **kwargs)
-            )
+            return await self.message.respond(process_text(text), *args, **kwargs)
 
         self.message.edit = modified_edit
         self.message.reply = modified_reply

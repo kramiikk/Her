@@ -311,6 +311,8 @@ class AdvancedExecutorMod(loader.Module):
         command = command.strip()
         if not command:
             return False
+        if re.match(r"^\s*[\d.]+\s*[\+\-\*\/\%\*\*]+\s*[\d.]+\s*$", command):
+            return False
         if command.startswith(
             ("r.", "reply.", "message.", "event.", "self.", "await ")
         ):
@@ -363,6 +365,8 @@ class AdvancedExecutorMod(loader.Module):
             r"^\s*class\s+",
             r"^\s*async\s+def",
             r"^\s*await\s+",
+            r"^\s*\d+\s*[\+\-\*\/\%\*\*]+",
+            r"^\s*[\+\-]?\d+\.?\d*\s*[\+\-\*\/\%\*\*]",
         ]
 
         if any(re.match(pattern, command) for pattern in python_patterns):
@@ -395,12 +399,14 @@ class AdvancedExecutorMod(loader.Module):
             "<<",
             "&",
             ";",
-            "*",
             "2>",
             "2>&1",
         ]
+
         if any(op in command for op in shell_operators):
             return True
+        if re.match(r"^[\s\d\+\-\*\/\(\)\.\%\*\*]+$", command):
+            return False
         return False
 
     @loader.command()
