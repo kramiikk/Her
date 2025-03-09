@@ -7,7 +7,6 @@ import logging
 import os
 import random
 import signal
-import sqlite3
 import sys
 import typing
 from pathlib import Path
@@ -149,11 +148,8 @@ class Her:
         try:
             session = SQLiteSession(str(session_path))
             self.sessions.append(session)
-        except sqlite3.DatabaseError as e:
-            logging.error(f"Invalid session: {e}")
-            self._handle_corrupted_session(session_path)
         except Exception as e:
-            logging.error(f"Unexpected error: {e}")
+            logging.error(f"Invalid session: {e}")
             self._handle_corrupted_session(session_path)
 
     def _handle_corrupted_session(self, session_path: Path):
@@ -386,18 +382,10 @@ class Her:
             logging.critical(f"Critical error: {e}")
             sys.exit(1)
 
-    def _shutdown_handler(self):
-        """Shutdown handler"""
-        logging.info("Bye")
-        sys.exit(0)
-
     def main(self):
         """Main entrypoint"""
         signal.signal(signal.SIGINT, self._shutdown_handler)
-        try:
-            self.loop.run_until_complete(self._main())
-        except KeyboardInterrupt:
-            self._shutdown_handler()
+        self.loop.run_until_complete(self._main())
         self.loop.close()
 
 

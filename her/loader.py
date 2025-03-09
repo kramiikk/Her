@@ -256,9 +256,7 @@ class Modules:
             try:
                 mod_shortname = os.path.basename(mod).rsplit(".py", maxsplit=1)[0]
                 module_name = f"{__package__}.{"modules"}.{mod_shortname}"
-                user_friendly_origin = (
-                    "<core {}>" if origin == "<core>" else "<file {}>"
-                ).format(module_name)
+                user_friendly_origin = ("<core {}>").format(module_name)
 
                 spec = importlib.machinery.ModuleSpec(
                     module_name,
