@@ -382,10 +382,18 @@ class Her:
             logging.critical(f"Critical error: {e}")
             sys.exit(1)
 
+    def _shutdown_handler(self):
+        """Shutdown handler"""
+        logging.info("Bye")
+        sys.exit(0)
+
     def main(self):
         """Main entrypoint"""
         signal.signal(signal.SIGINT, self._shutdown_handler)
-        self.loop.run_until_complete(self._main())
+        try:
+            self.loop.run_until_complete(self._main())
+        except KeyboardInterrupt:
+            self._shutdown_handler()
         self.loop.close()
 
 
