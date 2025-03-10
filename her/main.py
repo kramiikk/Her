@@ -382,7 +382,7 @@ class Her:
             logging.critical(f"Critical error: {e}")
             sys.exit(1)
 
-    def _shutdown_handler(self):
+    def _shutdown_handler(self, sig=None, frame=None):
         """Shutdown handler"""
         logging.info("Bye")
         sys.exit(0)
