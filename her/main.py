@@ -274,7 +274,8 @@ class Her:
             if client:
                 self.clients.append(client)
                 return True
-            return False
+            logging.critical("Unable to initialize client. Exiting.")
+            sys.exit(1)
         try:
             client = await self._common_client_setup(
                 self._create_client(self.sessions[0])
@@ -284,12 +285,8 @@ class Her:
             self.clients.append(client)
             return True
         except (AuthKeyInvalidError, SessionExpiredError):
-            logging.error("Session invalid, attempting re-auth...")
-            client = await self._initial_setup()
-            if client:
-                self.clients.append(client)
-                return True
-            return False
+            logging.error("Session invalid. Unable to re-authenticate.")
+            sys.exit(1)
 
     async def amain_wrapper(self, client: CustomTelegramClient):
         """Wrapper around amain"""
@@ -394,7 +391,11 @@ class Her:
             self.loop.run_until_complete(self._main())
         except KeyboardInterrupt:
             self._shutdown_handler()
-        self.loop.close()
+        except Exception as e:
+            logging.critical(f"Unhandled error: {e}")
+            sys.exit(1)
+        finally:
+            self.loop.close()
 
 
 her = Her()
