@@ -268,25 +268,39 @@ class Her:
                 await client.disconnect()
 
     async def _init_clients(self) -> bool:
-        """Initialize clients and return success status"""
+        """Initialize clients with better error handling"""
         if not self.sessions:
             client = await self._initial_setup()
             if client:
                 self.clients.append(client)
                 return True
             logging.critical("Unable to initialize client. Exiting.")
-            sys.exit(1)
+            return False
         try:
             client = await self._common_client_setup(
                 self._create_client(self.sessions[0])
             )
             if not await client.is_user_authorized():
-                raise SessionExpiredError
+                logging.warning("Session expired, attempting to re-authenticate")
+                await client.disconnect()
+                return await self._handle_expired_session()
             self.clients.append(client)
             return True
         except (AuthKeyInvalidError, SessionExpiredError):
-            logging.error("Session invalid. Unable to re-authenticate.")
-            sys.exit(1)
+            logging.error("Session invalid. Attempting to recreate...")
+            return await self._handle_expired_session()
+
+    async def _handle_expired_session(self):
+        """Handle expired session by removing it and trying to create a new one"""
+        session_path = self.base_path / "her.session"
+        try:
+            session_path.unlink(missing_ok=True)
+            self.sessions = []
+            logging.info("Creating a new session...")
+            return await self._initial_setup() is not None
+        except Exception as e:
+            logging.error(f"Failed to handle expired session: {e}")
+            return False
 
     async def amain_wrapper(self, client: CustomTelegramClient):
         """Wrapper around amain"""
@@ -380,12 +394,33 @@ class Her:
             sys.exit(1)
 
     def _shutdown_handler(self, sig=None, frame=None):
-        """Shutdown handler"""
+        """Improved shutdown handler that cleans up pending tasks"""
+        logging.info("Shutting down gracefully...")
+
+        for task in asyncio.all_tasks(self.loop):
+            if task is not asyncio.current_task(self.loop):
+                task.cancel()
+        self.loop.create_task(self._close_clients())
         logging.info("Bye")
-        sys.exit(0)
+
+        if sig is not None:
+            sys.exit(0)
+
+    async def _close_clients(self):
+        """Gracefully close all client connections"""
+        close_tasks = []
+        for client in self.clients:
+            if client.is_connected():
+                close_tasks.append(client.disconnect())
+        if close_tasks:
+            try:
+                await asyncio.wait_for(asyncio.gather(*close_tasks), timeout=5)
+            except asyncio.TimeoutError:
+                logging.warning("Some clients didn't disconnect in time")
+        self.loop.stop()
 
     def main(self):
-        """Main entrypoint"""
+        """Improved main entrypoint with better error handling"""
         signal.signal(signal.SIGINT, self._shutdown_handler)
         try:
             self.loop.run_until_complete(self._main())
@@ -393,8 +428,19 @@ class Her:
             self._shutdown_handler()
         except Exception as e:
             logging.critical(f"Unhandled error: {e}")
+            self._shutdown_handler()
             sys.exit(1)
         finally:
+            pending = asyncio.all_tasks(self.loop)
+            for task in pending:
+                task.cancel()
+            if pending:
+                try:
+                    self.loop.run_until_complete(
+                        asyncio.gather(*pending, return_exceptions=True)
+                    )
+                except Exception:
+                    pass
             self.loop.close()
 
 
