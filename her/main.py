@@ -239,7 +239,7 @@ class Her:
             raise
 
     async def _initial_setup(self) -> bool:
-        """Исправленный процесс начальной настройки"""
+        """Improved initial setup with non-interactive fallback"""
         client = None
         try:
             session_path = self.base_path / "her.session"
@@ -252,11 +252,33 @@ class Her:
 
             if not await client.is_user_authorized():
                 logging.info("Starting authentication...")
-                await client.start(
-                    phone=lambda: input("Phone: "),
-                    password=lambda: getpass.getpass("2FA: "),
-                    code_callback=lambda: input("Code: "),
+
+                phone = (
+                    self.arguments.phone[0]
+                    if self.arguments.phone
+                    else os.environ.get("TELEGRAM_PHONE")
                 )
+                password = os.environ.get("TELEGRAM_2FA", "")
+
+                if not phone:
+                    try:
+                        phone = input("Phone: ")
+                    except EOFError:
+                        logging.error("Cannot read phone number interactively.")
+                        return None
+                try:
+                    await client.start(
+                        phone=lambda: phone,
+                        password=lambda: password,
+                        code_callback=lambda: (
+                            input("Code: ")
+                            if sys.stdin.isatty()
+                            else os.environ.get("TELEGRAM_CODE", "")
+                        ),
+                    )
+                except EOFError:
+                    logging.error("Cannot read authentication code interactively.")
+                    return None
             client.session.save()
             self._read_sessions()
             return client
