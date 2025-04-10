@@ -624,7 +624,7 @@ class AdvancedExecutorMod(loader.Module):
             name: getattr(mod, name) for name in dir(mod) if not name.startswith("_")
         }
 
-    @loader.command
+    @loader.command()
     async def kickall(self, message):
         """Kick all members from the group"""
         if not message.is_group and not message.is_channel:
