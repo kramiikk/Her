@@ -361,23 +361,8 @@ class Her:
         )
 
         client.add_event_handler(
-            dispatcher.handle_incoming,
-            events.ChatAction,
-        )
-
-        client.add_event_handler(
             dispatcher.handle_command,
             events.NewMessage(forwards=False),
-        )
-
-        client.add_event_handler(
-            dispatcher.handle_command,
-            events.MessageEdited(),
-        )
-
-        client.add_event_handler(
-            dispatcher.handle_raw,
-            events.Raw(),
         )
 
     async def amain(self, first: bool, client: CustomTelegramClient):

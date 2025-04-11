@@ -94,15 +94,6 @@ class CommandDispatcher:
                 return False
         return message, prefix, txt, func
 
-    async def handle_raw(self, event: events.Raw) -> None:
-        """Handle raw events"""
-        for handler in self.raw_handlers:
-            if isinstance(event, tuple(handler.updates)):
-                try:
-                    await handler(event)
-                except Exception as e:
-                    logger.exception("Error in raw handler %s: %s", handler.id, e)
-
     async def handle_command(
         self,
         event: Union[events.NewMessage, events.MessageDeleted],
