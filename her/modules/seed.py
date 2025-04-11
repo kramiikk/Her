@@ -628,73 +628,83 @@ class AdvancedExecutorMod(loader.Module):
     async def kickall(self, message):
         """Kick all members from the group"""
         if not message.is_group and not message.is_channel:
-            return await utils.answer(message, "⚠️ <b>This command can only be used in groups or channels!</b>")
-        
+            return await utils.answer(
+                message, "⚠️ <b>This command can only be used in groups or channels!</b>"
+            )
         chat = await message.get_chat()
-        
+
         if not chat.admin_rights or not chat.admin_rights.ban_users:
-            return await utils.answer(message, "❌ <b>I need admin rights with ban users permission!</b>")
-        
+            return await utils.answer(
+                message, "❌ <b>I need admin rights with ban users permission!</b>"
+            )
         await utils.answer(message, "🔄 <b>Starting to remove all members...</b>")
-        
+
         kicked_count = 0
         failed_count = 0
         start_time = time.time()
-        
+
         # Get all participants
+
         try:
+            # Get the bot's own ID
+
+            me = await self.client.get_me()
+            my_id = me.id
+
             async for participant in self.client.iter_participants(chat):
                 # Skip yourself, bots, and the chat creator
+
                 if (
-                    participant.id == self.client.hikkatl_me.id or 
-                    participant.bot or 
-                    (chat.creator and participant.id == chat.creator.id)
+                    participant.id == my_id
+                    or participant.bot
+                    or (chat.creator and participant.id == chat.creator.id)
                 ):
                     continue
-                
                 try:
-                    await self.client(hikkatl.tl.functions.channels.EditBannedRequest(
-                        chat.id,
-                        participant.id,
-                        hikkatl.tl.types.ChatBannedRights(
-                            until_date=None,
-                            view_messages=True,
-                            send_messages=True,
-                            send_media=True,
-                            send_stickers=True,
-                            send_gifs=True,
-                            send_games=True,
-                            send_inline=True,
-                            embed_links=True
+                    await self.client(
+                        hikkatl.tl.functions.channels.EditBannedRequest(
+                            chat.id,
+                            participant.id,
+                            hikkatl.tl.types.ChatBannedRights(
+                                until_date=None,
+                                view_messages=True,
+                                send_messages=True,
+                                send_media=True,
+                                send_stickers=True,
+                                send_gifs=True,
+                                send_games=True,
+                                send_inline=True,
+                                embed_links=True,
+                            ),
                         )
-                    ))
+                    )
                     kicked_count += 1
-                    
+
                     # Update status every 10 members or every 5 seconds
+
                     if kicked_count % 10 == 0 or time.time() - start_time > 5:
                         await utils.answer(
-                            message, 
+                            message,
                             f"🔄 <b>Kicking members in progress...</b>\n"
                             f"✅ Kicked: {kicked_count}\n"
-                            f"❌ Failed: {failed_count}"
+                            f"❌ Failed: {failed_count}",
                         )
                         start_time = time.time()
-                        
                     # Sleep a bit to avoid flood wait
+
                     await asyncio.sleep(0.5)
-                    
                 except Exception as e:
                     logger.error(f"Failed to kick {participant.id}: {e}")
                     failed_count += 1
-        
         except Exception as e:
-            return await utils.answer(message, f"❌ <b>Error getting participants:</b> {str(e)}")
-        
+            return await utils.answer(
+                message, f"❌ <b>Error getting participants:</b> {str(e)}"
+            )
         await utils.answer(
-            message, 
+            message,
             f"✅ <b>Operation completed!</b>\n"
             f"👢 Total kicked: {kicked_count}\n"
-            f"❌ Failed: {failed_count}"
+            f"❌ Failed: {failed_count}",
         )
 
     async def on_unload(self):
