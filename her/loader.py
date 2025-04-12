@@ -307,11 +307,6 @@ class Modules:
                 self.client.dispatcher.raw_handlers.append(handler)
                 instance.raw_handlers.append(handler)
 
-    def register_commands(self, instance: Module):
-        """Register commands from instance"""
-        for _command, cmd in instance.her_commands.items():
-            self.commands.update({_command.lower(): cmd})
-
     def register_watchers(self, instance: Module):
         """Register watcher from instance"""
         for _watcher in self.watchers:
@@ -428,6 +423,5 @@ class Modules:
 
                 if method.autostart:
                     method.start()
-        self.register_commands(mod)
         self.register_watchers(mod)
         self.register_raw_handlers(mod)

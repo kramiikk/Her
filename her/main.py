@@ -18,7 +18,7 @@ from hikkatl.network.connection import ConnectionTcpFull
 
 
 from . import configurator, database, loader
-from .dispatcher import CommandDispatcher
+from .dispatcher import TextDispatcher
 from .tl_cache import CustomTelegramClient
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -350,17 +350,12 @@ class Her:
         db: database.Database,
     ):
         """Inits and adds dispatcher instance to client"""
-        dispatcher = CommandDispatcher(modules, client, db)
+        dispatcher = TextDispatcher(modules, client, db)
         client.dispatcher = dispatcher
 
         client.add_event_handler(
             dispatcher.handle_incoming,
             events.NewMessage,
-        )
-
-        client.add_event_handler(
-            dispatcher.handle_command,
-            events.NewMessage(forwards=False),
         )
 
     async def amain(self, first: bool, client: CustomTelegramClient):

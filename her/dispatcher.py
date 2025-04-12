@@ -2,16 +2,14 @@ import asyncio
 import contextlib
 import logging
 import re
-from typing import Optional, Union, List
+from typing import Optional, List
 
 from hikkatl import events
-from hikkatl.errors import FloodWaitError, RPCError
 from hikkatl.tl.types import Message
 
 from . import main, utils
 from .database import Database
 from .loader import Modules
-from .tl_cache import CustomTelegramClient
 
 logger = logging.getLogger(__name__)
 
@@ -20,136 +18,16 @@ class SecurityError(Exception):
     pass
 
 
-class CommandDispatcher:
-    """Handles command dispatching and message processing"""
+class TextDispatcher:
+    """Handles dispatching and message processing"""
 
     def __init__(
         self,
         modules: Modules,
-        client: CustomTelegramClient,
         db: Database,
     ):
         self.modules = modules
-        self.client = client
         self.db = db
-
-        self.raw_handlers = []
-
-        self._flood_delay = 3
-        self._last_reset = 0.0
-        self._reset_interval = 30.0
-
-    async def _handle_command(self, event, watcher=False) -> Union[bool, tuple]:
-        # Quick validation checks to avoid unnecessary processing
-        if not event.out:
-            return False
-            
-        # Early message validation
-        if not hasattr(event, "message") or not hasattr(event.message, "message"):
-            return False
-            
-        message = utils.censor(event.message)
-        
-        # More validation
-        if not hasattr(message, "message") or message.message is None:
-            return False
-            
-        prefix = "."
-        if not message.message.startswith(prefix):
-            return False
-            
-        # Extract command more efficiently
-        cmd_parts = message.message[len(prefix):].strip().split(maxsplit=1)
-        if not cmd_parts:
-            return False
-            
-        command = cmd_parts[0]
-        if not command:
-            return False
-            
-        txt, func = self.modules.dispatch(command)
-        if not func:
-            return False
-            
-        message.message = prefix + txt + message.message[len(prefix + command):]
-
-        # Only process grep if needed
-        if self.db.get(main.__name__, "grep", False) and not watcher:
-            try:
-                message = GrepHandler(message, self).message
-            except SecurityError as e:
-                logger.warning("Grep security error: %s", e)
-                return False
-                
-        return message, prefix, txt, func
-
-    async def handle_command(self, event: events.NewMessage) -> None:
-        """Handle incoming commands, optimized to reduce API calls"""
-        # Skip processing for non-NewMessage events
-        if not isinstance(event, events.NewMessage):
-            return
-            
-        result = await self._handle_command(event)
-        if not result:
-            return
-            
-        message, _, _, func = result
-
-        # Use create_task to avoid blocking
-        asyncio.create_task(
-            self.future_dispatcher(
-                func,
-                message,
-                self.command_exc,
-            )
-        )
-
-    async def command_exc(
-        self, exc: Exception, _func: callable, message: Message
-    ) -> None:
-        """Handle command exceptions"""
-        logger.exception("Command failed", exc_info=exc)
-
-        if isinstance(exc, RPCError):
-            if isinstance(exc, FloodWaitError):
-                # Calculate time components more efficiently
-                seconds = exc.seconds
-                hours, remainder = divmod(seconds, 3600)
-                minutes, secs = divmod(remainder, 60)
-                
-                time_parts = []
-                if hours:
-                    time_parts.append(f"{hours} hours")
-                if minutes:
-                    time_parts.append(f"{minutes} minutes")
-                if secs:
-                    time_parts.append(f"{secs} seconds")
-                    
-                fw_time = ", ".join(time_parts)
-
-                txt = (
-                    "🕒 <b>Call</b>"
-                    f" <code>{utils.escape_html(message.message)}</code>"
-                    f" <b>caused FloodWait of {fw_time} on method</b>"
-                    f" <code>{type(exc.request).__name__}</code>"
-                )
-            else:
-                txt = (
-                    "🚫 <b>Call</b>"
-                    f" <code>{utils.escape_html(message.message)}</code>"
-                    " <b>failed due to RPC error:</b>"
-                    f" <code>{utils.escape_html(str(exc))}</code>"
-                )
-        else:
-            txt = (
-                "🚫 <b>Call</b>"
-                f" <code>{utils.escape_html(message.message)}</code>"
-                "<b> failed!</b>"
-            )
-            
-        # Use contextlib.suppress to avoid extra try/except blocks
-        with contextlib.suppress(Exception):
-            await utils.answer(message, txt)
 
     async def watcher_exc(
         self, exc: Exception, _func: callable, _message: Message
@@ -198,7 +76,7 @@ class CommandDispatcher:
 class GrepHandler:
     """Handles grep-like filtering of messages"""
 
-    def __init__(self, message: Message, dispatcher: CommandDispatcher):
+    def __init__(self, message: Message, dispatcher: TextDispatcher):
         self.message = message
         self.dispatcher = dispatcher
         self._process_grep()
