@@ -643,21 +643,33 @@ class AdvancedExecutorMod(loader.Module):
         failed_count = 0
         start_time = time.time()
 
-        # Get all participants
-
         try:
             # Get the bot's own ID
 
-            me = await self.client.get_me()
-            my_id = me.id
+            my_id = self.tg_id
 
+            # Get chat creator ID separately if possible
+
+            creator_id = None
+            if hasattr(chat, "creator") and chat.creator:
+                try:
+                    full_chat = await self.client(
+                        hikkatl.tl.functions.channels.GetFullChannelRequest(
+                            channel=chat.id
+                        )
+                    )
+                    if hasattr(full_chat.full_chat, "creator_id"):
+                        creator_id = full_chat.full_chat.creator_id
+                except Exception as e:
+                    logger.error(f"Failed to get chat creator: {e}")
             async for participant in self.client.iter_participants(chat):
                 # Skip yourself, bots, and the chat creator
 
                 if (
                     participant.id == my_id
                     or participant.bot
-                    or (chat.creator and participant.id == chat.creator.id)
+                    or participant.id == creator_id
+                    or (hasattr(participant, "creator") and participant.creator)
                 ):
                     continue
                 try:
