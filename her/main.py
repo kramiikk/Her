@@ -1,7 +1,6 @@
 import argparse
 import asyncio
 import importlib
-import getpass
 import json
 import logging
 import os
@@ -333,7 +332,6 @@ class Her:
             first = True
             me = await client.get_me()
             client.tg_id = me.id
-            client.her_me = me
 
             while True:
                 try:
