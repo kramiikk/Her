@@ -29,6 +29,7 @@ class TextDispatcher:
         db: Database,
     ):
         self.modules = modules
+        self.client = client
         self.db = db
 
     async def watcher_exc(

@@ -148,8 +148,7 @@ class BroadcastMod(loader.Module):
     async def watcher(self, message):
         """Автоматическое добавление чата/топика при получении спец. сообщения"""
         if (
-            not isinstance(message, Message)
-            or not message.out
+            not message.out
             or not message.text
         ):
             return
