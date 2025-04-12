@@ -105,7 +105,6 @@ class BroadcastMod(loader.Module):
     """Модуль для массовой рассылки."""
 
     def __init__(self):
-        super().__init__()
         self.manager = None
 
     async def client_ready(self):

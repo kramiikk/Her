@@ -5,9 +5,10 @@ import re
 from typing import Optional, List
 
 from hikkatl import events
+from .tl_cache import CustomTelegramClient
 from hikkatl.tl.types import Message
 
-from . import main, utils
+from . import utils
 from .database import Database
 from .loader import Modules
 
@@ -24,6 +25,7 @@ class TextDispatcher:
     def __init__(
         self,
         modules: Modules,
+        client: CustomTelegramClient,
         db: Database,
     ):
         self.modules = modules
