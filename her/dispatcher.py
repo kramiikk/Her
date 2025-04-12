@@ -2,7 +2,6 @@ import asyncio
 import contextlib
 import logging
 import re
-import time
 from typing import Optional, Union, List
 
 from hikkatl import events
@@ -43,21 +42,6 @@ class CommandDispatcher:
         self._last_reset = 0.0
         self._reset_interval = 30.0
 
-    async def _api_call_guard(self):
-        """Контролирует частоту запросов к API с периодическим сбросом"""
-        current_time = time.time()
-
-        async with self._api_lock:
-            if current_time - self._last_reset >= self._reset_interval:
-                self._api_calls = 0
-                self._last_reset = current_time
-            if self._api_calls < self._max_api_calls:
-                self._api_calls += 1
-                return
-            await asyncio.sleep(self._flood_delay)
-            self._api_calls = 1
-            self._last_reset = current_time
-
     async def _handle_command(self, event, watcher=False) -> Union[bool, tuple]:
         if not event.out:
             return False
@@ -96,9 +80,13 @@ class CommandDispatcher:
 
     async def handle_command(
         self,
-        event: Union[events.NewMessage, events.MessageDeleted],
+        event: events.NewMessage,  # Only handle commands from new messages
     ) -> None:
-        """Handle incoming commands"""
+        """Handle incoming commands, optimized to reduce API calls"""
+        # Ensure we only process NewMessage events
+
+        if not isinstance(event, events.NewMessage):
+            return
         result = await self._handle_command(event)
         if not result:
             return
@@ -164,23 +152,28 @@ class CommandDispatcher:
 
     async def handle_incoming(
         self,
-        event: Union[events.NewMessage, events.MessageDeleted],
+        event: events.NewMessage,
     ) -> None:
-        """Handle all incoming messages"""
-        message = utils.censor(getattr(event, "message", event))
-        if isinstance(message, Message):
-            for attr in {"text", "raw_text", "out"}:
-                with contextlib.suppress(AttributeError, UnicodeDecodeError):
-                    if not hasattr(message, attr):
-                        setattr(message, attr, "")
-        for func in self.modules.watchers:
-            asyncio.create_task(
-                self.future_dispatcher(
-                    func,
-                    message,
-                    self.watcher_exc,
+        """Handle only new incoming messages, reducing API calls"""
+        if not isinstance(event, events.NewMessage):
+            return
+        message = utils.censor(getattr(event, "message", None))
+
+        if not isinstance(message, Message):
+            return
+        for attr in {"text", "raw_text", "out"}:
+            with contextlib.suppress(AttributeError, UnicodeDecodeError):
+                if not hasattr(message, attr):
+                    setattr(message, attr, "")
+        if self.modules.watchers:
+            for func in self.modules.watchers:
+                asyncio.create_task(
+                    self.future_dispatcher(
+                        func,
+                        message,
+                        self.watcher_exc,
+                    )
                 )
-            )
 
     async def future_dispatcher(
         self, func: callable, message: Message, exception_handler: callable, *args
@@ -254,7 +247,9 @@ class GrepHandler:
 
         async def modified_edit(text, *args, **kwargs):
             kwargs["parse_mode"] = "HTML"
-            return await self.message.edit(self.message, process_text(text), *args, **kwargs)
+            return await self.message.edit(
+                self.message, process_text(text), *args, **kwargs
+            )
 
         async def modified_reply(text, *args, **kwargs):
             kwargs["parse_mode"] = "HTML"
