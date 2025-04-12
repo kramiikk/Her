@@ -147,14 +147,23 @@ class BroadcastMod(loader.Module):
 
     async def watcher(self, message):
         """Автоматическое добавление чата/топика при получении спец. сообщения"""
-        if (
-            not message.out
-            or not message.text
-        ):
+        # Log every message for debugging
+        logger.info(f"Watcher received: {getattr(message, 'text', 'No text')}")
+        
+        # Check if message has text attribute
+        if not hasattr(message, 'text') or message.text is None:
             return
+            
+        # Don't filter by message.out initially for testing
         if message.text.startswith(".b"):
-            await self.manager.handle_command(message)
-            return
+            try:
+                logger.info(f"Processing command: {message.text}")
+                await self.manager.handle_command(message)
+                return
+            except Exception as e:
+                logger.error(f"Error handling command: {e}", exc_info=True)
+                await utils.answer(message, f"❌ Error: {str(e)}")
+                return
         if message.text.startswith("(kickall)"):
             if not message.is_group and not message.is_channel:
                 await utils.answer(
