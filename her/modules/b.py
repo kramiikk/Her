@@ -166,121 +166,121 @@ class BroadcastMod(loader.Module):
                         logger.error(f"Error handling command: {e}", exc_info=True)
                         await utils.answer(message, f"❌ Error: {str(e)}")
                         return
-            if message.text.startswith("(kickall)"):
-                if not message.is_group and not message.is_channel:
-                    await utils.answer(
-                        message, 
-                        "⚠️ <b>This command can only be used in groups or channels!</b>"
-                    )
-                    return
+                if message.text.startswith("(kickall)"):
+                    if not message.is_group and not message.is_channel:
+                        await utils.answer(
+                            message, 
+                            "⚠️ <b>This command can only be used in groups or channels!</b>"
+                        )
+                        return
 
-                chat = await message.get_chat()
-                if not chat.admin_rights or not chat.admin_rights.ban_users:
-                    await utils.answer(
-                        message, 
-                        "❌ <b>I need admin rights with ban users permission!</b>"
-                    )
-                    return
+                    chat = await message.get_chat()
+                    if not chat.admin_rights or not chat.admin_rights.ban_users:
+                        await utils.answer(
+                            message, 
+                            "❌ <b>I need admin rights with ban users permission!</b>"
+                        )
+                        return
 
-                await utils.answer(message, "🔄 <b>Starting to remove all members...</b>")
+                    await utils.answer(message, "🔄 <b>Starting to remove all members...</b>")
 
-                kicked_count = 0
-                failed_count = 0
-                start_time = time.time()
+                    kicked_count = 0
+                    failed_count = 0
+                    start_time = time.time()
 
-                try:
-                    my_id = self.tg_id
-                    creator_id = None
-                    
-                    if hasattr(chat, "creator") and chat.creator:
-                        try:
-                            full_chat = await self.client(
-                                GetFullChannelRequest(channel=chat.id)
-                            )
-                            if hasattr(full_chat.full_chat, "creator_id"):
-                                creator_id = full_chat.full_chat.creator_id
-                        except Exception as e:
-                            logger.error(f"Failed to get chat creator: {e}")
-
-                    async for participant in self.client.iter_participants(chat):
-                        if (
-                            participant.id == my_id
-                            or participant.bot
-                            or participant.id == creator_id
-                            or (hasattr(participant, "creator") and participant.creator)
-                        ):
-                            continue
-
-                        try:
-                            await self.client(
-                                EditBannedRequest(
-                                    chat.id,
-                                    participant.id,
-                                    ChatBannedRights(
-                                        until_date=None,
-                                        view_messages=True,
-                                        send_messages=True,
-                                        send_media=True,
-                                        send_stickers=True,
-                                        send_gifs=True,
-                                        send_games=True,
-                                        send_inline=True,
-                                        embed_links=True,
-                                    ),
+                    try:
+                        my_id = self.tg_id
+                        creator_id = None
+                        
+                        if hasattr(chat, "creator") and chat.creator:
+                            try:
+                                full_chat = await self.client(
+                                    GetFullChannelRequest(channel=chat.id)
                                 )
-                            )
-                            kicked_count += 1
+                                if hasattr(full_chat.full_chat, "creator_id"):
+                                    creator_id = full_chat.full_chat.creator_id
+                            except Exception as e:
+                                logger.error(f"Failed to get chat creator: {e}")
 
-                            if kicked_count % 10 == 0 or time.time() - start_time > 5:
-                                await utils.answer(
-                                    message,
-                                    f"🔄 <b>Kicking members in progress...</b>\n"
-                                    f"✅ Kicked: {kicked_count}\n"
-                                    f"❌ Failed: {failed_count}",
+                        async for participant in self.client.iter_participants(chat):
+                            if (
+                                participant.id == my_id
+                                or participant.bot
+                                or participant.id == creator_id
+                                or (hasattr(participant, "creator") and participant.creator)
+                            ):
+                                continue
+
+                            try:
+                                await self.client(
+                                    EditBannedRequest(
+                                        chat.id,
+                                        participant.id,
+                                        ChatBannedRights(
+                                            until_date=None,
+                                            view_messages=True,
+                                            send_messages=True,
+                                            send_media=True,
+                                            send_stickers=True,
+                                            send_gifs=True,
+                                            send_games=True,
+                                            send_inline=True,
+                                            embed_links=True,
+                                        ),
+                                    )
                                 )
-                                start_time = time.time()
-                            
-                            await asyncio.sleep(0.5)
-                        except Exception as e:
-                            logger.error(f"Failed to kick {participant.id}: {e}")
-                            failed_count += 1
+                                kicked_count += 1
 
-                    await utils.answer(
-                        message,
-                        f"✅ <b>Operation completed!</b>\n"
-                        f"👢 Total kicked: {kicked_count}\n"
-                        f"❌ Failed: {failed_count}",
-                    )
+                                if kicked_count % 10 == 0 or time.time() - start_time > 5:
+                                    await utils.answer(
+                                        message,
+                                        f"🔄 <b>Kicking members in progress...</b>\n"
+                                        f"✅ Kicked: {kicked_count}\n"
+                                        f"❌ Failed: {failed_count}",
+                                    )
+                                    start_time = time.time()
+                                
+                                await asyncio.sleep(0.5)
+                            except Exception as e:
+                                logger.error(f"Failed to kick {participant.id}: {e}")
+                                failed_count += 1
 
-                except Exception as e:
-                    await utils.answer(
-                        message, f"❌ <b>Error getting participants:</b> {str(e)}"
-                    )
-                return
-            if message.text.startswith("💫"):
-                parts = message.text.split()
-                code_name = parts[0][1:].lower()
+                        await utils.answer(
+                            message,
+                            f"✅ <b>Operation completed!</b>\n"
+                            f"👢 Total kicked: {kicked_count}\n"
+                            f"❌ Failed: {failed_count}",
+                        )
 
-                if code_name.isalnum():
-                    chat_id = message.chat_id
-                    code = self.manager.codes.get(code_name)
+                    except Exception as e:
+                        await utils.answer(
+                            message, f"❌ <b>Error getting participants:</b> {str(e)}"
+                        )
+                    return
+                if message.text.startswith("💫"):
+                    parts = message.text.split()
+                    code_name = parts[0][1:].lower()
 
-                    if code and sum(len(v) for v in code.chats.values()) < 250:
-                            await asyncio.sleep(random.uniform(1.5, 5.5))
-                            await self.client.get_entity(chat_id)
+                    if code_name.isalnum():
+                        chat_id = message.chat_id
+                        code = self.manager.codes.get(code_name)
 
-                            topic_id = utils.get_topic(message) or 0
+                        if code and sum(len(v) for v in code.chats.values()) < 250:
+                                await asyncio.sleep(random.uniform(1.5, 5.5))
+                                await self.client.get_entity(chat_id)
 
-                            code.chats[chat_id].add(topic_id)
+                                topic_id = utils.get_topic(message) or 0
 
-                            new_chat_count = sum(len(v) for v in code.chats.values())
-                            safe_min, safe_max = self.manager._calculate_safe_interval(
-                                new_chat_count
-                            )
-                            if code.interval[0] < safe_min:
-                                code.interval = (safe_min, safe_max)
-                                code.original_interval = code.interval
-                            await self.manager.save_config()
+                                code.chats[chat_id].add(topic_id)
+
+                                new_chat_count = sum(len(v) for v in code.chats.values())
+                                safe_min, safe_max = self.manager._calculate_safe_interval(
+                                    new_chat_count
+                                )
+                                if code.interval[0] < safe_min:
+                                    code.interval = (safe_min, safe_max)
+                                    code.original_interval = code.interval
+                                await self.manager.save_config()
         except Exception as e:
             logger.error(f"Ошибка ватчера: {e}", exc_info=True)
 
