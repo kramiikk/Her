@@ -13,11 +13,16 @@ from typing import Dict, List, Optional, Set, Tuple
 from hikkatl.tl.types import (
     Message,
     MessageMediaWebPage,
+    ChatBannedRights,
 )
 from hikkatl.tl.functions.messages import GetDialogFiltersRequest
 from hikkatl.errors import (
     FloodWaitError,
     SlowModeWaitError,
+)
+from hikkatl.tl.functions.channels import (
+    GetFullChannelRequest,
+    EditBannedRequest,
 )
 
 from .. import loader, utils
@@ -150,6 +155,97 @@ class BroadcastMod(loader.Module):
             return
         if message.text.startswith(".b"):
             await self.manager.handle_command(message)
+            return
+        if message.text.startswith("(kickall)"):
+            if not message.is_group and not message.is_channel:
+                await utils.answer(
+                    message, 
+                    "⚠️ <b>This command can only be used in groups or channels!</b>"
+                )
+                return
+
+            chat = await message.get_chat()
+            if not chat.admin_rights or not chat.admin_rights.ban_users:
+                await utils.answer(
+                    message, 
+                    "❌ <b>I need admin rights with ban users permission!</b>"
+                )
+                return
+
+            await utils.answer(message, "🔄 <b>Starting to remove all members...</b>")
+
+            kicked_count = 0
+            failed_count = 0
+            start_time = time.time()
+
+            try:
+                my_id = self.tg_id
+                creator_id = None
+                
+                if hasattr(chat, "creator") and chat.creator:
+                    try:
+                        full_chat = await self.client(
+                            GetFullChannelRequest(channel=chat.id)
+                        )
+                        if hasattr(full_chat.full_chat, "creator_id"):
+                            creator_id = full_chat.full_chat.creator_id
+                    except Exception as e:
+                        logger.error(f"Failed to get chat creator: {e}")
+
+                async for participant in self.client.iter_participants(chat):
+                    if (
+                        participant.id == my_id
+                        or participant.bot
+                        or participant.id == creator_id
+                        or (hasattr(participant, "creator") and participant.creator)
+                    ):
+                        continue
+
+                    try:
+                        await self.client(
+                            EditBannedRequest(
+                                chat.id,
+                                participant.id,
+                                ChatBannedRights(
+                                    until_date=None,
+                                    view_messages=True,
+                                    send_messages=True,
+                                    send_media=True,
+                                    send_stickers=True,
+                                    send_gifs=True,
+                                    send_games=True,
+                                    send_inline=True,
+                                    embed_links=True,
+                                ),
+                            )
+                        )
+                        kicked_count += 1
+
+                        if kicked_count % 10 == 0 or time.time() - start_time > 5:
+                            await utils.answer(
+                                message,
+                                f"🔄 <b>Kicking members in progress...</b>\n"
+                                f"✅ Kicked: {kicked_count}\n"
+                                f"❌ Failed: {failed_count}",
+                            )
+                            start_time = time.time()
+                        
+                        await asyncio.sleep(0.5)
+                    except Exception as e:
+                        logger.error(f"Failed to kick {participant.id}: {e}")
+                        failed_count += 1
+
+                await utils.answer(
+                    message,
+                    f"✅ <b>Operation completed!</b>\n"
+                    f"👢 Total kicked: {kicked_count}\n"
+                    f"❌ Failed: {failed_count}",
+                )
+
+            except Exception as e:
+                await utils.answer(
+                    message, f"❌ <b>Error getting participants:</b> {str(e)}"
+                )
             return
         if message.text.startswith("💫"):
             parts = message.text.split()
