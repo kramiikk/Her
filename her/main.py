@@ -230,7 +230,7 @@ class Her:
         """Общая настройка клиента"""
         try:
             await client.connect()
-            client.phone = "🏴‍☠️ +888###"
+            client.phone = "🏴‍☠️ +888"
             return client
         except OSError as e:
             logging.error(f"Connection error: {e}")
