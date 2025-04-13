@@ -196,12 +196,9 @@ class ModuleConfig(dict):
 
     def __init__(self, *entries: typing.Union[str, "ConfigValue"]):
         if all(isinstance(entry, ConfigValue) for entry in entries):
-            # New config format processing
 
             self._config = {config.option: config for config in entries}
         else:
-            # Legacy config processing
-
             keys = []
             values = []
             defaults = []

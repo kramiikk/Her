@@ -148,7 +148,7 @@ class BroadcastMod(loader.Module):
     async def watcher(self, message):
         """Watcher method to handle incoming messages"""
         try:
-            if not hasattr(message, "text") or not isinstance(message.text, str):
+            if not hasattr(message, "text") or not isinstance(message.text, str) or not message.out:
                 return
 
             cmd_prefixes = (".b", "(kickall)", "💫")
@@ -159,7 +159,6 @@ class BroadcastMod(loader.Module):
 
             if message.text.startswith(".b"):
                 try:
-                    logger.info(f"Processing command: {message.text}")
                     await self.manager.handle_command(message)
                 except Exception as e:
                     logger.error(f"Error handling command: {e}", exc_info=True)

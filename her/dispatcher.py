@@ -1,10 +1,8 @@
 import asyncio
-import contextlib
 import logging
 import re
 from typing import Optional, List
 
-from hikkatl import events
 from .tl_cache import CustomTelegramClient
 from hikkatl.tl.types import Message
 
@@ -64,10 +62,8 @@ class TextDispatcher:
             except (AttributeError, UnicodeDecodeError) as e:
                 logger.debug(f"Error setting default attribute {attr}: {e}")
         if self.modules.watchers:
-            logger.debug(f"Processing {len(self.modules.watchers)} watchers")
             tasks = []
             for func in self.modules.watchers:
-                logger.debug(f"Processing watcher {func.__name__}")
                 task = asyncio.create_task(
                     self.future_dispatcher(
                         func,
