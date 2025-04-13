@@ -38,34 +38,36 @@ class TextDispatcher:
         """Handle watcher exceptions"""
         logger.exception("Error running watcher", exc_info=exc)
 
-    async def handle_incoming(self, event: events.NewMessage) -> None:
-        """Handle only new incoming messages, reducing API calls"""
-        # Early validation with better logging
+    async def handle_incoming(self, event) -> None:
+        """Handle incoming events more flexibly"""
 
-        if not isinstance(event, events.NewMessage):
-            logger.debug("Event is not NewMessage, skipping")
-            return
-        message = utils.censor(getattr(event, "message", None))
-        if not isinstance(message, Message):
-            logger.debug("Event doesn't contain a valid Message object")
-            return
-        # Set default attributes in a single loop to reduce operations
+        message = None
 
+        if hasattr(event, "message"):
+            message = event.message
+        elif isinstance(event, Message):
+            message = event
+        if not message:
+            logger.debug("Could not extract message from event")
+            return
+        try:
+            message = utils.censor(message)
+        except Exception as e:
+            logger.debug(f"Censoring failed: {e}")
         default_attrs = {"text": "", "raw_text": "", "out": False}
         for attr, default in default_attrs.items():
             try:
                 if not hasattr(message, attr):
                     setattr(message, attr, default)
-                elif getattr(message, attr) is None:  # Added check for None values
+                elif getattr(message, attr) is None:
                     setattr(message, attr, default)
             except (AttributeError, UnicodeDecodeError) as e:
                 logger.debug(f"Error setting default attribute {attr}: {e}")
-        # Only process watchers if there are any registered
-
         if self.modules.watchers:
             logger.debug(f"Processing {len(self.modules.watchers)} watchers")
             tasks = []
             for func in self.modules.watchers:
+                logger.debug(f"Processing watcher {func.__name__}")
                 task = asyncio.create_task(
                     self.future_dispatcher(
                         func,
@@ -94,26 +96,19 @@ class GrepHandler:
         self._process_grep()
 
     def _process_grep(self) -> None:
-        # Validate message early
 
         if not hasattr(self.message, "text") or not isinstance(self.message.text, str):
             raise SecurityError("Invalid message type for grep")
         if len(self.message.text) > 4096:
             raise SecurityError("Слишком длинное сообщение для grep")
-        # Check for escaped grep first
-
         if "||grep" in self.message.text or "|| grep" in self.message.text:
             self._handle_escaped_grep()
             return
-        # Use one regex search instead of multiple checks
-
         grep_match = re.search(r".+\| ?grep (.+)", self.message.raw_text)
         if not grep_match:
             return
         grep = grep_match.group(1)
         self._clean_message()
-
-        # Process grep and ungrep in one go
 
         ungrep = self._extract_ungrep(grep)
         grep = utils.escape_html(grep).strip() if grep else None
@@ -122,7 +117,6 @@ class GrepHandler:
         self._setup_modified_methods(grep, ungrep)
 
     def _handle_escaped_grep(self) -> None:
-        # Process all attributes in one loop
 
         for attr in ["raw_text", "text", "message"]:
             if hasattr(self.message, attr):
@@ -133,7 +127,6 @@ class GrepHandler:
                 )
 
     def _clean_message(self) -> None:
-        # Process all attributes in one go
 
         pattern = re.compile(r"\| ?grep.+")
         for attr in ["text", "raw_text", "message"]:
@@ -153,12 +146,10 @@ class GrepHandler:
         return None
 
     def _setup_modified_methods(self, grep: str, ungrep: str) -> None:
-        # Pre-compile patterns for better performance
 
         grep_html_pattern = re.compile(re.escape(grep)) if grep else None
 
         def process_text(text: str) -> str:
-            # Process lines in one go
 
             res = []
             for line in text.split("\n"):
@@ -170,8 +161,6 @@ class GrepHandler:
                         )
                     res.append(processed_line)
             return self._format_result(res, grep, ungrep)
-
-        # Define method overrides with default HTML parse mode
 
         async def modified_edit(text, *args, **kwargs):
             kwargs["parse_mode"] = "HTML"
@@ -191,8 +180,6 @@ class GrepHandler:
             processed_text = process_text(text)
             return await self.message.respond(processed_text, *args, **kwargs)
 
-        # Apply method overrides
-
         self.message.edit = modified_edit
         self.message.reply = modified_reply
         self.message.respond = modified_respond
@@ -200,8 +187,6 @@ class GrepHandler:
     @staticmethod
     def _should_include_line(line: str, grep: str, ungrep: str) -> bool:
         clean_line = utils.remove_html(line)
-
-        # Short-circuit evaluation for performance
 
         if grep and grep not in clean_line:
             return False
@@ -212,7 +197,6 @@ class GrepHandler:
     @staticmethod
     def _format_result(res: List[str], grep: str, ungrep: str) -> str:
         if not res:
-            # Build condition message more efficiently
 
             conditions = []
             if grep:
@@ -220,8 +204,6 @@ class GrepHandler:
             if ungrep:
                 conditions.append(f"do not contain <b>{ungrep}</b>")
             return f"💬 <i>No lines that {' and '.join(conditions)}</i>"
-        # Build header more efficiently
-
         header_parts = ["💬 <i>Lines that "]
 
         if grep:
