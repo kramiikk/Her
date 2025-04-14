@@ -152,7 +152,7 @@ class Her:
             self._handle_corrupted_session(session_path)
 
     def _handle_corrupted_session(self, session_path: Path):
-        """Обработка поврежденных сессий"""
+        """bs"""
         logging.warning("Removing corrupted session...")
         try:
             session_path.unlink(missing_ok=True)
@@ -202,7 +202,7 @@ class Her:
     def _create_client(
         self, session: typing.Union[MemorySession, SQLiteSession]
     ) -> CustomTelegramClient:
-        """Фабричный метод для создания клиента Telegram"""
+        """Telegram"""
         return CustomTelegramClient(
             session,
             self.api_token.ID,
@@ -227,7 +227,7 @@ class Her:
         )
 
     async def _common_client_setup(self, client: CustomTelegramClient):
-        """Общая настройка клиента"""
+        """s"""
         try:
             await client.connect()
             client.phone = "🏴‍☠️ +888"
