@@ -1,5 +1,3 @@
-"""Author: kramiikk - Telegram: @kramiikk"""
-
 import asyncio
 import html
 import logging

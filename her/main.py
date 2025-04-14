@@ -27,10 +27,7 @@ BASE_PATH = Path(BASE_DIR)
 CONFIG_PATH = BASE_PATH / "config.json"
 
 OFFICIAL_CLIENTS = [
-    "Telegram Android",
     "Telegram Desktop",
-    "Telegram Web",
-    "Telegram Win",
     "Telegram Linux",
 ]
 
@@ -42,10 +39,6 @@ class ApiToken(typing.NamedTuple):
 
 def generate_random_system_version():
     systems = [
-        (
-            lambda: f"Android {random.randint(10, 14)} (SDK {random.randint(30, 34)})",
-            "arm64-v8a",
-        ),
         (
             lambda: f"11 Build {random.randint(19000, 22621)}",
             "x64",
