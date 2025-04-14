@@ -6,7 +6,7 @@ from . import main
 
 
 def tty_print(text: str) -> None:
-    """Печатает текст с цветами, если вывод в TTY, иначе удаляет ANSI коды."""
+    """TTY"""
     if sys.stdout.isatty():
         print(text)
     else:
@@ -14,14 +14,14 @@ def tty_print(text: str) -> None:
 
 
 def tty_input(prompt: str) -> str:
-    """Запрашивает ввод с цветным приглашением, если вывод в TTY."""
+    """TTY"""
     if sys.stdout.isatty():
         return input(prompt)
     return input(re.sub(r"\033\[[0-9;]*m", "", prompt))
 
 
 def api_config() -> None:
-    """Запрашивает конфигурацию API у пользователя и сохраняет её."""
+    """API"""
     tty_print("\033[0;96m1. Go to https://my.telegram.org and login\033[0m")
     tty_print("\033[0;96m2. Click on \033[1;96mAPI development tools\033[0m")
     tty_print("\033[0;96m4. Copy your \033[1;96mAPI ID\033[0;96m and \033[1;96mAPI hash\033[0m")
