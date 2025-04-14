@@ -1,4 +1,4 @@
-## 🚀 Installation
+# 🚀 Installation
 
 ```bash
 git clone https://github.com/kramiikk/Her
