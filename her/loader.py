@@ -17,8 +17,6 @@ from hikkatl.tl.tlobject import TLObject
 from . import utils, validators
 from .database import Database
 from .types import (
-    Command,
-    ConfigValue,
     JSONSerializable,
     LoadError,
     Module,
@@ -33,7 +31,6 @@ from .types import (
 __all__ = [
     "Modules",
     "InfiniteLoop",
-    "Command",
     "JSONSerializable",
     "LoadError",
     "Module",
@@ -135,13 +132,13 @@ def loop(
     return wrapped
 
 
-def _mark_method(mark: str, *args, **kwargs) -> typing.Callable[..., Command]:
+def watcher(*args, **kwargs):
     """
-    Mark method as a method of a class
+    Decorator that marks function as watcher
     """
 
-    def decorator(func: Command) -> Command:
-        setattr(func, mark, True)
+    def decorator(func):
+        setattr(func, "is_watcher", True)
         for arg in args:
             setattr(func, arg, True)
         for kwarg, value in kwargs.items():
@@ -151,25 +148,20 @@ def _mark_method(mark: str, *args, **kwargs) -> typing.Callable[..., Command]:
     return decorator
 
 
-def command(*args, **kwargs):
-    """
-    Decorator that marks function as userbot command
-    """
-    return _mark_method("is_command", *args, **kwargs)
-
-
-def watcher(*args, **kwargs):
-    """
-    Decorator that marks function as watcher
-    """
-    return _mark_method("is_watcher", *args, **kwargs)
-
-
 def callback_handler(*args, **kwargs):
     """
     Decorator that marks function as callback handler
     """
-    return _mark_method("is_callback_handler", *args, **kwargs)
+
+    def decorator(func):
+        setattr(func, "is_callback_handler", True)
+        for arg in args:
+            setattr(func, arg, True)
+        for kwarg, value in kwargs.items():
+            setattr(func, kwarg, value)
+        return func
+
+    return decorator
 
 
 def raw_handler(*updates: TLObject):
@@ -180,7 +172,7 @@ def raw_handler(*updates: TLObject):
     ⚠️ This feature won't work, if you dynamically declare method with decorator!
     """
 
-    def inner(func: Command) -> Command:
+    def inner(func):
         func.is_raw_handler = True
         func.updates = updates
         func.id = uuid4().hex
@@ -199,7 +191,6 @@ class Modules:
         db: Database,
     ):
         self._initial_registration = True
-        self.commands = {}
         self.callback_handlers = {}
         self.modules = []  # skipcq: PTC-W0052
         self.watchers = []
@@ -211,7 +202,7 @@ class Modules:
 
     async def _junk_collector(self):
         """
-        Periodically reloads commands, callback handlers and watchers from loaded
+        Periodically reloads callback handlers and watchers from loaded
         modules to prevent zombie handlers
         """
         last_modules = set()
@@ -219,16 +210,12 @@ class Modules:
             await asyncio.sleep(5)
             if {id(m) for m in self.modules} != last_modules:
                 last_modules = {id(m) for m in self.modules}
-                commands = {}
                 callback_handlers = {}
                 watchers = []
                 for module in self.modules:
-                    commands.update(module.her_commands)
                     callback_handlers.update(module.her_callback_handlers)
                     watchers.extend(module.her_watchers.values())
-                self.commands = commands
                 self.callback_handlers = callback_handlers
-
                 self.watchers = watchers
 
     async def register_all(self) -> typing.List[Module]:
@@ -333,15 +320,6 @@ class Modules:
                     if isinstance(method, InfiniteLoop):
                         await method.stop()
         self.modules += [instance]
-
-    def dispatch(self, _command: str) -> typing.Tuple[str, typing.Optional[str]]:
-        """Dispatch command to appropriate module"""
-        cmd_lower = _command.lower()
-        return (
-            (cmd_lower, self.commands[cmd_lower])
-            if cmd_lower in self.commands
-            else (_command, None)
-        )
 
     def send_config(self, skip_hook: bool = False):
         """Configure modules"""
