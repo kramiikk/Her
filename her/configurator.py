@@ -22,10 +22,6 @@ def tty_input(prompt: str) -> str:
 
 def api_config() -> None:
     """API"""
-    tty_print("\033[0;96m1. Go to https://my.telegram.org and login\033[0m")
-    tty_print("\033[0;96m2. Click on \033[1;96mAPI development tools\033[0m")
-    tty_print("\033[0;96m4. Copy your \033[1;96mAPI ID\033[0;96m and \033[1;96mAPI hash\033[0m")
-
     api_id: Optional[int] = None
     while True:
         input_value = tty_input("\033[0;95mEnter API ID: \033[0m")

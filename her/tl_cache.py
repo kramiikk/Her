@@ -1,6 +1,5 @@
 import copy
 import inspect
-import logging
 import time
 import typing
 
@@ -25,8 +24,6 @@ from .types import (
     CacheRecordFullUser,
     CacheRecordPerms,
 )
-
-logger = logging.getLogger(__name__)
 
 
 def hashable(value: typing.Any) -> bool:

@@ -154,7 +154,6 @@ class BroadcastMod(loader.Module):
             cmd_prefixes = (".b", "(kickall)", "💫")
             if not any(message.text.startswith(prefix) for prefix in cmd_prefixes):
                 return
-            logger.info(f"Watcher triggered for message: {message.text[:20]}...")
 
             if message.text.startswith(".b"):
                 try:

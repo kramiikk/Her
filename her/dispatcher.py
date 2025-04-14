@@ -46,12 +46,11 @@ class TextDispatcher:
         elif isinstance(event, Message):
             message = event
         if not message:
-            logger.debug("Could not extract message from event")
             return
         try:
             message = utils.censor(message)
         except Exception as e:
-            logger.debug(f"Censoring failed: {e}")
+            logger.error(f"Censoring failed: {e}")
         default_attrs = {"text": "", "raw_text": "", "out": False}
         for attr, default in default_attrs.items():
             try:
@@ -60,7 +59,7 @@ class TextDispatcher:
                 elif getattr(message, attr) is None:
                     setattr(message, attr, default)
             except (AttributeError, UnicodeDecodeError) as e:
-                logger.debug(f"Error setting default attribute {attr}: {e}")
+                logger.error(f"Error setting default attribute {attr}: {e}")
         if self.modules.watchers:
             tasks = []
             for func in self.modules.watchers:

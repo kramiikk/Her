@@ -53,8 +53,6 @@ class Database(dict):
         try:
             if self.db_file.exists():
                 self.update(**json.loads(self.db_file.read_text()))
-            else:
-                logger.info("Creating new local DB")
         except json.JSONDecodeError:
             logger.error("DB corrupted, resetting...")
             self.db_file.unlink()

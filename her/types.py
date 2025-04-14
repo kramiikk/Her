@@ -3,7 +3,6 @@ import asyncio
 import contextlib
 import copy
 import inspect
-import logging
 import time
 import typing
 from dataclasses import dataclass, field
@@ -27,8 +26,6 @@ __all__ = [
     "PointerDict",
     "PointerList",
 ]
-
-logger = logging.getLogger(__name__)
 
 
 JSONSerializable = typing.Union[str, int, float, bool, list, dict, None]

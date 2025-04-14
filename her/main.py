@@ -243,8 +243,6 @@ class Her:
             await client.connect()
 
             if not await client.is_user_authorized():
-                logging.info("Starting authentication...")
-
                 phone = (
                     self.arguments.phone[0]
                     if self.arguments.phone
@@ -310,7 +308,6 @@ class Her:
         try:
             session_path.unlink(missing_ok=True)
             self.sessions = []
-            logging.info("Creating a new session...")
             return await self._initial_setup() is not None
         except Exception as e:
             logging.error(f"Failed to handle expired session: {e}")
@@ -370,7 +367,7 @@ class Her:
         await modules.send_ready()
 
         if first:
-            logging.info(f"\n\n• Version 1.8.0\n\n• For {client.tg_id}")
+            logging.info(f"\n\n• Version 1.8.1\n\n• For {client.tg_id}")
         await client.run_until_disconnected()
 
     async def _main(self):

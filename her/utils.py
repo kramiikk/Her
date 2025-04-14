@@ -1,6 +1,5 @@
 import io
 import json
-import logging
 import os
 import re
 import typing
@@ -9,9 +8,6 @@ import hikkatl
 from hikkatl.tl.custom.message import Message
 
 from hikkatl.tl.types import MessageMediaWebPage
-
-
-logger = logging.getLogger(__name__)
 
 
 def get_args_raw(message: typing.Union[Message, str]) -> str:
