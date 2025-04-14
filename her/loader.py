@@ -25,7 +25,6 @@ from .types import (
     SelfUnload,
     StringLoader,
     get_callback_handlers,
-    get_commands,
 )
 
 __all__ = [
@@ -37,7 +36,6 @@ __all__ = [
     "SelfSuspend",
     "SelfUnload",
     "StringLoader",
-    "get_commands",
     "get_callback_handlers",
     "validators",
     "Database",

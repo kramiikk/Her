@@ -20,10 +20,9 @@ from .pointers import PointerDict, PointerList
 __all__ = [
     "JSONSerializable",
     "ListLike",
-    "Command",
     "StringLoader",
     "Module",
-    "get_commands",
+    "get_watchers",
     "get_callback_handlers",
     "PointerDict",
     "PointerList",
@@ -34,7 +33,6 @@ logger = logging.getLogger(__name__)
 
 JSONSerializable = typing.Union[str, int, float, bool, list, dict, None]
 ListLike = typing.Union[list, set, tuple]
-Command = typing.Callable[..., typing.Awaitable[typing.Any]]
 
 
 class StringLoader(SourceLoader):
@@ -82,42 +80,24 @@ class Module:
         """Called after unloading / reloading module"""
 
     @property
-    def commands(self) -> typing.Dict[str, Command]:
-        """List of commands that module supports"""
-        return get_commands(self)
-
-    @property
-    def her_commands(self) -> typing.Dict[str, Command]:
-        """List of commands that module supports"""
-        return get_commands(self)
-
-    @property
-    def callback_handlers(self) -> typing.Dict[str, Command]:
+    def callback_handlers(self) -> typing.Dict[str, typing.Callable[..., typing.Awaitable[typing.Any]]]:
         """List of callback handlers that module supports"""
         return get_callback_handlers(self)
 
     @property
-    def her_callback_handlers(self) -> typing.Dict[str, Command]:
+    def her_callback_handlers(self) -> typing.Dict[str, typing.Callable[..., typing.Awaitable[typing.Any]]]:
         """List of callback handlers that module supports"""
         return get_callback_handlers(self)
 
     @property
-    def watchers(self) -> typing.Dict[str, Command]:
+    def watchers(self) -> typing.Dict[str, typing.Callable[..., typing.Awaitable[typing.Any]]]:
         """List of watchers that module supports"""
         return get_watchers(self)
 
     @property
-    def her_watchers(self) -> typing.Dict[str, Command]:
+    def her_watchers(self) -> typing.Dict[str, typing.Callable[..., typing.Awaitable[typing.Any]]]:
         """List of watchers that module supports"""
         return get_watchers(self)
-
-    @commands.setter
-    def commands(self, _):
-        pass
-
-    @her_commands.setter
-    def her_commands(self, _):
-        pass
 
     @callback_handlers.setter
     def callback_handlers(self, _):
@@ -178,7 +158,7 @@ class SelfUnload(Exception):
 class SelfSuspend(Exception):
     """
     Silently suspends module, if raised in `client_ready`
-    Commands and watcher will not be registered if raised
+    Watcher will not be registered if raised
     Module won't be unloaded from db and will be unfreezed after restart, unless
     the exception is raised again
     """
@@ -247,7 +227,6 @@ class ModuleConfig(dict):
         validator: typing.Callable[[JSONSerializable], JSONSerializable],
     ):
         self._config[key].validator = validator
-
 
 
 class _Placeholder:
@@ -480,11 +459,6 @@ class CacheRecordFullUser:
 
     def __repr__(self) -> str:
         return f"CacheRecordFullUser(channel_id={self.user_id}(...), exp={self._exp})"
-
-
-def get_commands(mod: Module) -> dict:
-    """Introspect the module to get its commands"""
-    return _get_members(mod, "cmd", "is_command")
 
 
 def get_callback_handlers(mod: Module) -> dict:

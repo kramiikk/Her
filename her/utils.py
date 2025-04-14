@@ -8,50 +8,8 @@ import typing
 import hikkatl
 from hikkatl.tl.custom.message import Message
 
-from hikkatl.tl.types import (
-    MessageEntityBankCard,
-    MessageEntityBlockquote,
-    MessageEntityBold,
-    MessageEntityBotCommand,
-    MessageEntityCashtag,
-    MessageEntityCode,
-    MessageEntityEmail,
-    MessageEntityHashtag,
-    MessageEntityItalic,
-    MessageEntityMention,
-    MessageEntityMentionName,
-    MessageEntityPhone,
-    MessageEntityPre,
-    MessageEntitySpoiler,
-    MessageEntityStrike,
-    MessageEntityTextUrl,
-    MessageEntityUnderline,
-    MessageEntityUnknown,
-    MessageEntityUrl,
-    MessageMediaWebPage,
-)
+from hikkatl.tl.types import MessageMediaWebPage
 
-FormattingEntity = typing.Union[
-    MessageEntityUnknown,
-    MessageEntityMention,
-    MessageEntityHashtag,
-    MessageEntityBotCommand,
-    MessageEntityUrl,
-    MessageEntityEmail,
-    MessageEntityBold,
-    MessageEntityItalic,
-    MessageEntityCode,
-    MessageEntityPre,
-    MessageEntityTextUrl,
-    MessageEntityMentionName,
-    MessageEntityPhone,
-    MessageEntityCashtag,
-    MessageEntityUnderline,
-    MessageEntityStrike,
-    MessageEntityBlockquote,
-    MessageEntityBankCard,
-    MessageEntitySpoiler,
-]
 
 logger = logging.getLogger(__name__)
 
