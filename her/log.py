@@ -128,5 +128,6 @@ def init():
     logging.getLogger().addHandler(
         TelegramLogsHandler((handler, rotating_handler), 7000)
     )
+    logging.getLogger("hikkatl").setLevel(logging.WARNING)
     logging.getLogger().setLevel(logging.NOTSET)
     logging.captureWarnings(True)
