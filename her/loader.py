@@ -377,22 +377,10 @@ class Modules:
         self,
         mod: Module,
     ):
-        try:
-            if len(inspect.signature(mod.client_ready).parameters) == 2:
-                await mod.client_ready(self.client, self.db)
-            else:
-                await mod.client_ready()
-        except Exception as e:
-            logger.exception(
-                (
-                    "Failed to send mod init complete signal for %s due to %s,"
-                    " attempting unload"
-                ),
-                mod,
-                e,
-            )
-            self.modules.remove(mod)
-            raise
+        if len(inspect.signature(mod.client_ready).parameters) == 2:
+            await mod.client_ready(self.client, self.db)
+        else:
+            await mod.client_ready()
         for _, method in utils.iter_attrs(mod):
             if isinstance(method, InfiniteLoop):
                 setattr(method, "module_instance", mod)

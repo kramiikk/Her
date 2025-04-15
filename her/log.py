@@ -20,14 +20,7 @@ class HerException:
 
 
 class TelegramLogsHandler(logging.Handler):
-    """
-    Keeps 2 buffers.
-    One for dispatched messages.
-    One for unused messages.
-    When the length of the 2 together is 100
-    truncate to make them 100 together,
-    first trimming handled then unused.
-    """
+    """Keeps 2 buffers"""
 
     def __init__(self, targets: list, capacity: int):
         super().__init__(0)

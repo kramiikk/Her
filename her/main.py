@@ -209,7 +209,7 @@ class Her:
         )
 
     def _generate_app_version(self) -> str:
-        """Генерация версии приложения"""
+        """version"""
         base_version = f"{random.randint(8, 10)}"
         return (
             f"{base_version}.{random.randint(0, 9)}"

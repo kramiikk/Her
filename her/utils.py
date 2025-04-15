@@ -9,13 +9,6 @@ from hikkatl.tl.custom.message import Message
 from hikkatl.tl.types import MessageMediaWebPage
 
 
-def get_args_raw(message: typing.Union[Message, str]) -> str:
-    """Get the parameters to the command as a raw string (not split)"""
-    if not (message := getattr(message, "message", message)):
-        return False
-    return args[1] if len(args := message.split(maxsplit=1)) > 1 else ""
-
-
 def get_base_dir() -> str:
     """Get directory of current file"""
     return os.path.dirname(os.path.abspath(__file__))

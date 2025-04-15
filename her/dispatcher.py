@@ -27,12 +27,6 @@ class TextDispatcher:
         self.client = client
         self.db = db
 
-    async def watcher_exc(
-        self, exc: Exception, _func: callable, _message: Message
-    ) -> None:
-        """Handle watcher exceptions"""
-        logger.exception("Error running watcher", exc_info=exc)
-
     async def handle_incoming(self, event) -> None:
         """Handle incoming events more flexibly"""
 
@@ -44,7 +38,6 @@ class TextDispatcher:
             message = event
         if not message:
             return
-
         default_attrs = {"text": "", "raw_text": "", "out": False}
         for attr, default in default_attrs.items():
             try:
@@ -57,20 +50,12 @@ class TextDispatcher:
         if self.modules.watchers:
             tasks = []
             for func in self.modules.watchers:
-                task = asyncio.create_task(
-                    self.future_dispatcher(
-                        func,
-                        message,
-                        self.watcher_exc,
-                    )
-                )
+                task = asyncio.create_task(self.future_dispatcher(func, message))
                 tasks.append(task)
 
-    async def future_dispatcher(
-        self, func: callable, message: Message, exception_handler: callable, *args
-    ) -> None:
+    async def future_dispatcher(self, func: callable, message: Message, *args) -> None:
         """Dispatch function execution to the future"""
         try:
             await func(message, *args)
-        except Exception as e:
-            await exception_handler(e, func, message)
+        except Exception as exc:
+            logger.exception("Error running watcher", exc_info=exc)
