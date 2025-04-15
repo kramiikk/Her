@@ -156,8 +156,6 @@ class Her:
     def _get_api_token(self):
         """Get API Token from disk or environment"""
         try:
-            # Legacy migration
-
             if not get_config_key("api_id"):
                 api_id, api_hash = (
                     line.strip()
@@ -308,6 +306,16 @@ class Her:
         try:
             session_path.unlink(missing_ok=True)
             self.sessions = []
+
+            if (
+                not sys.stdin.isatty()
+                and not self.arguments.phone
+                and not os.environ.get("TELEGRAM_PHONE")
+            ):
+                logging.critical(
+                    "Cannot authenticate: running in non-interactive mode without phone credentials"
+                )
+                return False
             return await self._initial_setup() is not None
         except Exception as e:
             logging.error(f"Failed to handle expired session: {e}")

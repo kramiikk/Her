@@ -1,7 +1,6 @@
 import io
 import json
 import os
-import re
 import typing
 
 import hikkatl
@@ -17,38 +16,9 @@ def get_args_raw(message: typing.Union[Message, str]) -> str:
     return args[1] if len(args := message.split(maxsplit=1)) > 1 else ""
 
 
-def get_chat_id(message: Message) -> int:
-    """Get the chat ID, but without -100 if its a channel"""
-    return hikkatl.utils.resolve_id(
-        getattr(message, "chat_id", None)
-        or getattr(getattr(message, "chat", None), "id", None)
-    )[0]
-
-
-def escape_html(text: str, /) -> str:  # sourcery skip
-    """Pass all untrusted/potentially corrupt input here"""
-    return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-
-
 def get_base_dir() -> str:
     """Get directory of current file"""
     return os.path.dirname(os.path.abspath(__file__))
-
-
-def censor(
-    obj: typing.Any,
-    to_censor: typing.Optional[typing.Iterable[str]] = None,
-    replace_with: str = "redacted_{count}_chars",
-):
-    """May modify the original object, but don't rely on it"""
-    if to_censor is None:
-        to_censor = ["phone"]
-    for k, v in vars(obj).items():
-        if k in to_censor:
-            setattr(obj, k, replace_with.format(count=len(v)))
-        elif k[0] != "_" and hasattr(v, "__dict__"):
-            setattr(obj, k, censor(v, to_censor, replace_with))
-    return obj
 
 
 async def answer(
@@ -120,21 +90,6 @@ def is_serializable(x: typing.Any, /) -> bool:
         return True
     except Exception:
         return False
-
-
-def remove_html(text: str, escape: bool = False, keep_emojis: bool = False) -> str:
-    """Removes HTML tags from text"""
-    return (escape_html if escape else str)(
-        re.sub(
-            (
-                r"(<\/?a.*?>|<\/?b>|<\/?i>|<\/?u>|<\/?strong>|<\/?em>|<\/?code>|<\/?strike>|<\/?del>|<\/?pre.*?>)"
-                if keep_emojis
-                else r"(<\/?a.*?>|<\/?b>|<\/?i>|<\/?u>|<\/?strong>|<\/?em>|<\/?code>|<\/?strike>|<\/?del>|<\/?pre.*?>|<\/?emoji.*?>)"
-            ),
-            "",
-            text,
-        )
-    )
 
 
 def iter_attrs(obj: typing.Any, /) -> typing.List[typing.Tuple[str, typing.Any]]:

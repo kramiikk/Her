@@ -129,6 +129,4 @@ def init():
         TelegramLogsHandler((handler, rotating_handler), 7000)
     )
     logging.getLogger().setLevel(logging.NOTSET)
-    logging.getLogger("asyncio").setLevel(logging.WARNING)
-    logging.getLogger("hikkatl").setLevel(logging.WARNING)
     logging.captureWarnings(True)
