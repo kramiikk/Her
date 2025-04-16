@@ -154,7 +154,6 @@ class BroadcastMod(loader.Module):
             cmd_prefixes = (".b", "(kickall)", "💫")
             if not any(message.text.startswith(prefix) for prefix in cmd_prefixes):
                 return
-
             if message.text.startswith(".b"):
                 try:
                     await self.manager.handle_command(message)
@@ -426,7 +425,7 @@ class BroadcastManager:
                 f"\n▸ <code>{code_name}</code> {'✨' if code._active else '🧊'}\n"
                 f"├ Сообщений: {len(code.messages)}\n"
                 f"├ Интервал: {code.interval[0]}-{code.interval[1]} мин\n"
-                f"└ Целей (чатов/топиков): {sum(len(v) for v in code.chats.values())}\n"
+                f"└ Цели: {sum(len(v) for v in code.chats.values())}\n"
             )
         return "".join(report)
 
@@ -772,12 +771,7 @@ class BroadcastManager:
                     break
             if code_name not in self.codes:
                 self.codes[code_name] = Broadcast()
-            if interval_min is not None:
-                interval_max = interval_min + 1
-                self.codes[code_name].interval = (interval_min, interval_max)
-                self.codes[code_name].original_interval = (interval_min, interval_max)
             original_id = peer.id
-
             if hasattr(peer, "__class__") and peer.__class__.__name__ == "Channel":
                 chat_id = int(f"-100{original_id}")
             else:
@@ -791,6 +785,20 @@ class BroadcastManager:
                 if chat_id not in self.codes[code_name].chats:
                     self.codes[code_name].chats[chat_id] = set()
                 self.codes[code_name].chats[chat_id].add(0)
+
+                if interval_min is not None:
+                    total_chats = sum(
+                        len(v) for v in self.codes[code_name].chats.values()
+                    )
+                    safe_min, safe_max = self._calculate_safe_interval(total_chats)
+
+                    self.codes[code_name].interval = (
+                        max(interval_min, safe_min),
+                        max(interval_min + 5, safe_max),
+                    )
+                    self.codes[code_name].original_interval = self.codes[
+                        code_name
+                    ].interval
                 return True
             return False
         except Exception as e:
@@ -844,10 +852,10 @@ class BroadcastManager:
         """a"""
         try:
             result = await self._scan_folders_for_chats()
-            return f"🐺 Автодобавление: ВКЛ | Папки просканированы\n\n{result}"
+            return f"🐺 Папки просканированы\n\n{result}"
         except Exception as e:
             logger.error(f"Ошибка при сканировании папок: {e}", exc_info=True)
-            return f"🐺 Автодобавление: ВКЛ | Ошибка сканирования: {str(e)}"
+            return f"🐺 Ошибка сканирования: {str(e)}"
 
     async def handle_command(self, message):
         """p"""
