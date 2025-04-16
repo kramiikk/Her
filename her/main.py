@@ -254,32 +254,19 @@ class Her:
                     except EOFError:
                         logging.error("Cannot read phone number interactively.")
                         return None
-                max_attempts = 3
-                for attempt in range(max_attempts):
-                    try:
-                        code_input = None
-
-                        def code_callback():
-                            nonlocal code_input
-                            if code_input is None:
-                                if sys.stdin.isatty():
-                                    code_input = input("Code: ")
-                                else:
-                                    code_input = os.environ.get("TELEGRAM_CODE", "")
-                            return code_input
-
-                        await client.start(
-                            phone=lambda: phone,
-                            password=lambda: password,
-                            code_callback=code_callback,
-                        )
-                        break
-                    except Exception as e:
-                        if attempt < max_attempts - 1:
-                            logging.warning(f"Auth attempt {attempt+1} failed: {e}")
-                            await asyncio.sleep(10)
-                        else:
-                            raise
+                try:
+                    await client.start(
+                        phone=lambda: phone,
+                        password=lambda: password,
+                        code_callback=lambda: (
+                            input("Code: ")
+                            if sys.stdin.isatty()
+                            else os.environ.get("TELEGRAM_CODE", "")
+                        ),
+                    )
+                except EOFError:
+                    logging.error("Cannot read authentication code interactively.")
+                    return None
             client.session.save()
             self._read_sessions()
             return client
