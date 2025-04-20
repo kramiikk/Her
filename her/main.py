@@ -13,7 +13,7 @@ from pathlib import Path
 
 from hikkatl import events
 from hikkatl.errors import AuthKeyInvalidError
-from hikkatl.sessions import MemorySession, SQLiteSession
+from hikkatl.sessions import SQLiteSession
 from hikkatl.network.connection import ConnectionTcpFull
 
 
@@ -112,27 +112,28 @@ class Her:
     def __init__(self):
         try:
             self.arguments = parse_arguments()
-            self.base_dir = self._get_base_dir()
+            self.base_dir = os.path.abspath(
+                os.path.join(os.path.dirname(__file__), "..")
+            )
             self.base_path = Path(self.base_dir)
             self.config_path = self.base_path / "config.json"
 
             self.sessions = []
-            self._read_sessions()
-
             self.loop = asyncio.get_event_loop()
             self.ready = asyncio.Event()
-            self._get_api_token()
             self.clients = []
+
+            self._get_api_token()
+
+            if self.api_token:
+                self._read_sessions()
         except Exception as e:
             logging.critical(f"Failed to initialize Her instance: {e}")
             raise
 
-    def _get_base_dir(self):
-        return os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-
     def _read_sessions(self):
-        """Load sessions without manual AuthKeyInvalidError check"""
-        session_path = Path(BASE_DIR) / "her.session"
+        """Load sessions without trying to fix errors"""
+        session_path = self.base_path / "her.session"
         self.sessions = []
 
         if not session_path.exists():
@@ -141,59 +142,56 @@ class Her:
             session = SQLiteSession(str(session_path))
             self.sessions.append(session)
         except Exception as e:
-            logging.error(f"Invalid session: {e}")
-            self._handle_corrupted_session(session_path)
-
-    def _handle_corrupted_session(self, session_path: Path):
-        """bs"""
-        logging.warning("Removing corrupted session...")
-        try:
-            session_path.unlink(missing_ok=True)
-        except Exception as e:
-            logging.error(f"Failed to reset session: {e}")
-            raise RuntimeError("Session recovery failed") from e
+            logging.critical(f"Invalid session file: {e}")
 
     def _get_api_token(self):
         """Get API Token from disk or environment"""
+        self.api_token = None
+
         try:
-            if not get_config_key("api_id"):
+            if get_config_key("api_id") and get_config_key("api_hash"):
+                self.api_token = ApiToken(
+                    int(get_config_key("api_id")),
+                    get_config_key("api_hash"),
+                )
+                return
+            token_file = Path(self.base_dir) / "api_token.txt"
+            if token_file.exists():
                 api_id, api_hash = (
-                    line.strip()
-                    for line in (Path(BASE_DIR) / "api_token.txt")
-                    .read_text()
-                    .splitlines()
+                    line.strip() for line in token_file.read_text().splitlines()
                 )
                 save_config_key("api_id", int(api_id))
                 save_config_key("api_hash", api_hash)
-                (Path(BASE_DIR) / "api_token.txt").unlink()
-            api_token = ApiToken(
-                int(get_config_key("api_id")),
-                get_config_key("api_hash"),
-            )
-        except FileNotFoundError:
+                token_file.unlink()
+                self.api_token = ApiToken(int(api_id), api_hash)
+                return
             try:
                 from . import api_token
+
+                self.api_token = ApiToken(
+                    api_token.ID,
+                    api_token.HASH,
+                )
+                return
             except ImportError:
-                try:
-                    api_token = ApiToken(
-                        os.environ["api_id"],
-                        os.environ["api_hash"],
-                    )
-                except KeyError:
-                    api_token = None
-        self.api_token = api_token
+                pass
+            if os.environ.get("api_id") and os.environ.get("api_hash"):
+                self.api_token = ApiToken(
+                    int(os.environ["api_id"]),
+                    os.environ["api_hash"],
+                )
+                return
+        except Exception as e:
+            logging.critical(f"Failed to get API token: {e}")
+        logging.critical(
+            "No API token found. Please run configurator or set environment variables."
+        )
 
-    async def _get_token(self):
-        """Reads or waits for user to enter API credentials"""
-        while self.api_token is None:
-            configurator.api_config()
-            importlib.invalidate_caches()
-            self._get_api_token()
-
-    def _create_client(
-        self, session: typing.Union[MemorySession, SQLiteSession]
-    ) -> CustomTelegramClient:
-        """Telegram"""
+    def _create_client(self, session):
+        """Create a new Telegram client"""
+        if not self.api_token:
+            logging.critical("Cannot create client without API token")
+            return None
         return CustomTelegramClient(
             session,
             self.api_token.ID,
@@ -209,7 +207,7 @@ class Her:
         )
 
     def _generate_app_version(self) -> str:
-        """version"""
+        """Generate a random app version"""
         base_version = f"{random.randint(8, 10)}"
         return (
             f"{base_version}.{random.randint(0, 9)}"
@@ -217,29 +215,27 @@ class Her:
             else f"{base_version}.{random.randint(0, 9)}.{random.randint(0, 9)}"
         )
 
-    async def _common_client_setup(self, client: CustomTelegramClient):
-        """s"""
+    async def _setup_client(self):
+        """Set up a client with proper authentication"""
+        if not self.api_token:
+            logging.critical("No API token available")
+            return None
+        session_path = self.base_path / "her.session"
         try:
-            await client.connect()
-            client.phone = "🏴‍☠️ +888"
-            return client
-        except OSError as e:
-            logging.error(f"Connection error: {e}")
-            await client.disconnect()
-            raise
-
-    async def _initial_setup(self) -> bool:
-        """Improved initial setup with non-interactive fallback"""
-        client = None
-        try:
-            session_path = self.base_path / "her.session"
             session = SQLiteSession(str(session_path))
-
-            if not hasattr(self, "api_token") or not self.api_token:
-                await self._get_token()
-            client = self._create_client(session)
+        except Exception as e:
+            logging.critical(f"Failed to create session: {e}")
+            return None
+        client = self._create_client(session)
+        if not client:
+            return None
+        try:
             await client.connect()
-
+        except Exception as e:
+            logging.critical(f"Failed to connect: {e}")
+            await client.disconnect()
+            return None
+        try:
             if not await client.is_user_authorized():
                 phone = (
                     self.arguments.phone[0]
@@ -248,11 +244,18 @@ class Her:
                 )
                 password = os.environ.get("TELEGRAM_2FA", "")
 
+                if not phone and not sys.stdin.isatty():
+                    logging.critical(
+                        "Cannot authenticate: running in non-interactive mode without phone credentials"
+                    )
+                    await client.disconnect()
+                    return None
                 if not phone:
                     try:
                         phone = input("Phone: ")
-                    except EOFError:
-                        logging.error("Cannot read phone number interactively.")
+                    except (EOFError, KeyboardInterrupt):
+                        logging.critical("Authentication cancelled")
+                        await client.disconnect()
                         return None
                 try:
                     await client.start(
@@ -264,89 +267,30 @@ class Her:
                             else os.environ.get("TELEGRAM_CODE", "")
                         ),
                     )
-                except EOFError:
-                    logging.error("Cannot read authentication code interactively.")
+                except (EOFError, KeyboardInterrupt):
+                    logging.critical("Authentication cancelled")
+                    await client.disconnect()
+                    return None
+                except Exception as e:
+                    logging.critical(f"Authentication failed: {e}")
+                    await client.disconnect()
                     return None
             client.session.save()
-            self._read_sessions()
             return client
-        except Exception as e:
-            logging.error(f"Setup failed: {e}")
-            return None
-        finally:
-            if client:
-                await client.disconnect()
-
-    async def _init_clients(self) -> bool:
-        """Initialize clients with better error handling"""
-        if not self.sessions:
-            client = await self._initial_setup()
-            if client:
-                self.clients.append(client)
-                return True
-            logging.critical("Unable to initialize client. Exiting.")
-            return False
-        try:
-            client = await self._common_client_setup(
-                self._create_client(self.sessions[0])
-            )
-            if not await client.is_user_authorized():
-                logging.warning("Session expired, attempting to re-authenticate")
-                await client.disconnect()
-                return await self._handle_expired_session()
-            self.clients.append(client)
-            return True
-        except (AuthKeyInvalidError, SessionExpiredError):
-            logging.error("Session invalid. Attempting to recreate...")
-            return await self._handle_expired_session()
-
-    async def _handle_expired_session(self):
-        """Handle expired session by removing it and trying to create a new one"""
-        session_path = self.base_path / "her.session"
-        try:
-            session_path.unlink(missing_ok=True)
-            self.sessions = []
-
-            if (
-                not sys.stdin.isatty()
-                and not self.arguments.phone
-                and not os.environ.get("TELEGRAM_PHONE")
-            ):
-                logging.critical(
-                    "Cannot authenticate: running in non-interactive mode without phone credentials"
-                )
-                return False
-            return await self._initial_setup() is not None
-        except Exception as e:
-            logging.error(f"Failed to handle expired session: {e}")
-            return False
-
-    async def amain_wrapper(self, client: CustomTelegramClient):
-        """Wrapper around amain"""
-        try:
-            await asyncio.sleep(random.uniform(13, 99))
-
-            await client.start()
-            first = True
-            me = await client.get_me()
-            client.tg_id = me.id
-
-            while True:
-                try:
-                    await self.amain(first, client)
-                    first = False
-                except (ConnectionError, AuthKeyInvalidError):
-                    break
-        finally:
+        except AuthKeyInvalidError:
+            logging.critical("Session expired or invalid")
             await client.disconnect()
-            client.session.save()
+            try:
+                session_path.unlink(missing_ok=True)
+            except Exception as e:
+                logging.error(f"Failed to delete invalid session: {e}")
+            return None
+        except Exception as e:
+            logging.critical(f"Setup failed: {e}")
+            await client.disconnect()
+            return None
 
-    async def _add_dispatcher(
-        self,
-        client: CustomTelegramClient,
-        modules: loader.Modules,
-        db: database.Database,
-    ):
+    async def _add_dispatcher(self, client, modules, db):
         """Inits and adds dispatcher instance to client"""
         dispatcher = TextDispatcher(modules, client, db)
         client.dispatcher = dispatcher
@@ -359,13 +303,18 @@ class Her:
     async def amain(self, first: bool, client: CustomTelegramClient):
         """Entrypoint for async init, run once for each user"""
         client.parse_mode = "HTML"
-        await client.start()
 
+        try:
+            me = await client.get_me()
+            client.tg_id = me.id
+        except Exception as e:
+            logging.critical(f"Failed to get user info: {e}")
+            return
         db = database.Database(client)
         client.her_db = db
         await db.init()
 
-        modules = loader.Modules(client, self.sessions[0], db)
+        modules = loader.Modules(client, client.session, db)
         client.loader = modules
 
         await self._add_dispatcher(client, modules, db)
@@ -380,46 +329,56 @@ class Her:
 
     async def _main(self):
         """Main entrypoint"""
-        try:
-            await self._get_token()
+        if not self.api_token:
+            if sys.stdin.isatty():
+                configurator.api_config()
+                importlib.invalidate_caches()
+                self._get_api_token()
+            if not self.api_token:
+                logging.critical("No API token available. Exiting.")
+                return
+        client = await self._setup_client()
+        if not client:
+            logging.critical("Failed to setup client. Exiting.")
+            return
+        self.clients.append(client)
 
-            if not await self._init_clients() or not self.clients:
-                logging.critical("No valid client initialization")
-                sys.exit(1)
-            await self.amain_wrapper(self.clients[0])
+        try:
+            await self.amain(True, client)
         except Exception as e:
-            logging.critical(f"Critical error: {e}")
-            sys.exit(1)
+            logging.critical(f"Error in main loop: {e}")
+        finally:
+            await client.disconnect()
+
+    async def _close_clients(self):
+        """Gracefully close all client connections"""
+        for client in self.clients:
+            if client.is_connected():
+                try:
+                    await client.disconnect()
+                except Exception:
+                    pass
 
     def _shutdown_handler(self, sig=None, frame=None):
-        """Improved shutdown handler that cleans up pending tasks"""
+        """Handle shutdown signal"""
         logging.info("Shutting down gracefully...")
 
         for task in asyncio.all_tasks(self.loop):
             if task is not asyncio.current_task(self.loop):
                 task.cancel()
         self.loop.create_task(self._close_clients())
-        logging.info("Bye")
 
-        if sig is not None:
-            sys.exit(0)
-
-    async def _close_clients(self):
-        """Gracefully close all client connections"""
-        close_tasks = []
-        for client in self.clients:
-            if client.is_connected():
-                close_tasks.append(client.disconnect())
-        if close_tasks:
-            try:
-                await asyncio.wait_for(asyncio.gather(*close_tasks), timeout=5)
-            except asyncio.TimeoutError:
-                logging.warning("Some clients didn't disconnect in time")
         self.loop.stop()
 
+        logging.info("Bye")
+
+        sys.exit(0)
+
     def main(self):
-        """Improved main entrypoint with better error handling"""
+        """Main entrypoint"""
         signal.signal(signal.SIGINT, self._shutdown_handler)
+        signal.signal(signal.SIGTERM, self._shutdown_handler)
+
         try:
             self.loop.run_until_complete(self._main())
         except KeyboardInterrupt:
@@ -427,19 +386,11 @@ class Her:
         except Exception as e:
             logging.critical(f"Unhandled error: {e}")
             self._shutdown_handler()
-            sys.exit(1)
         finally:
-            pending = asyncio.all_tasks(self.loop)
-            for task in pending:
-                task.cancel()
-            if pending:
-                try:
-                    self.loop.run_until_complete(
-                        asyncio.gather(*pending, return_exceptions=True)
-                    )
-                except Exception:
-                    pass
-            self.loop.close()
+            try:
+                self._shutdown_handler()
+            except Exception:
+                pass
 
 
 her = Her()
