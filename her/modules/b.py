@@ -136,6 +136,7 @@ class BroadcastMod(loader.Module):
             await asyncio.gather(*tasks, return_exceptions=True)
         if hasattr(self.manager, "_message_cache"):
             await self.manager._message_cache.clean_expired()
+            self.manager._message_cache._active = False
 
     async def watcher(self, message):
         """Watcher method to handle incoming messages"""
