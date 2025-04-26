@@ -132,7 +132,6 @@ class BroadcastMod(loader.Module):
     async def on_unload(self):
         if not hasattr(self, "manager"):
             return
-        self.manager._active = False
 
         tasks = []
         tasks.extend(self.manager.broadcast_tasks.values())
