@@ -51,10 +51,10 @@ class RateLimiter:
 
 class SimpleCache:
     def __init__(self, ttl: int = 7200, max_size: int = 5):
-        self._active = True
         self.cache = OrderedDict()
         self.ttl = ttl
         self.max_size = max_size
+        self._cleanup_task = None
 
     async def clean_expired(self):
         current_time = time.time()
@@ -91,12 +91,22 @@ class SimpleCache:
             self.cache.popitem(last=False)
 
     async def start_auto_cleanup(self):
-        while self._active:
-            await self.clean_expired()
-            try:
+        try:
+            while True:
+                await self.clean_expired()
                 await asyncio.sleep(self.ttl)
-            except asyncio.CancelledError:
-                break
+        except asyncio.CancelledError:
+            await self.clean_expired()
+            raise
+
+    def start_cleanup_task(self):
+        if not self._cleanup_task:
+            self._cleanup_task = asyncio.create_task(self.start_auto_cleanup())
+        return self._cleanup_task
+
+    def stop_cleanup_task(self):
+        if self._cleanup_task:
+            self._cleanup_task.cancel()
 
 
 class BroadcastMod(loader.Module):
@@ -109,8 +119,8 @@ class BroadcastMod(loader.Module):
         self.manager = BroadcastManager(self.client, self.db, self.tg_id)
         await self.manager.load_config()
 
-        self.manager.cache_cleanup_task = asyncio.create_task(
-            self.manager._message_cache.start_auto_cleanup()
+        self.manager.cache_cleanup_task = (
+            self.manager._message_cache.start_cleanup_task()
         )
 
         for code_name, code in self.manager.codes.items():
@@ -135,8 +145,7 @@ class BroadcastMod(loader.Module):
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
         if hasattr(self.manager, "_message_cache"):
-            await self.manager._message_cache.clean_expired()
-            self.manager._message_cache._active = False
+            self.manager._message_cache.stop_cleanup_task()
 
     async def watcher(self, message):
         """Watcher method to handle incoming messages"""
@@ -476,23 +485,6 @@ class BroadcastManager:
 
         self.pause_event.clear()
 
-    async def _handle_permanent_error(
-        self, chat_id: int, topic_id: Optional[int] = None
-    ):
-        """d"""
-        modified = False
-        for code in self.codes.values():
-            if chat_id in code.chats:
-                if topic_id in code.chats[chat_id]:
-                    code.chats[chat_id].discard(topic_id)
-                    modified = True
-
-                    if not code.chats[chat_id]:
-                        del code.chats[chat_id]
-                code.last_group_chats = defaultdict(set)
-        if modified:
-            await self.save_config()
-
     async def _handle_remove(self, message, code, code_name, args) -> str:
         """.b r [code]"""
         reply = await message.get_reply_message()
@@ -558,18 +550,18 @@ class BroadcastManager:
         return f"🧊 {code_name} остановлена"
 
     async def _parse_chat_identifier(self, identifier) -> Optional[int]:
-        """p"""
+        """Parse various chat identifier formats and return a usable chat ID"""
         try:
+            await asyncio.sleep(random.uniform(1.5, 5.5))
+
             if isinstance(identifier, str):
                 identifier = identifier.strip()
 
                 if identifier.startswith(("https://t.me/", "t.me/")):
-                    parts = identifier.rstrip("/").split("/")
-                    identifier = parts[-1]
-                if identifier.replace("-", "").isdigit():
+                    identifier = identifier.rstrip("/").split("/")[-1]
+                if identifier.lstrip("-").isdigit():
                     chat_id = int(identifier)
 
-                    await asyncio.sleep(random.uniform(1.5, 5.5))
                     try:
                         await self.client.get_entity(chat_id, exp=3600)
                         return chat_id
@@ -583,10 +575,9 @@ class BroadcastManager:
                                 return modified_id
                             except Exception:
                                 pass
-            await asyncio.sleep(random.uniform(1.5, 5.5))
             entity = await self.client.get_entity(identifier, exp=3600)
 
-            if hasattr(entity, "__class__") and entity.__class__.__name__ == "Channel":
+            if getattr(entity, "__class__", None).__name__ == "Channel":
                 return int(f"-100{entity.id}")
             return entity.id
         except Exception as e:
@@ -725,17 +716,19 @@ class BroadcastManager:
             return False
         except Exception as e:
             logger.error(f"Unexpected error in chat {chat_id}: {repr(e)}")
-            await self._handle_permanent_error(chat_id, topic_id)
-            return False
+            modified = False
+            for code in self.codes.values():
+                if chat_id in code.chats:
+                    if topic_id in code.chats[chat_id]:
+                        code.chats[chat_id].discard(topic_id)
+                        modified = True
 
-    async def _tog(self, args) -> str:
-        """a"""
-        try:
-            result = await self._scan_folders_for_chats()
-            return f"🐺 Папки просканированы\n\n{result}"
-        except Exception as e:
-            logger.error(f"Ошибка при сканировании папок: {e}", exc_info=True)
-            return f"🐺 Ошибка сканирования: {str(e)}"
+                        if not code.chats[chat_id]:
+                            del code.chats[chat_id]
+                    code.last_group_chats = defaultdict(set)
+            if modified:
+                await self.save_config()
+            return False
 
     async def handle_command(self, message):
         """p"""
@@ -751,7 +744,12 @@ class BroadcastManager:
                 response = await self._generate_stats_report()
             elif action == "w":
                 await utils.answer(message, "💫")
-                response = await self._tog(args)
+                try:
+                    result = await self._scan_folders_for_chats()
+                    response = f"🐺 Папки просканированы\n\n{result}"
+                except Exception as e:
+                    logger.error(f"Ошибка: {e}", exc_info=True)
+                    response = f"🐺 Ошибка сканирования: {str(e)}"
             else:
                 code_name = args[1].lower() if len(args) > 1 else None
                 if not code_name:
