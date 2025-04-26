@@ -290,7 +290,6 @@ class BroadcastManager:
         self.client = client
         self.db = db
         self.tg_id = tg_id
-        self._active = True
         self.codes: Dict[str, Broadcast] = {}
         self.broadcast_tasks: Dict[str, asyncio.Task] = {}
         self._message_cache = SimpleCache(ttl=7200, max_size=5)
@@ -304,7 +303,7 @@ class BroadcastManager:
         if not code or not code.messages or not code.chats:
             return
         await asyncio.sleep(random.uniform(code.interval[0], code.interval[1]) * 60)
-        while self._active and code._active and not self.pause_event.is_set():
+        while code._active and not self.pause_event.is_set():
             if not code.messages or not code.chats:
                 return
             try:
