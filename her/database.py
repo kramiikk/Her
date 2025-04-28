@@ -70,9 +70,6 @@ class Database(dict):
                 )
                 continue
             if not isinstance(value, dict):
-                # If value is not a dict (module values), drop it,
-                # otherwise it may cause problems
-
                 del db[key]
                 logger.warning(
                     "DbAutoFix: Dropped key %s, because it is non-dict, but %s",

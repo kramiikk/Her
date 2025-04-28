@@ -6,7 +6,7 @@ class PointerList(list):
 
     def __init__(
         self,
-        db: "Database",  # type: ignore  # noqa: F821
+        db: "Database",
         module: str,
         key: str,
         default: typing.Optional[typing.Any] = None,
@@ -47,12 +47,12 @@ class PointerList(list):
         self._save()
         return a
 
-    def __iadd__(self, __x: typing.Iterable) -> "Self":  # type: ignore  # noqa: F821
+    def __iadd__(self, __x: typing.Iterable) -> "Self":
         a = super().__iadd__(__x)
         self._save()
         return a
 
-    def __imul__(self, __x: int) -> "Self":  # type: ignore  # noqa: F821
+    def __imul__(self, __x: int) -> "Self":
         a = super().__imul__(__x)
         self._save()
         return a
@@ -94,7 +94,7 @@ class PointerDict(dict):
 
     def __init__(
         self,
-        db: "Database",  # type: ignore  # noqa: F821
+        db: "Database",
         module: str,
         key: str,
         default: typing.Optional[typing.Any] = None,
@@ -166,10 +166,10 @@ class BaseSerializingMiddlewareDict:
     def __init__(self, pointer: PointerDict):
         self._pointer = pointer
 
-    def serialize(self, item: typing.Any) -> "JSONSerializable":  # type: ignore  # noqa: F821
+    def serialize(self, item: typing.Any) -> "JSONSerializable":
         raise NotImplementedError
 
-    def deserialize(self, item: "JSONSerializable") -> typing.Any:  # type: ignore  # noqa: F821
+    def deserialize(self, item: "JSONSerializable") -> typing.Any:
         raise NotImplementedError
 
     def __getitem__(self, key: typing.Any) -> typing.Any:
@@ -228,10 +228,10 @@ class BaseSerializingMiddlewareList:
     def __init__(self, pointer: PointerList):
         self._pointer = pointer
 
-    def serialize(self, item: typing.Any) -> "JSONSerializable":  # type: ignore  # noqa: F821
+    def serialize(self, item: typing.Any) -> "JSONSerializable":
         raise NotImplementedError
 
-    def deserialize(self, item: "JSONSerializable") -> typing.Any:  # type: ignore  # noqa: F821
+    def deserialize(self, item: "JSONSerializable") -> typing.Any:
         raise NotImplementedError
 
     def remove(self, item: typing.Any) -> None:
@@ -285,10 +285,10 @@ class NamedTupleMiddlewareList(BaseSerializingMiddlewareList):
         super().__init__(pointer)
         self._item_type = item_type
 
-    def serialize(self, item: typing.Any) -> "JSONSerializable":  # type: ignore  # noqa: F821
+    def serialize(self, item: typing.Any) -> "JSONSerializable":
         return item._asdict()
 
-    def deserialize(self, item: "JSONSerializable") -> typing.Any:  # type: ignore  # noqa: F821
+    def deserialize(self, item: "JSONSerializable") -> typing.Any:
         return self._item_type(**item)
 
 
@@ -297,8 +297,8 @@ class NamedTupleMiddlewareDict(BaseSerializingMiddlewareDict):
         super().__init__(pointer)
         self._item_type = item_type
 
-    def serialize(self, item: typing.Any) -> "JSONSerializable":  # type: ignore  # noqa: F821
+    def serialize(self, item: typing.Any) -> "JSONSerializable":
         return item._asdict()
 
-    def deserialize(self, item: "JSONSerializable") -> typing.Any:  # type: ignore  # noqa: F821
+    def deserialize(self, item: "JSONSerializable") -> typing.Any:
         return self._item_type(**item)

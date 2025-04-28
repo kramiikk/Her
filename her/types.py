@@ -134,7 +134,7 @@ class Module:
 class LoadError(Exception):
     """Tells user, why your module can't be loaded, if raised in `client_ready`"""
 
-    def __init__(self, error_message: str):  # skipcq: PYL-W0231
+    def __init__(self, error_message: str):
         self._error = error_message
 
     def __str__(self) -> str:
@@ -276,8 +276,6 @@ class ConfigValue:
                 value = ast.literal_eval(value)
             except Exception:
                 pass
-            # Convert value to list if it's tuple just not to mess up
-            # with json convertations
 
             if isinstance(value, (set, tuple)):
                 value = list(value)
@@ -306,8 +304,6 @@ class ConfigValue:
 
                     if self.validator.internal_id in defaults:
                         value = defaults[self.validator.internal_id]
-            # This attribute will tell the `Loader` to save this value in db
-
             self._save_marker = True
         object.__setattr__(self, key, value)
 
@@ -345,7 +341,7 @@ def _get_members(
 class CacheRecordEntity:
     def __init__(
         self,
-        hashable_entity: "Hashable",  # type: ignore  # noqa: F821
+        hashable_entity: "Hashable",
         resolved_entity: EntityLike,
         exp: int,
     ):
@@ -377,8 +373,8 @@ class CacheRecordEntity:
 class CacheRecordPerms:
     def __init__(
         self,
-        hashable_entity: "Hashable",  # type: ignore  # noqa: F821
-        hashable_user: "Hashable",  # type: ignore  # noqa: F821
+        hashable_entity: "Hashable",
+        hashable_user: "Hashable",
         resolved_perms: EntityLike,
         exp: int,
     ):

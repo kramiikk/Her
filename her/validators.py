@@ -124,7 +124,7 @@ class Integer(Validator):
             doc = {
                 "en": VALIDATORS_TRANSLATIONS["integer"].format(
                     sign=_signs.get("en", ""),
-                    digits=_digits.get("en", ""),  # .get() is now safe
+                    digits=_digits.get("en", ""),
                 )
             }
         else:

@@ -54,7 +54,7 @@ async def stop_placeholder() -> bool:
 class InfiniteLoop:
     _task = None
     status = False
-    module_instance = None  # Will be passed later
+    module_instance = None
 
     def __init__(
         self,
@@ -184,13 +184,13 @@ class Modules:
 
     def __init__(
         self,
-        client: "CustomTelegramClient",  # type: ignore  # noqa: F821
+        client: "CustomTelegramClient",
         session,
         db: Database,
     ):
         self._initial_registration = True
         self.callback_handlers = {}
-        self.modules = []  # skipcq: PTC-W0052
+        self.modules = []
         self.watchers = []
         self.raw_handlers = []
         self.client = client

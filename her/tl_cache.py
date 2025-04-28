@@ -95,8 +95,6 @@ class CustomTelegramClient(TelegramClient):
         if unix_socket_path is not None:
             connection.set_unix_socket(unix_socket_path)
         if not await self._sender.connect(connection):
-            # We don't want to init or modify anything if we were already connected
-
             return
         self.session.auth_key = self._sender.auth_key
         self.session.save()
