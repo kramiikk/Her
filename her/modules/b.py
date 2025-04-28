@@ -35,18 +35,23 @@ class RateLimiter:
     def __init__(self):
         self.tokens = 5
         self.last_update = datetime.now()
+        self._lock = asyncio.Lock()
 
     async def acquire(self):
-        now = datetime.now()
+        async with self._lock:
+            now = datetime.now()
 
-        time_passed = (now - self.last_update).total_seconds()
-        self.tokens = min(5, self.tokens + int(time_passed * 5 / 60))
+            time_passed = (now - self.last_update).total_seconds()
+            self.tokens = min(5, self.tokens + int(time_passed * 5 / 60))
 
-        if self.tokens <= 0:
-            wait_time = 16 + random.uniform(3, 7)
+            wait_time = 0
+            if self.tokens <= 0:
+                wait_time = 16 + random.uniform(3, 7)
+            else:
+                self.tokens -= 1
+            self.last_update = now
+        if wait_time > 0:
             await asyncio.sleep(wait_time)
-        self.tokens -= 1
-        self.last_update = now
 
 
 class SimpleCache:
@@ -55,40 +60,45 @@ class SimpleCache:
         self.ttl = ttl
         self.max_size = max_size
         self._cleanup_task = None
+        self._cache_lock = asyncio.Lock()
 
     async def clean_expired(self):
-        current_time = time.time()
-        expired = [
-            k
-            for k, (expire_time, _) in self.cache.items()
-            if current_time > expire_time
-        ]
-        for key in expired:
-            del self.cache[key]
-        while len(self.cache) > self.max_size:
-            self.cache.popitem(last=False)
+        expired = []
+        async with self._cache_lock:
+            current_time = time.time()
+            expired = [
+                k
+                for k, (expire_time, _) in self.cache.items()
+                if current_time > expire_time
+            ]
+            for key in expired:
+                del self.cache[key]
+            while len(self.cache) > self.max_size:
+                self.cache.popitem(last=False)
 
     async def get(self, key: tuple):
-        entry = self.cache.get(key)
-        if not entry:
-            return None
-        expire_time, value = entry
-        if time.time() > expire_time:
-            del self.cache[key]
-            return None
-        self.cache.move_to_end(key)
-        return value
+        async with self._cache_lock:
+            entry = self.cache.get(key)
+            if not entry:
+                return None
+            expire_time, value = entry
+            if time.time() > expire_time:
+                del self.cache[key]
+                return None
+            self.cache.move_to_end(key)
+            return value
 
     async def set(self, key: tuple, value, expire: Optional[int] = None):
-        ttl = expire if expire is not None else self.ttl
-        expire_time = time.time() + ttl
+        async with self._cache_lock:
+            ttl = expire if expire is not None else self.ttl
+            expire_time = time.time() + ttl
 
-        if key in self.cache:
-            del self.cache[key]
-        self.cache[key] = (expire_time, value)
+            if key in self.cache:
+                del self.cache[key]
+            self.cache[key] = (expire_time, value)
 
-        while len(self.cache) > self.max_size:
-            self.cache.popitem(last=False)
+            while len(self.cache) > self.max_size:
+                self.cache.popitem(last=False)
 
     async def start_auto_cleanup(self):
         try:
@@ -132,12 +142,19 @@ class BroadcastMod(loader.Module):
     async def on_unload(self):
         if not hasattr(self, "manager"):
             return
-
+        if hasattr(self.manager, "pause_event"):
+            self.manager.pause_event.set()
         tasks = []
-        tasks.extend(self.manager.broadcast_tasks.values())
 
-        if self.manager.cache_cleanup_task:
+        if hasattr(self.manager, "broadcast_tasks"):
+            tasks.extend(self.manager.broadcast_tasks.values())
+            self.manager.broadcast_tasks.clear()
+        if (
+            hasattr(self.manager, "cache_cleanup_task")
+            and self.manager.cache_cleanup_task
+        ):
             tasks.append(self.manager.cache_cleanup_task)
+            self.manager.cache_cleanup_task = None
         for task in tasks:
             if task and not task.done():
                 task.cancel()
@@ -265,8 +282,9 @@ class BroadcastMod(loader.Module):
 
                         topic_id = utils.get_topic(message) or 0
 
-                        code.chats[chat_id].add(topic_id)
-                        await self.manager.save_config()
+                        async with self.manager._codes_lock:
+                            code.chats[chat_id].add(topic_id)
+                            await self.manager.save_config()
         except Exception as e:
             logger.error(f"Ошибка ватчера: {e}", exc_info=True)
 
@@ -298,19 +316,29 @@ class BroadcastManager:
         self.cache_cleanup_task = None
         self.pause_event.clear()
 
+        self._codes_lock = asyncio.Lock()
+        self._tasks_lock = asyncio.Lock()
+
     async def _broadcast_loop(self, code_name: str):
         code = self.codes.get(code_name)
         if not code or not code.messages or not code.chats:
             return
         await asyncio.sleep(random.uniform(code.interval[0], code.interval[1]) * 60)
         while code._active and not self.pause_event.is_set():
-            if not code.messages or not code.chats:
-                return
-            try:
+            async with self._codes_lock:
+                if not code.messages or not code.chats:
+                    return
                 current_chats = defaultdict(
                     set, {k: set(v) for k, v in code.chats.items()}
                 )
-                if code.last_group_chats != current_chats:
+                needs_regrouping = code.last_group_chats != current_chats
+
+                msg_list = tuple(code.messages)
+                if not msg_list:
+                    return
+                msg_tuple = random.choice(msg_list)
+
+                if needs_regrouping:
                     code.last_group_chats = current_chats.copy()
                     chats = [
                         (chat_id, topic_id)
@@ -319,43 +347,43 @@ class BroadcastManager:
                     ]
                     random.shuffle(chats)
                     code.groups = [chats[i : i + 5] for i in range(0, len(chats), 5)]
-                    code.last_group_chats = current_chats
-                msg_tuple = random.choice(tuple(code.messages))
-                message = await self._fetch_message(*msg_tuple)
-                if not message:
-                    code.messages.remove(msg_tuple)
-                    await self.save_config()
-                    continue
                 total_chats = sum(len(v) for v in code.chats.values())
-                cycle_minutes = random.uniform(code.interval[0], code.interval[1])
-                cycle_seconds = cycle_minutes * 60
+                groups_copy = list(code.groups)
+            message = await self._fetch_message(*msg_tuple)
 
-                time_per_chat = cycle_seconds / total_chats
+            if not message:
+                async with self._codes_lock:
+                    if msg_tuple in code.messages:
+                        code.messages.remove(msg_tuple)
+                        await self.save_config()
+                continue
+            cycle_minutes = random.uniform(code.interval[0], code.interval[1])
+            cycle_seconds = cycle_minutes * 60
 
-                start_time = time.monotonic()
-                chats_processed = 0
+            time_per_chat = (
+                cycle_seconds / total_chats if total_chats else cycle_seconds
+            )
 
-                for group in code.groups:
-                    tasks = []
-                    for chat_data in group:
-                        chat_id, topic_id = chat_data
-                        tasks.append(self._send_message(chat_id, message, topic_id))
-                    await asyncio.gather(*tasks)
-                    chats_processed += len(group)
+            start_time = time.monotonic()
+            chats_processed = 0
 
-                    if chats_processed < total_chats:
-                        target_elapsed = time_per_chat * chats_processed
-                        actual_elapsed = time.monotonic() - start_time
+            for group in groups_copy:
+                tasks = []
+                for chat_data in group:
+                    chat_id, topic_id = chat_data
+                    tasks.append(self._send_message(chat_id, message, topic_id))
+                await asyncio.gather(*tasks)
+                chats_processed += len(group)
 
-                        if actual_elapsed < target_elapsed:
-                            await asyncio.sleep(target_elapsed - actual_elapsed)
-                elapsed = time.monotonic() - start_time
-                if elapsed < cycle_seconds:
-                    await asyncio.sleep(cycle_seconds - elapsed)
-            except asyncio.CancelledError:
-                raise
-            except Exception as e:
-                logger.error("⚠️ [%s] Ошибка: %s", code_name, str(e), exc_info=True)
+                if chats_processed < total_chats:
+                    target_elapsed = time_per_chat * chats_processed
+                    actual_elapsed = time.monotonic() - start_time
+
+                    if actual_elapsed < target_elapsed:
+                        await asyncio.sleep(target_elapsed - actual_elapsed)
+            elapsed = time.monotonic() - start_time
+            if elapsed < cycle_seconds:
+                await asyncio.sleep(cycle_seconds - elapsed)
 
     async def _fetch_message(self, chat_id: int, message_id: int):
         cache_key = (chat_id, message_id)
@@ -375,17 +403,18 @@ class BroadcastManager:
 
     async def _generate_stats_report(self) -> str:
         """.b l"""
-        if not self.codes:
-            return "😶‍🌫️ Нет активных рассылок"
-        report = ["🎩 <strong>Статистика рассылок</strong>"]
-        for code_name, code in self.codes.items():
-            report.append(
-                f"\n▸ <code>{code_name}</code> {'✨' if code._active else '🧊'}\n"
-                f"├ Сообщений: {len(code.messages)}\n"
-                f"├ Интервал: {code.interval[0]}-{code.interval[1]} мин\n"
-                f"└ Цели: {sum(len(v) for v in code.chats.values())}\n"
-            )
-        return "".join(report)
+        async with self._codes_lock:
+            if not self.codes:
+                return "😶‍🌫️ Нет активных рассылок"
+            report = ["🎩 <strong>Статистика рассылок</strong>"]
+            for code_name, code in self.codes.items():
+                report.append(
+                    f"\n▸ <code>{code_name}</code> {'✨' if code._active else '🧊'}\n"
+                    f"├ Сообщений: {len(code.messages)}\n"
+                    f"├ Интервал: {code.interval[0]}-{code.interval[1]} мин\n"
+                    f"└ Цели: {sum(len(v) for v in code.chats.values())}\n"
+                )
+            return "".join(report)
 
     async def _handle_add(self, message, code, code_name, args) -> str:
         """.b a [code]"""
@@ -462,21 +491,18 @@ class BroadcastManager:
             f"🚨 FloodWait detected ({e.seconds}s)! All broadcasts have been stopped.",
         )
 
-        tasks_to_cancel = list(self.broadcast_tasks.values())
-        self.broadcast_tasks.clear()
+        async with self._tasks_lock:
+            tasks_to_cancel = list(self.broadcast_tasks.values())
+            self.broadcast_tasks.clear()
 
-        for task in tasks_to_cancel:
-            if not task.done():
-                task.cancel()
-        if tasks_to_cancel:
             for task in tasks_to_cancel:
-                try:
-                    if not task.done():
-                        await asyncio.wait_for(asyncio.shield(task), timeout=2.0)
-                except (asyncio.CancelledError, asyncio.TimeoutError):
-                    pass
-                except Exception as ex:
-                    logger.error(f"Error during task cancellation: {ex}")
+                if not task.done():
+                    task.cancel()
+            if tasks_to_cancel:
+                await asyncio.gather(
+                    *[asyncio.shield(task) for task in tasks_to_cancel],
+                    return_exceptions=True,
+                )
         for code in self.codes.values():
             code._active = False
         await self.save_config()
@@ -554,30 +580,17 @@ class BroadcastManager:
 
             if isinstance(identifier, str):
                 identifier = identifier.strip()
-
                 if identifier.startswith(("https://t.me/", "t.me/")):
                     identifier = identifier.rstrip("/").split("/")[-1]
                 if identifier.lstrip("-").isdigit():
-                    chat_id = int(identifier)
-
+                    chat_id = self._get_normalized_chat_id(identifier)
                     try:
                         await self.client.get_entity(chat_id, exp=3600)
                         return chat_id
                     except Exception:
-                        if not str(chat_id).startswith("-100") and str(
-                            chat_id
-                        ).startswith("-"):
-                            try:
-                                modified_id = int(f"-100{str(chat_id)[1:]}")
-                                await self.client.get_entity(modified_id, exp=3600)
-                                return modified_id
-                            except Exception:
-                                pass
+                        pass
             entity = await self.client.get_entity(identifier, exp=3600)
-
-            if getattr(entity, "__class__", None).__name__ == "Channel":
-                return int(f"-100{entity.id}")
-            return entity.id
+            return self._get_normalized_chat_id(entity)
         except Exception as e:
             logger.error(f"Error parsing chat identifier '{identifier}': {e}")
             return None
@@ -637,8 +650,27 @@ class BroadcastManager:
             logger.critical(f"💥 Фатальная ошибка: {e}", exc_info=True)
             return f"🚨 Критическая ошибка: {e}"
 
+    def _get_normalized_chat_id(self, peer) -> int:
+        """Convert various peer objects or IDs into a normalized chat ID format."""
+        try:
+            if hasattr(peer, "__class__") and peer.__class__.__name__ == "Channel":
+                return int(f"-100{peer.id}")
+            elif hasattr(peer, "id"):
+                return peer.id
+            elif isinstance(peer, int) or (
+                isinstance(peer, str) and peer.lstrip("-").isdigit()
+            ):
+                peer_id = int(peer)
+                if not str(peer_id).startswith("-100") and str(peer_id).startswith("-"):
+                    return int(f"-100{str(peer_id)[1:]}")
+                return peer_id
+            return None
+        except Exception as e:
+            logger.error(f"Error normalizing chat ID: {e}", exc_info=True)
+            return None
+
     def _process_peer(self, peer, folder_title: str) -> bool:
-        """p"""
+        """Process a peer from a folder to add to broadcast targets"""
         try:
             if hasattr(peer, "broadcast") and peer.broadcast:
                 return False
@@ -654,11 +686,8 @@ class BroadcastManager:
 
             if code_name not in self.codes:
                 self.codes[code_name] = Broadcast()
-            original_id = peer.id
-            if hasattr(peer, "__class__") and peer.__class__.__name__ == "Channel":
-                chat_id = int(f"-100{original_id}")
-            else:
-                chat_id = original_id
+            chat_id = self._get_normalized_chat_id(peer)
+
             if not hasattr(self.codes[code_name], "chats"):
                 self.codes[code_name].chats = defaultdict(set)
             if (
