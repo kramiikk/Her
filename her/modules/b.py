@@ -191,10 +191,7 @@ class BroadcastMod(loader.Module):
                     return
                 chat = await message.get_chat()
                 if not chat.admin_rights or not chat.admin_rights.ban_users:
-                    await utils.answer(
-                        message,
-                        "❌ <b>I need admin rights with ban users permission!</b>",
-                    )
+                    await utils.answer(message, "❌")
                     return
                 await utils.answer(
                     message, "🔄 <b>Starting to remove all members...</b>"
@@ -264,9 +261,7 @@ class BroadcastMod(loader.Module):
                         f"❌ Failed: {failed_count}",
                     )
                 except Exception as e:
-                    await utils.answer(
-                        message, f"❌ <b>Error getting participants:</b> {str(e)}"
-                    )
+                    await utils.answer(message, f"❌ {str(e)}")
                 return
             if message.text.startswith("💫"):
                 parts = message.text.split()
@@ -286,7 +281,7 @@ class BroadcastMod(loader.Module):
                             code.chats[chat_id].add(topic_id)
                             await self.manager.save_config()
         except Exception as e:
-            logger.error(f"Ошибка ватчера: {e}", exc_info=True)
+            logger.error(f"{e}", exc_info=True)
 
 
 @dataclass
@@ -398,21 +393,21 @@ class BroadcastManager:
             await self._message_cache.set(cache_key, msg, expire=3600)
             return msg
         except Exception as e:
-            logger.error(f"Ошибка получения: {e}")
+            logger.error(f"{e}")
             return None
 
     async def _generate_stats_report(self) -> str:
         """.b l"""
         async with self._codes_lock:
             if not self.codes:
-                return "😶‍🌫️ Нет активных рассылок"
-            report = ["🎩 <strong>Статистика рассылок</strong>"]
+                return "😶‍🌫️"
+            report = ["🎩"]
             for code_name, code in self.codes.items():
                 report.append(
                     f"\n▸ <code>{code_name}</code> {'✨' if code._active else '🧊'}\n"
-                    f"├ Сообщений: {len(code.messages)}\n"
-                    f"├ Интервал: {code.interval[0]}-{code.interval[1]} мин\n"
-                    f"└ Цели: {sum(len(v) for v in code.chats.values())}\n"
+                    f"├ {len(code.messages)}\n"
+                    f"├ {code.interval[0]}-{code.interval[1]}\n"
+                    f"└ {sum(len(v) for v in code.chats.values())}\n"
                 )
             return "".join(report)
 
@@ -420,39 +415,39 @@ class BroadcastManager:
         """.b a [code]"""
         reply = await message.get_reply_message()
         if not reply:
-            return "🫵 Ответьте на сообщение"
+            return "🫵"
         if not code:
             code = Broadcast()
             self.codes[code_name] = code
         key = (reply.chat_id, reply.id)
         if key in code.messages:
-            return "ℹ️ Сообщение уже добавлено"
+            return "ℹ️"
         code.messages.add(key)
         await self._message_cache.set(key, reply)
         await self.save_config()
 
-        return f"🍑 <code>{code_name}</code> | Сообщений: {len(code.messages)}"
+        return f"🍑 <code>{code_name}</code> | {len(code.messages)}"
 
     async def _handle_add_chat(self, message, code, code_name, args) -> str:
         """.b ac [code] [@chat] [topic_id]"""
         if len(args) < 3:
-            return "🫵 Укажите чат"
+            return "🫵"
         target = args[2]
         topic_id = int(args[3]) if len(args) > 3 else None
 
         chat_id = await self._parse_chat_identifier(target)
         if not chat_id:
-            return "🫵 Неверный формат чата"
+            return "🫵"
         try:
             if topic_id:
                 await asyncio.sleep(random.uniform(1.5, 5.5))
                 await self.client.get_messages(chat_id, ids=topic_id)
         except Exception:
-            return "🫵 Топик не существует или недоступен"
+            return "🫵"
         code.chats[chat_id].add(topic_id or 0)
 
         await self.save_config()
-        return f"🪴 +1 {'топик' if topic_id else 'чат'} | Всего: {sum(len(v) for v in code.chats.values())}"
+        return f"🪴 +1 | {sum(len(v) for v in code.chats.values())}"
 
     async def _handle_delete(self, message, code, code_name, args) -> str:
         """.b d [code]"""
@@ -460,24 +455,24 @@ class BroadcastManager:
             self.broadcast_tasks[code_name].cancel()
         del self.codes[code_name]
         await self.save_config()
-        return f"🗑 {code_name} удалена"
+        return f"🗑 {code_name}"
 
     async def _handle_interval(self, message, code, code_name, args) -> str:
         """Handle interval setting with safe interval check"""
         if len(args) < 4:
-            return "Укажите мин/макс"
+            return "🛑"
         try:
             requested_min = int(args[2])
             requested_max = int(args[3])
             if requested_min >= requested_max:
-                return "🛑 Минимум должен быть меньше максимума"
+                return "🛑"
             if requested_max > 1440:
-                return "🛑 Максимальный интервал не может превышать 1440 минут"
+                return "🛑"
         except ValueError:
-            return "Некорректные значения"
+            return "🛑"
         code.interval = (requested_min, requested_max)
         await self.save_config()
-        return f"⏱️ Интервал для {code_name}: {requested_min}-{requested_max} мин"
+        return f"⏱️ {code_name}: {requested_min}-{requested_max}"
 
     async def _handle_flood_wait(self, e: FloodWaitError):
         """Handle FloodWait by stopping all broadcasts"""
@@ -488,7 +483,7 @@ class BroadcastManager:
         await asyncio.sleep(100)
         await self.client.send_message(
             self.tg_id,
-            f"🚨 FloodWait detected ({e.seconds}s)! All broadcasts have been stopped.",
+            f"🚨 FloodWait ({e.seconds}s)!",
         )
 
         async with self._tasks_lock:
@@ -513,28 +508,28 @@ class BroadcastManager:
         """.b r [code]"""
         reply = await message.get_reply_message()
         if not reply:
-            return "🫵 Ответьте на сообщение"
+            return "🫵"
         key = (reply.chat_id, reply.id)
         if key not in code.messages:
-            return "🫵 Сообщение не найдено"
+            return "🫵"
         code.messages.remove(key)
         await self._message_cache.set(key, None)
         await self.save_config()
-        return f"🐀 Удалено | Осталось: {len(code.messages)}"
+        return f"🐀 {len(code.messages)}"
 
     async def _handle_remove_chat(self, message, code, code_name, args) -> str:
         """.b rc [code] [@chat]"""
         if len(args) < 3:
-            return "🫵 Укажите чат для удаления"
+            return "🫵"
         target = args[2]
         chat_id = await self._parse_chat_identifier(target)
 
         if not chat_id:
-            return "🫵 Неверный формат чата или чат недоступен"
+            return "🫵"
         if chat_id in code.chats:
             del code.chats[chat_id]
             await self.save_config()
-            return f"🐲 -1 чат | Осталось: {sum(len(v) for v in code.chats.values())}"
+            return f"🐲 -1 | {sum(len(v) for v in code.chats.values())}"
         if str(chat_id).startswith("-100"):
             alternative_id = int(str(chat_id)[4:])
         else:
@@ -542,17 +537,17 @@ class BroadcastManager:
         if alternative_id in code.chats:
             del code.chats[alternative_id]
             await self.save_config()
-            return f"🐲 -1 чат | Осталось: {sum(len(v) for v in code.chats.values())}"
-        return "ℹ️ Чат не найден"
+            return f"🐲 -1 | {sum(len(v) for v in code.chats.values())}"
+        return "ℹ️"
 
     async def _handle_start(self, message, code, code_name, args) -> str:
         """.b s [code]"""
         if not code.messages:
-            return "🫵 Нет сообщений для отправки"
+            return "🫵"
         if not code.chats:
-            return "🫵 Нет чатов для рассылки"
+            return "🫵"
         if code._active:
-            return "ℹ️ Рассылка уже активна"
+            return "ℹ️"
         code._active = True
         self.broadcast_tasks[code_name] = asyncio.create_task(
             self._broadcast_loop(code_name)
@@ -560,18 +555,18 @@ class BroadcastManager:
 
         await self.save_config()
 
-        return f"🚀 {code_name} запущена | Чатов: {len(code.chats)}"
+        return f"🚀 {code_name} | {len(code.chats)}"
 
     async def _handle_stop(self, message, code, code_name, args) -> str:
         """.b x [code]"""
         if not code._active:
-            return "ℹ️ Рассылка не активна"
+            return "ℹ️"
         code._active = False
         if code_name in self.broadcast_tasks:
             self.broadcast_tasks[code_name].cancel()
         await self.save_config()
 
-        return f"🧊 {code_name} остановлена"
+        return f"🧊 {code_name}"
 
     async def _parse_chat_identifier(self, identifier) -> Optional[int]:
         """Parse various chat identifier formats and return a usable chat ID"""
@@ -592,7 +587,7 @@ class BroadcastManager:
             entity = await self.client.get_entity(identifier, exp=3600)
             return self._get_normalized_chat_id(entity)
         except Exception as e:
-            logger.error(f"Error parsing chat identifier '{identifier}': {e}")
+            logger.error(f"'{identifier}': {e}")
             return None
 
     async def _scan_folders_for_chats(self):
@@ -608,8 +603,8 @@ class BroadcastManager:
             try:
                 folders = await self.client(GetDialogFiltersRequest())
             except Exception as e:
-                logger.error(f"🚨 Ошибка получения папок: {e}")
-                return "❌ Не удалось получить список папок"
+                logger.error(f"🚨 {e}")
+                return "❌"
             for folder in folders:
                 folder_title = getattr(folder, "title", "").strip()
 
@@ -628,9 +623,7 @@ class BroadcastManager:
                                 entity = await self.client.get_entity(peer)
                                 peers.append(entity)
                             except Exception as e:
-                                logger.error(
-                                    f"Не удалось получить сущность для peer {peer}: {e}"
-                                )
+                                logger.error(f"{peer}: {e}")
                     added = 0
                     for peer in peers:
                         if self._process_peer(peer, folder_title):
@@ -638,17 +631,17 @@ class BroadcastManager:
                     await self.save_config()
                     stats["added"] += added
                 except Exception as e:
-                    logger.error(f"🔥 Ошибка: {e}", exc_info=True)
+                    logger.error(f"🔥 {e}", exc_info=True)
             report = [
-                "📊 Итоги сканирования:",
-                f"• Всего папок: {len(folders)}",
-                f"• Обработано: {stats['processed']}",
-                f"• Добавлено чатов: {stats['added']}",
+                "📊",
+                f"• {len(folders)}",
+                f"• {stats['processed']}",
+                f"• {stats['added']}",
             ]
             return "\n".join(report)
         except Exception as e:
-            logger.critical(f"💥 Фатальная ошибка: {e}", exc_info=True)
-            return f"🚨 Критическая ошибка: {e}"
+            logger.critical(f"💥 {e}", exc_info=True)
+            return f"🚨 {e}"
 
     def _get_normalized_chat_id(self, peer) -> int:
         """Convert various peer objects or IDs into a normalized chat ID format."""
@@ -666,7 +659,7 @@ class BroadcastManager:
                 return peer_id
             return None
         except Exception as e:
-            logger.error(f"Error normalizing chat ID: {e}", exc_info=True)
+            logger.error(f"Error {e}", exc_info=True)
             return None
 
     def _process_peer(self, peer, folder_title: str) -> bool:
@@ -701,7 +694,7 @@ class BroadcastManager:
             return False
         except Exception as e:
             logger.error(
-                f"⚠️ Ошибка обработки чата {getattr(peer, 'id', 'Unknown')}: {e}",
+                f"⚠️ {getattr(peer, 'id', 'Unknown')}: {e}",
                 exc_info=True,
             )
             return False
@@ -739,10 +732,10 @@ class BroadcastManager:
             await self._handle_flood_wait(e)
             return False
         except SlowModeWaitError as e:
-            logger.error("⌛ [%d] SlowModeWait %d сек.", chat_id, e.seconds)
+            logger.error("⌛ [%d] SlowModeWait %d", chat_id, e.seconds)
             return False
         except Exception as e:
-            logger.error(f"Unexpected error in chat {chat_id}: {repr(e)}")
+            logger.error(f"{chat_id}: {repr(e)}")
             modified = False
             for code in self.codes.values():
                 if chat_id in code.chats:
@@ -763,7 +756,7 @@ class BroadcastManager:
         args = message.text.split()[1:]
 
         if not args:
-            response = "🫵 Недостаточно аргументов"
+            response = "🫵"
         else:
             action = args[0].lower()
 
@@ -773,14 +766,14 @@ class BroadcastManager:
                 await utils.answer(message, "💫")
                 try:
                     result = await self._scan_folders_for_chats()
-                    response = f"🐺 Папки просканированы\n\n{result}"
+                    response = f"🐺\n\n{result}"
                 except Exception as e:
                     logger.error(f"Ошибка: {e}", exc_info=True)
-                    response = f"🐺 Ошибка сканирования: {str(e)}"
+                    response = f"🐺{str(e)}"
             else:
                 code_name = args[1].lower() if len(args) > 1 else None
                 if not code_name:
-                    response = "🫵 Укажите код рассылки"
+                    response = "🫵"
                 else:
                     code = self.codes.get(code_name)
                     handler_map = {
@@ -795,16 +788,16 @@ class BroadcastManager:
                     }
 
                     if action not in handler_map:
-                        response = "🫵 Неизвестная команда"
+                        response = "🫵"
                     elif action != "a" and not code:
-                        response = f"🫵 Рассылка {code_name} не найдена"
+                        response = f"🫵 {code_name}"
                     else:
                         try:
                             handler = handler_map[action]
                             result = await handler(message, code, code_name, args)
                             response = result
                         except Exception as e:
-                            response = f"🚨 Ошибка: {str(e)}"
+                            response = f"🚨 {str(e)}"
         await utils.answer(message, response)
 
     async def load_config(self):
@@ -840,13 +833,13 @@ class BroadcastManager:
                     code._active = code_data.get("active", False)
                     self.codes[code_name] = code
                 except Exception as e:
-                    logger.error(f"Ошибка загрузки {code_name}: {str(e)}")
+                    logger.error(f"{code_name}: {str(e)}")
                     continue
             for code_name, code in self.codes.items():
                 if code._active and (not code.messages or not code.chats):
                     code._active = False
         except Exception as e:
-            logger.error(f"Критическая ошибка загрузки: {str(e)}", exc_info=True)
+            logger.error(f"{str(e)}", exc_info=True)
             self.codes = {}
 
     async def save_config(self):
