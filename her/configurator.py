@@ -28,18 +28,18 @@ def api_config() -> None:
         if input_value.isdigit():
             api_id = int(input_value)
             break
-        tty_print("\033[0;91mInvalid ID\033[0m")
+        tty_print("\033[0;91mInvalid\033[0m")
     api_hash: Optional[str] = None
     while True:
         input_value = tty_input("\033[0;95mAPI hash: \033[0m")
         if len(input_value) == 32 and all(c in string.hexdigits for c in input_value):
             api_hash = input_value
             break
-        tty_print("\033[0;91mInvalid hash\033[0m")
+        tty_print("\033[0;91mInvalid\033[0m")
     if api_id and api_hash:
         main.save_config_key("api_id", api_id)
         main.save_config_key("api_hash", api_hash)
-        tty_print("\033[0;92mAPI config saved\033[0m")
+        tty_print("\033[0;92mSaved\033[0m")
     else:
         tty_print("\033[0;91mCancelled\033[0m")
         sys.exit(1)

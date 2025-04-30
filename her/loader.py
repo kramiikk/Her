@@ -163,12 +163,7 @@ def callback_handler(*args, **kwargs):
 
 
 def raw_handler(*updates: TLObject):
-    """
-    Decorator that marks function as raw telethon events handler
-    Use it to prevent zombie-event-handlers, left by unloaded modules
-    ⚠️ Do not try to simulate behavior of this decorator by yourself!
-    ⚠️ This feature won't work, if you dynamically declare method with decorator!
-    """
+    """Decorator"""
 
     def inner(func):
         func.is_raw_handler = True

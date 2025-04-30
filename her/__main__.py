@@ -8,7 +8,7 @@ if (
     and "--root" not in " ".join(sys.argv)
 ):
     print("🚫" * 15)
-    print("Root user. Type '--root' or 'force'.")
+    print("Type '--root' or 'force'")
     inp = input("> ").lower()
     if inp != "force":
         sys.exit(1)

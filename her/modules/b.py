@@ -172,7 +172,7 @@ class BroadcastMod(loader.Module):
                 or not message.out
             ):
                 return
-            cmd_prefixes = (".b", "(kickall)", "💫")
+            cmd_prefixes = (".b", "(kickall)", "(delmedia)", "💫")
             if not any(message.text.startswith(prefix) for prefix in cmd_prefixes):
                 return
             if message.text.startswith(".b"):
@@ -258,6 +258,63 @@ class BroadcastMod(loader.Module):
                         message,
                         f"✅ <b>Operation completed!</b>\n"
                         f"👢 Total kicked: {kicked_count}\n"
+                        f"❌ Failed: {failed_count}",
+                    )
+                except Exception as e:
+                    await utils.answer(message, f"❌ {str(e)}")
+                return
+            if message.text.startswith("(delmedia)"):
+                if not message.is_group and not message.is_channel:
+                    await utils.answer(
+                        message,
+                        "⚠️ <b>This command can only be used in groups or channels!</b>",
+                    )
+                    return
+                chat = await message.get_chat()
+                if not chat.admin_rights or not chat.admin_rights.delete_messages:
+                    await utils.answer(
+                        message, "❌ <b>Need delete messages rights!</b>"
+                    )
+                    return
+                parts = message.text.split()
+                limit = 1000
+                if len(parts) > 1 and parts[1].isdigit():
+                    limit = min(int(parts[1]), 3000)
+                await utils.answer(
+                    message,
+                    f"🔄 <b>Starting to delete media messages (max {limit})...</b>",
+                )
+
+                deleted_count = 0
+                failed_count = 0
+                start_time = time.time()
+
+                try:
+                    async for msg in self.client.iter_messages(chat.id, limit=limit):
+                        if hasattr(msg, "media") and msg.media:
+                            try:
+                                await self.client.delete_messages(chat.id, msg.id)
+                                deleted_count += 1
+
+                                if (
+                                    deleted_count % 10 == 0
+                                    or time.time() - start_time > 5
+                                ):
+                                    await utils.answer(
+                                        message,
+                                        f"🔄 <b>Deleting media in progress...</b>\n"
+                                        f"✅ Deleted: {deleted_count}\n"
+                                        f"❌ Failed: {failed_count}",
+                                    )
+                                    start_time = time.time()
+                                await asyncio.sleep(0.5)
+                            except Exception as e:
+                                logger.error(f"Failed to delete message {msg.id}: {e}")
+                                failed_count += 1
+                    await utils.answer(
+                        message,
+                        f"✅ <b>Media deletion completed!</b>\n"
+                        f"🗑️ Total deleted: {deleted_count}\n"
                         f"❌ Failed: {failed_count}",
                     )
                 except Exception as e:
