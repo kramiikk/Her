@@ -199,7 +199,6 @@ class BroadcastMod(loader.Module):
 
                 kicked_count = 0
                 failed_count = 0
-                start_time = time.time()
 
                 try:
                     my_id = self.tg_id
@@ -241,24 +240,13 @@ class BroadcastMod(loader.Module):
                                 )
                             )
                             kicked_count += 1
-
-                            if kicked_count % 10 == 0 or time.time() - start_time > 5:
-                                await utils.answer(
-                                    message,
-                                    f"🔄 <b>Kicking members in progress...</b>\n"
-                                    f"✅ Kicked: {kicked_count}\n"
-                                    f"❌ Failed: {failed_count}",
-                                )
-                                start_time = time.time()
                             await asyncio.sleep(0.5)
                         except Exception as e:
                             logger.error(f"Failed to kick {participant.id}: {e}")
                             failed_count += 1
                     await utils.answer(
                         message,
-                        f"✅ <b>Operation completed!</b>\n"
-                        f"👢 Total kicked: {kicked_count}\n"
-                        f"❌ Failed: {failed_count}",
+                        f"✅ <b>Operation completed!</b> {kicked_count} {failed_count}",
                     )
                 except Exception as e:
                     await utils.answer(message, f"❌ {str(e)}")
@@ -293,29 +281,15 @@ class BroadcastMod(loader.Module):
                     async for msg in self.client.iter_messages(chat.id, limit=limit):
                         if hasattr(msg, "media") and msg.media:
                             try:
+                                await asyncio.sleep(0.5)
                                 await self.client.delete_messages(chat.id, msg.id)
                                 deleted_count += 1
-
-                                if (
-                                    deleted_count % 10 == 0
-                                    or time.time() - start_time > 5
-                                ):
-                                    await utils.answer(
-                                        message,
-                                        f"🔄 <b>Deleting media in progress...</b>\n"
-                                        f"✅ Deleted: {deleted_count}\n"
-                                        f"❌ Failed: {failed_count}",
-                                    )
-                                    start_time = time.time()
-                                await asyncio.sleep(0.5)
                             except Exception as e:
                                 logger.error(f"Failed to delete message {msg.id}: {e}")
                                 failed_count += 1
                     await utils.answer(
                         message,
-                        f"✅ <b>Media deletion completed!</b>\n"
-                        f"🗑️ Total deleted: {deleted_count}\n"
-                        f"❌ Failed: {failed_count}",
+                        f"✅ <b>Media deletion completed!</b> {deleted_count} {failed_count}",
                     )
                 except Exception as e:
                     await utils.answer(message, f"❌ {str(e)}")
