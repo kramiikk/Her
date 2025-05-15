@@ -49,7 +49,7 @@ class AnnouncementConfig:
 
     active: bool = False
     chats: Dict[int, Set[int]] = field(default_factory=lambda: defaultdict(set))
-    announcement_text: str = "📢 Default announcement message"
+    announcement_text: str = "@buygrp"
     interval: Tuple[int, int] = (10, 15)
     excluded_chats: Set[int] = field(default_factory=set)
     last_announcement: Dict[int, float] = field(default_factory=dict)
@@ -59,19 +59,17 @@ class AnnouncementMod(loader.Module):
     """Module that automatically replies to new messages with an announcement at specified intervals."""
 
     strings = {
-        "name": "AutoAnnouncement",
-        "config_saved": "✅ Configuration saved",
-        "announcement_set": "📝 Announcement text set",
-        "interval_set": "⏱️ Interval set to {}-{} minutes",
-        "activated": "✅ Auto-announcement activated for code '{}'",
-        "deactivated": "⏸️ Auto-announcement deactivated for code '{}'",
-        "status": "📊 Status: {}\n⏱️ Interval: {}-{} minutes\n🗣️ Active in {} chats\n📝 Message: {}",
-        "chat_added": "➕ Chat added to announcement list",
-        "chat_removed": "➖ Chat removed from announcement list",
-        "code_created": "🆕 Created new announcement code '{}'",
-        "code_deleted": "🗑️ Deleted announcement code '{}'",
-        "code_not_found": "❌ Announcement code '{}' not found",
-        "list_codes": "📋 Announcement codes:\n{}",
+        "name": "Announcement",
+        "config_saved": "✅",
+        "announcement_set": "📝",
+        "interval_set": "⏱️ {}-{}",
+        "activated": "✅ '{}'",
+        "deactivated": "⏸️ '{}'",
+        "status": "📊 {}\n⏱️ {}-{}\n🗣️ {}\n📝 {}",
+        "code_created": "🆕 '{}'",
+        "code_deleted": "🗑️ '{}'",
+        "code_not_found": "❌ '{}'",
+        "list_codes": "📋 {}",
     }
 
     def __init__(self):
@@ -95,9 +93,7 @@ class AnnouncementMod(loader.Module):
         for code, config_data in data.items():
             config = AnnouncementConfig()
             config.active = config_data.get("active", False)
-            config.announcement_text = config_data.get(
-                "announcement_text", "📢 Default announcement message"
-            )
+            config.announcement_text = config_data.get("announcement_text", "@byugrp")
             config.interval = tuple(config_data.get("interval", (10, 15)))
             config.excluded_chats = set(config_data.get("excluded_chats", []))
 
@@ -236,7 +232,6 @@ class AnnouncementMod(loader.Module):
             async with self._config_lock:
                 config.chats[chat_id].add(topic_id)
                 await self.save_config()
-            await utils.answer(message, self.strings["chat_added"])
         elif command == "call":
             chat_id = message.chat_id
             topic_id = utils.get_topic(message) or 0
