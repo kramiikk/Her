@@ -6,12 +6,9 @@ import time
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Dict, Set, Tuple
+from typing import Dict, Set, Tuple, List
 
-from hikkatl.errors import (
-    FloodWaitError,
-    SlowModeWaitError,
-)
+from hikkatl.errors import FloodWaitError
 
 from .. import loader, utils
 
@@ -54,6 +51,12 @@ class AnnouncementConfig:
     excluded_chats: Set[int] = field(default_factory=set)
     last_announcement: Dict[int, float] = field(default_factory=dict)
 
+    recent_users: Dict[int, List[int]] = field(
+        default_factory=lambda: defaultdict(list)
+    )
+
+    max_recent_users: int = 3
+
 
 class AnnouncementMod(loader.Module):
     """Module that automatically replies to new messages with an announcement at specified intervals."""
@@ -93,7 +96,7 @@ class AnnouncementMod(loader.Module):
         for code, config_data in data.items():
             config = AnnouncementConfig()
             config.active = config_data.get("active", False)
-            config.announcement_text = config_data.get("announcement_text", "@byugrp")
+            config.announcement_text = config_data.get("announcement_text", "@buygrp")
             config.interval = tuple(config_data.get("interval", (10, 15)))
             config.excluded_chats = set(config_data.get("excluded_chats", []))
 
@@ -108,6 +111,13 @@ class AnnouncementMod(loader.Module):
                     "last_announcement", {}
                 ).items()
             }
+
+            recent_users = defaultdict(list)
+            for chat_id, users in config_data.get("recent_users", {}).items():
+                recent_users[int(chat_id)] = list(map(int, users))
+            config.recent_users = recent_users
+
+            config.max_recent_users = config_data.get("max_recent_users", 3)
 
             self.configs[code] = config
 
@@ -129,6 +139,12 @@ class AnnouncementMod(loader.Module):
                     str(chat_id): timestamp
                     for chat_id, timestamp in config.last_announcement.items()
                 },
+                # Save recent users data
+                "recent_users": {
+                    str(chat_id): list(map(int, users))
+                    for chat_id, users in config.recent_users.items()
+                },
+                "max_recent_users": config.max_recent_users,
             }
             data[code] = config_data
         self.db.set("AutoAnnouncement", "configs", data)
@@ -201,6 +217,18 @@ class AnnouncementMod(loader.Module):
                 )
             except ValueError:
                 await utils.answer(message, "⚠️ Invalid interval values")
+        elif command == "recent" and len(args) > 2:
+            try:
+                max_recent = int(args[2])
+                if max_recent < 1:
+                    await utils.answer(message, "⚠️ Value must be at least 1")
+                    return True
+                async with self._config_lock:
+                    config.max_recent_users = max_recent
+                    await self.save_config()
+                await utils.answer(message, f"📊 Max recent users set to {max_recent}")
+            except ValueError:
+                await utils.answer(message, "⚠️ Invalid value")
         elif command == "on":
             async with self._config_lock:
                 config.active = True
@@ -265,8 +293,36 @@ class AnnouncementMod(loader.Module):
         await asyncio.sleep(e.seconds + 181)
         return True
 
+    async def _should_respond_to_user(
+        self, config: AnnouncementConfig, chat_id: int, user_id: int
+    ) -> bool:
+        """
+        Determine if we should respond to this user based on recent interaction history.
+        Uses a "weighted random" approach to reduce chances of responding to recent users.
+        """
+        if chat_id not in config.recent_users or not config.recent_users[chat_id]:
+            return True
+        if user_id in config.recent_users[chat_id]:
+            if random.random() < 0.4:
+                return False
+        return True
+
+    async def _update_recent_users(
+        self, config: AnnouncementConfig, chat_id: int, user_id: int
+    ):
+        """Update the list of recent users we've responded to"""
+        if chat_id not in config.recent_users:
+            config.recent_users[chat_id] = []
+        if user_id in config.recent_users[chat_id]:
+            config.recent_users[chat_id].remove(user_id)
+        config.recent_users[chat_id].insert(0, user_id)
+
+        config.recent_users[chat_id] = config.recent_users[chat_id][
+            : config.max_recent_users
+        ]
+
     async def _send_announcement(
-        self, chat_id: int, config: AnnouncementConfig, msg_id: int
+        self, chat_id: int, config: AnnouncementConfig, topic_id: int, msg_id: int
     ):
         """Send an announcement to a chat as a reply to specific message"""
         try:
@@ -301,6 +357,7 @@ class AnnouncementMod(loader.Module):
         chat_id = message.chat_id
         topic_id = utils.get_topic(message) or 0
         msg_id = message.id
+        user_id = message.sender_id
 
         for code, config in self.configs.items():
             try:
@@ -319,7 +376,18 @@ class AnnouncementMod(loader.Module):
                 )
 
                 if time_elapsed >= interval_seconds:
-                    await asyncio.sleep(random.uniform(1, 3))
-                    await self._send_announcement(chat_id, config, topic_id, msg_id)
+                    should_respond = await self._should_respond_to_user(
+                        config, chat_id, user_id
+                    )
+
+                    if should_respond:
+                        await asyncio.sleep(random.uniform(1, 3))
+                        success = await self._send_announcement(
+                            chat_id, config, topic_id, msg_id
+                        )
+
+                        if success:
+                            await self._update_recent_users(config, chat_id, user_id)
+                            await self.save_config()
             except Exception as e:
                 logger.error(f"Error in watcher for code {code}: {e}", exc_info=True)
