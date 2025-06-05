@@ -120,9 +120,10 @@ class AnnouncementMod(loader.Module):
         self.rate_limiter: Optional[RateLimiter] = None
         self._config_lock: Optional[asyncio.Lock] = None
 
-    async def client_ready(self, client):
+    async def client_ready(self, client, db):
         """Called when the client is ready to start functioning"""
         self.client = client
+        self.db = db
         self.rate_limiter = RateLimiter()
         self._config_lock = asyncio.Lock()
         await self.load_config()
