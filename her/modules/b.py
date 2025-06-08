@@ -65,6 +65,11 @@ class AnnouncementConfig:
     )
     max_recent_users: int = 3
     recent_user_probability: float = 0.4  # Probability to skip recent users
+    # Добавляем блокировку для предотвращения дублирования сообщений
+
+    _sending_lock: Dict[int, asyncio.Lock] = field(
+        default_factory=lambda: defaultdict(lambda: asyncio.Lock())
+    )
 
 
 class AnnouncementMod(loader.Module):
@@ -82,8 +87,6 @@ class AnnouncementMod(loader.Module):
         "code_deleted": "🗑️ Configuration '{}' deleted",
         "code_not_found": "❌ Configuration '{}' not found",
         "list_codes": "📋 Available configurations:\n{}",
-        "chat_added": "✅ Chat added to configuration '{}'",
-        "chat_removed": "❌ Chat removed from configuration '{}'",
         "help_text": """
 📋 <b>Announcement Module Commands</b>
 
@@ -102,7 +105,6 @@ class AnnouncementMod(loader.Module):
 
 <b>Chat Management:</b>
 • <code>нa sos [code]</code> - Add current chat to configuration
-• <code>нa call [code]</code> - Remove current chat from configuration
 
 <b>Example Usage:</b>
 1. <code>нa create promo</code>
@@ -169,6 +171,10 @@ class AnnouncementMod(loader.Module):
                 for chat_id, users in config_data.get("recent_users", {}).items():
                     recent_users[int(chat_id)] = list(map(int, users))
                 config.recent_users = recent_users
+
+                # Инициализируем блокировки для отправки сообщений
+
+                config._sending_lock = defaultdict(lambda: asyncio.Lock())
 
                 self.configs[code] = config
             logger.info(f"Loaded {len(self.configs)} announcement configurations")
@@ -258,8 +264,6 @@ class AnnouncementMod(loader.Module):
             return await self._handle_status(message, config)
         elif command == "sos":
             return await self._handle_add_chat(message, config, code)
-        elif command == "call":
-            return await self._handle_remove_chat(message, config, code)
         return True
 
     async def _handle_create(self, message, code: str) -> bool:
@@ -268,7 +272,9 @@ class AnnouncementMod(loader.Module):
             if code in self.configs:
                 await utils.answer(message, f"❌ Configuration '{code}' already exists")
                 return True
-            self.configs[code] = AnnouncementConfig()
+            config = AnnouncementConfig()
+            config._sending_lock = defaultdict(lambda: asyncio.Lock())
+            self.configs[code] = config
             await self.save_config()
         await utils.answer(message, self.strings["code_created"].format(code))
         return True
@@ -374,23 +380,12 @@ class AnnouncementMod(loader.Module):
         async with self._config_lock:
             config.chats[chat_id].add(topic_id)
             await self.save_config()
-        await utils.answer(message, self.strings["chat_added"].format(code))
-        return True
+        # Удаляем сообщение вместо редактирования
 
-    async def _handle_remove_chat(
-        self, message, config: AnnouncementConfig, code: str
-    ) -> bool:
-        """Handle removing current chat from configuration"""
-        chat_id = message.chat_id
-        topic_id = utils.get_topic(message) or 0
-
-        async with self._config_lock:
-            if chat_id in config.chats and topic_id in config.chats[chat_id]:
-                config.chats[chat_id].discard(topic_id)
-                if not config.chats[chat_id]:
-                    del config.chats[chat_id]
-                await self.save_config()
-        await utils.answer(message, self.strings["chat_removed"].format(code))
+        try:
+            await message.delete()
+        except Exception as e:
+            logger.error(f"Failed to delete message: {e}")
         return True
 
     async def _handle_list(self, message) -> None:
@@ -441,7 +436,6 @@ class AnnouncementMod(loader.Module):
         # Add user to the beginning of the list
 
         config.recent_users[chat_id].insert(0, user_id)
-
         # Keep only the configured number of recent users
 
         config.recent_users[chat_id] = config.recent_users[chat_id][
@@ -452,27 +446,47 @@ class AnnouncementMod(loader.Module):
         self, chat_id: int, config: AnnouncementConfig, topic_id: int, msg_id: int
     ) -> bool:
         """Send an announcement to a chat as a reply to specific message"""
-        try:
-            await self.rate_limiter.acquire()
+        # Используем блокировку для предотвращения дублирования сообщений
 
-            await self.client.send_message(
-                entity=chat_id,
-                message=html.unescape(config.announcement_text),
-                parse_mode="html",
-                reply_to=msg_id,
+        async with config._sending_lock[chat_id]:
+            # Проверяем время еще раз после получения блокировки
+
+            current_time = time.time()
+            last_time = config.last_announcement.get(chat_id, 0)
+            time_elapsed = current_time - last_time
+
+            interval_seconds = random.uniform(
+                config.interval[0] * 60, config.interval[1] * 60
             )
 
-            async with self._config_lock:
-                config.last_announcement[chat_id] = time.time()
-                await self.save_config()
-            logger.debug(f"Sent announcement to chat {chat_id}")
-            return True
-        except FloodWaitError as e:
-            await self._handle_flood_wait(e)
-            return False
-        except Exception as e:
-            logger.error(f"Error sending announcement to {chat_id}: {e}")
-            return False
+            # Если с момента последнего объявления прошло недостаточно времени, не отправляем
+
+            if time_elapsed < interval_seconds:
+                logger.debug(
+                    f"Skipping announcement for chat {chat_id} - not enough time elapsed"
+                )
+                return False
+            try:
+                await self.rate_limiter.acquire()
+
+                await self.client.send_message(
+                    entity=chat_id,
+                    message=html.unescape(config.announcement_text),
+                    parse_mode="html",
+                    reply_to=msg_id,
+                )
+
+                # Обновляем время последнего объявления
+
+                config.last_announcement[chat_id] = current_time
+                logger.debug(f"Sent announcement to chat {chat_id}")
+                return True
+            except FloodWaitError as e:
+                await self._handle_flood_wait(e)
+                return False
+            except Exception as e:
+                logger.error(f"Error sending announcement to {chat_id}: {e}")
+                return False
 
     async def watcher(self, message):
         """Watch for incoming messages and reply with announcement if conditions are met"""
@@ -529,7 +543,10 @@ class AnnouncementMod(loader.Module):
                                 await self._update_recent_users(
                                     config, chat_id, user_id
                                 )
-                                await self.save_config()
+                                # Сохраняем конфиг после успешной отправки
+
+                                async with self._config_lock:
+                                    await self.save_config()
                 except Exception as e:
                     logger.error(
                         f"Error processing message for config {code}: {e}",
